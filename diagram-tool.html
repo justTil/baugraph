@@ -1,0 +1,2053 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Diagram Tool — Flows, Queues, Integrations</title>
+    <style>
+        * { box-sizing: border-box; }
+
+        :root {
+            --ink: #111;
+            --soft: #444;
+            --muted: #777;
+            --faint: #aaa;
+            --line: #e2e2e2;
+            --line2: #cfcfcf;
+            --bg: #fff;
+            --panel: #fbfbfb;
+            --hover: #f2f2f2;
+            --sel: #2f6fdb;
+            --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        html[data-theme="dark"] {
+            --ink: #e8eaed;
+            --soft: #c3c8ce;
+            --muted: #939aa3;
+            --faint: #6b7178;
+            --line: #2a2f36;
+            --line2: #3a414a;
+            --bg: #0f1113;
+            --panel: #14171a;
+            --hover: #1d2126;
+            --sel: #5b9dff;
+        }
+
+        html, body { height: 100%; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--sans);
+            font-size: 13px;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #app { height: 100%; display: flex; flex-direction: column; }
+
+        /* ---------- top bar ---------- */
+        header#top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 12px;
+            height: 46px;
+            border-bottom: 1px solid var(--line);
+            background: var(--panel);
+            flex: 0 0 auto;
+        }
+
+        .brand {
+            font-weight: 700;
+            font-size: 13px;
+            letter-spacing: -.01em;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .brand svg { opacity: .8; }
+
+        #docTitle {
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--ink);
+            font: inherit;
+            font-weight: 500;
+            padding: 5px 8px;
+            border-radius: 5px;
+            min-width: 120px;
+            width: 240px;
+        }
+
+        #docTitle:hover { border-color: var(--line); }
+        #docTitle:focus { outline: none; border-color: var(--line2); background: var(--bg); }
+
+        .spacer { flex: 1 1 auto; }
+
+        .grp { display: flex; align-items: center; gap: 2px; }
+
+        .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+
+        button.btn {
+            appearance: none;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--soft);
+            font: inherit;
+            padding: 5px 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        button.btn:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+        button.btn:disabled { opacity: .32; cursor: default; }
+        button.btn.on { background: var(--ink); color: var(--bg); }
+        button.btn.primary { border-color: var(--line2); }
+        button.btn svg { display: block; }
+
+        .zoomlbl {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            min-width: 44px;
+            text-align: center;
+            user-select: none;
+        }
+
+        /* ---------- layout ---------- */
+        #main { flex: 1 1 auto; display: flex; min-height: 0; }
+
+        aside {
+            background: var(--panel);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            flex: 0 0 auto;
+        }
+
+        #left { width: 226px; border-right: 1px solid var(--line); }
+        #right { width: 274px; border-left: 1px solid var(--line); }
+        aside.hidden { display: none; }
+
+        .panelhead {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--line);
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: .09em;
+            text-transform: uppercase;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex: 0 0 auto;
+        }
+
+        .scroll { overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; }
+        .scroll::-webkit-scrollbar { width: 9px; }
+        .scroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 5px; border: 3px solid var(--panel); }
+        .scroll::-webkit-scrollbar-track { background: transparent; }
+
+        /* ---------- palette ---------- */
+        .searchwrap { padding: 8px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+
+        input.txt, select.txt, textarea.txt {
+            width: 100%;
+            border: 1px solid var(--line);
+            background: var(--bg);
+            color: var(--ink);
+            font: inherit;
+            padding: 5px 7px;
+            border-radius: 5px;
+        }
+
+        input.txt:focus, select.txt:focus, textarea.txt:focus { outline: none; border-color: var(--line2); }
+        select.txt { cursor: pointer; }
+
+        .cat {
+            padding: 11px 12px 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--faint);
+        }
+
+        .pitem {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            cursor: grab;
+            user-select: none;
+            color: var(--soft);
+            border-left: 2px solid transparent;
+        }
+
+        .pitem:hover { background: var(--hover); color: var(--ink); border-left-color: var(--line2); }
+        .pitem svg { flex: 0 0 auto; }
+        .pitem span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        #ghost {
+            position: fixed;
+            z-index: 50;
+            pointer-events: none;
+            background: var(--bg);
+            border: 1px solid var(--line2);
+            border-radius: 7px;
+            padding: 6px 10px;
+            display: none;
+            align-items: center;
+            gap: 7px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, .16);
+            font-size: 12px;
+        }
+
+        /* ---------- stage ---------- */
+        #stage { flex: 1 1 auto; position: relative; min-width: 0; overflow: hidden; }
+        #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+        #cv.panning { cursor: grabbing; }
+        #cv.panmode { cursor: grab; }
+
+        #editor {
+            position: absolute;
+            display: none;
+            z-index: 20;
+            border: 1px solid var(--sel);
+            border-radius: 4px;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--sans);
+            font-weight: 600;
+            padding: 2px 5px;
+            text-align: center;
+        }
+
+        #editor:focus { outline: none; }
+
+        .hint {
+            position: absolute;
+            left: 12px;
+            bottom: 10px;
+            font-size: 11px;
+            color: var(--faint);
+            pointer-events: none;
+            user-select: none;
+            font-family: var(--mono);
+        }
+
+        /* ---------- inspector ---------- */
+        .sec { padding: 12px; border-bottom: 1px solid var(--line); }
+        .sec:last-child { border-bottom: none; }
+
+        .lbl {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin: 0 0 5px;
+            display: block;
+        }
+
+        .row { display: flex; gap: 7px; align-items: center; }
+        .row + .row, .fld + .fld { margin-top: 9px; }
+        .fld { display: block; }
+
+        .swatches { display: flex; flex-wrap: wrap; gap: 5px; }
+
+        .sw {
+            width: 21px;
+            height: 21px;
+            border-radius: 5px;
+            border: 1px solid rgba(128, 128, 128, .35);
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .sw.on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--ink); }
+
+        .seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+
+        .seg button {
+            flex: 1 1 0;
+            appearance: none;
+            border: none;
+            border-right: 1px solid var(--line);
+            background: var(--bg);
+            color: var(--muted);
+            font: inherit;
+            font-size: 11px;
+            padding: 5px 2px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .seg button:last-child { border-right: none; }
+        .seg button:hover { background: var(--hover); color: var(--ink); }
+        .seg button.on { background: var(--ink); color: var(--bg); }
+
+        .empty { color: var(--muted); line-height: 1.6; }
+        .empty b { color: var(--soft); }
+
+        kbd {
+            font-family: var(--mono);
+            font-size: 10.5px;
+            border: 1px solid var(--line2);
+            border-bottom-width: 2px;
+            border-radius: 4px;
+            padding: 1px 4px;
+            color: var(--soft);
+            background: var(--bg);
+            white-space: nowrap;
+        }
+
+        .kbdlist { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
+        .kbdlist div:nth-child(even) { color: var(--muted); }
+
+        /* icon picker */
+        #iconGrid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            max-height: 168px;
+            overflow-y: auto;
+            border: 1px solid var(--line);
+            border-radius: 5px;
+            padding: 4px;
+            background: var(--bg);
+        }
+
+        #iconGrid button {
+            appearance: none;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--soft);
+            border-radius: 4px;
+            padding: 4px 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #iconGrid button:hover { background: var(--hover); color: var(--ink); }
+        #iconGrid button.on { background: var(--ink); color: var(--bg); }
+
+        .stat { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+        /* modal */
+        #modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .38);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+
+        #modal.open { display: flex; }
+
+        .sheet {
+            background: var(--bg);
+            border: 1px solid var(--line2);
+            border-radius: 10px;
+            max-width: 620px;
+            width: 100%;
+            max-height: 84vh;
+            overflow-y: auto;
+            padding: 22px 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+        }
+
+        .sheet h2 { margin: 0 0 14px; font-size: 15px; }
+        .sheet h3 { margin: 18px 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+        .sheet p { color: var(--soft); line-height: 1.65; margin: 0 0 10px; }
+
+        @media (max-width: 860px) {
+            #left { width: 190px; }
+            #right { width: 240px; }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <header id="top">
+            <span class="brand">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M6 3.5A1.5 1.5 0 0 1 7.5 2h1A1.5 1.5 0 0 1 10 3.5v1A1.5 1.5 0 0 1 8.5 6v1H14a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 2 7h5.5V6A1.5 1.5 0 0 1 6 4.5zM8.5 5a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5zM0 11.5A1.5 1.5 0 0 1 1.5 10h1A1.5 1.5 0 0 1 4 11.5v1A1.5 1.5 0 0 1 2.5 14h-1A1.5 1.5 0 0 1 0 12.5zm1.5-.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm4.5.5A1.5 1.5 0 0 1 7.5 10h1a1.5 1.5 0 0 1 1.5 1.5v1A1.5 1.5 0 0 1 8.5 14h-1A1.5 1.5 0 0 1 6 12.5zm1.5-.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm4.5.5a1.5 1.5 0 0 1 1.5-1.5h1a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5zm1.5-.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z"/></svg>
+                Architect
+            </span>
+            <input id="docTitle" spellcheck="false" placeholder="Untitled diagram">
+            <span class="sep"></span>
+            <div class="grp">
+                <button class="btn" id="bUndo" title="Undo (⌘Z)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466"/></svg></button>
+                <button class="btn" id="bRedo" title="Redo (⇧⌘Z)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/></svg></button>
+            </div>
+            <span class="sep"></span>
+            <div class="grp">
+                <button class="btn" id="bSelect" title="Select tool (V)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .557.103M2.25 8.184l3.897 1.67a.5.5 0 0 1 .262.263l1.67 3.897L12.743 3.52z"/></svg></button>
+                <button class="btn" id="bPan" title="Pan tool (H) — or hold Space"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M8.5 1.75a.75.75 0 0 0-1.5 0v5.5a.25.25 0 0 1-.5 0V2.5a.75.75 0 0 0-1.5 0v6.086l-.943-.943a1.5 1.5 0 0 0-2.121 2.121l2.5 2.5A5 5 0 0 0 8.086 14H9.5a5 5 0 0 0 5-5V5a.75.75 0 0 0-1.5 0v2.25a.25.25 0 0 1-.5 0V3.5a.75.75 0 0 0-1.5 0v3.75a.25.25 0 0 1-.5 0V2.5a.75.75 0 0 0-1.5 0v4.75a.25.25 0 0 1-.5 0z"/></svg></button>
+            </div>
+            <span class="sep"></span>
+            <div class="grp">
+                <button class="btn" id="bZoomOut" title="Zoom out (−)">−</button>
+                <span class="zoomlbl" id="zoomLbl">100%</span>
+                <button class="btn" id="bZoomIn" title="Zoom in (+)">+</button>
+                <button class="btn" id="bFit" title="Fit to content (F)">Fit</button>
+            </div>
+            <span class="spacer"></span>
+            <div class="grp">
+                <button class="btn" id="bSnap" title="Snap to grid">Snap</button>
+                <button class="btn" id="bGrid" title="Show grid">Grid</button>
+                <button class="btn" id="bTheme" title="Toggle dark mode"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M6 .278a.77.77 0 0 1 .08.858 7.2 7.2 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277q.792-.001 1.533-.16a.79.79 0 0 1 .81.316.73.73 0 0 1-.031.893A8.35 8.35 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.75.75 0 0 1 6 .278"/></svg></button>
+            </div>
+            <span class="sep"></span>
+            <div class="grp">
+                <button class="btn" id="bNew" title="New diagram">New</button>
+                <button class="btn" id="bOpen" title="Open .json">Open</button>
+                <button class="btn primary" id="bExport" title="Export">Export ▾</button>
+                <button class="btn" id="bHelp" title="Help (?)">?</button>
+            </div>
+            <input type="file" id="fileIn" accept=".json,application/json" hidden>
+        </header>
+
+        <div id="main">
+            <aside id="left">
+                <div class="panelhead">Palette</div>
+                <div class="searchwrap"><input class="txt" id="palSearch" placeholder="Search nodes…" spellcheck="false"></div>
+                <div class="scroll" id="palette"></div>
+            </aside>
+
+            <div id="stage">
+                <svg id="cv"></svg>
+                <input id="editor" spellcheck="false">
+                <div class="hint" id="hint">drag a node from the palette · drag from a node's edge dot to connect</div>
+            </div>
+
+            <aside id="right">
+                <div class="panelhead"><span id="inspTitle">Diagram</span></div>
+                <div class="scroll" id="inspector"></div>
+            </aside>
+        </div>
+    </div>
+
+    <div id="ghost"></div>
+
+    <div id="modal">
+        <div class="sheet" id="sheet"></div>
+    </div>
+
+    <script>
+        /* ============================================================
+           Bootstrap Icons (MIT) — inner markup, 16×16 viewBox
+           ============================================================ */
+        const ICONS = {
+  "database": "<path d=\"M4.318 2.687C5.234 2.271 6.536 2 8 2s2.766.27 3.682.687C12.644 3.125 13 3.627 13 4c0 .374-.356.875-1.318 1.313C10.766 5.729 9.464 6 8 6s-2.766-.27-3.682-.687C3.356 4.875 3 4.373 3 4c0-.374.356-.875 1.318-1.313M13 5.698V7c0 .374-.356.875-1.318 1.313C10.766 8.729 9.464 9 8 9s-2.766-.27-3.682-.687C3.356 7.875 3 7.373 3 7V5.698c.271.202.58.378.904.525C4.978 6.711 6.427 7 8 7s3.022-.289 4.096-.777A5 5 0 0 0 13 5.698M14 4c0-1.007-.875-1.755-1.904-2.223C11.022 1.289 9.573 1 8 1s-3.022.289-4.096.777C2.875 2.245 2 2.993 2 4v9c0 1.007.875 1.755 1.904 2.223C4.978 15.71 6.427 16 8 16s3.022-.289 4.096-.777C13.125 14.755 14 14.007 14 13zm-1 4.698V10c0 .374-.356.875-1.318 1.313C10.766 11.729 9.464 12 8 12s-2.766-.27-3.682-.687C3.356 10.875 3 10.373 3 10V8.698c.271.202.58.378.904.525C4.978 9.71 6.427 10 8 10s3.022-.289 4.096-.777A5 5 0 0 0 13 8.698m0 3V13c0 .374-.356.875-1.318 1.313C10.766 14.729 9.464 15 8 15s-2.766-.27-3.682-.687C3.356 13.875 3 13.373 3 13v-1.302c.271.202.58.378.904.525C4.978 12.71 6.427 13 8 13s3.022-.289 4.096-.777c.324-.147.633-.323.904-.525\"/>",
+  "hdd-stack": "<path d=\"M14 10a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-1a1 1 0 0 1 1-1zM2 9a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2z\"/> <path d=\"M5 11.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-2 0a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0M14 3a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM2 2a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z\"/> <path d=\"M5 4.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-2 0a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0\"/>",
+  "server": "<path d=\"M1.333 2.667C1.333 1.194 4.318 0 8 0s6.667 1.194 6.667 2.667V4c0 1.473-2.985 2.667-6.667 2.667S1.333 5.473 1.333 4z\"/> <path d=\"M1.333 6.334v3C1.333 10.805 4.318 12 8 12s6.667-1.194 6.667-2.667V6.334a6.5 6.5 0 0 1-1.458.79C11.81 7.684 9.967 8 8 8s-3.809-.317-5.208-.876a6.5 6.5 0 0 1-1.458-.79z\"/> <path d=\"M14.667 11.668a6.5 6.5 0 0 1-1.458.789c-1.4.56-3.242.876-5.21.876-1.966 0-3.809-.316-5.208-.876a6.5 6.5 0 0 1-1.458-.79v1.666C1.333 14.806 4.318 16 8 16s6.667-1.194 6.667-2.667z\"/>",
+  "cloud": "<path d=\"M4.406 3.342A5.53 5.53 0 0 1 8 2c2.69 0 4.923 2 5.166 4.579C14.758 6.804 16 8.137 16 9.773 16 11.569 14.502 13 12.687 13H3.781C1.708 13 0 11.366 0 9.318c0-1.763 1.266-3.223 2.942-3.593.143-.863.698-1.723 1.464-2.383m.653.757c-.757.653-1.153 1.44-1.153 2.056v.448l-.445.049C2.064 6.805 1 7.952 1 9.318 1 10.785 2.23 12 3.781 12h8.906C13.98 12 15 10.988 15 9.773c0-1.216-1.02-2.228-2.313-2.228h-.5v-.5C12.188 4.825 10.328 3 8 3a4.53 4.53 0 0 0-2.941 1.1z\"/>",
+  "cpu": "<path d=\"M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0m-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5zM6.5 6a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5z\"/>",
+  "memory": "<path d=\"M1 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.586a1 1 0 0 0 .707-.293l.353-.353a.5.5 0 0 1 .708 0l.353.353a1 1 0 0 0 .707.293H15a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zm.5 1h3a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-4a.5.5 0 0 1 .5-.5m5 0h3a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-4a.5.5 0 0 1 .5-.5m4.5.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5zM2 10v2H1v-2zm2 0v2H3v-2zm2 0v2H5v-2zm3 0v2H8v-2zm2 0v2h-1v-2zm2 0v2h-1v-2zm2 0v2h-1v-2z\"/>",
+  "box-seam": "<path d=\"M8.186 1.113a.5.5 0 0 0-.372 0L1.846 3.5l2.404.961L10.404 2zm3.564 1.426L5.596 5 8 5.961 14.154 3.5zm3.25 1.7-6.5 2.6v7.922l6.5-2.6V4.24zM7.5 14.762V6.838L1 4.239v7.923zM7.443.184a1.5 1.5 0 0 1 1.114 0l7.129 2.852A.5.5 0 0 1 16 3.5v8.662a1 1 0 0 1-.629.928l-7.185 2.874a.5.5 0 0 1-.372 0L.63 13.09a1 1 0 0 1-.63-.928V3.5a.5.5 0 0 1 .314-.464z\"/>",
+  "boxes": "<path d=\"M7.752.066a.5.5 0 0 1 .496 0l3.75 2.143a.5.5 0 0 1 .252.434v3.995l3.498 2A.5.5 0 0 1 16 9.07v4.286a.5.5 0 0 1-.252.434l-3.75 2.143a.5.5 0 0 1-.496 0l-3.502-2-3.502 2.001a.5.5 0 0 1-.496 0l-3.75-2.143A.5.5 0 0 1 0 13.357V9.071a.5.5 0 0 1 .252-.434L3.75 6.638V2.643a.5.5 0 0 1 .252-.434zM4.25 7.504 1.508 9.071l2.742 1.567 2.742-1.567zM7.5 9.933l-2.75 1.571v3.134l2.75-1.571zm1 3.134 2.75 1.571v-3.134L8.5 9.933zm.508-3.996 2.742 1.567 2.742-1.567-2.742-1.567zm2.242-2.433V3.504L8.5 5.076V8.21zM7.5 8.21V5.076L4.75 3.504v3.134zM5.258 2.643 8 4.21l2.742-1.567L8 1.076zM15 9.933l-2.75 1.571v3.134L15 13.067zM3.75 14.638v-3.134L1 9.933v3.134z\"/>",
+  "diagram-3": "<path fill-rule=\"evenodd\" d=\"M6 3.5A1.5 1.5 0 0 1 7.5 2h1A1.5 1.5 0 0 1 10 3.5v1A1.5 1.5 0 0 1 8.5 6v1H14a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 2 7h5.5V6A1.5 1.5 0 0 1 6 4.5zM8.5 5a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5zM0 11.5A1.5 1.5 0 0 1 1.5 10h1A1.5 1.5 0 0 1 4 11.5v1A1.5 1.5 0 0 1 2.5 14h-1A1.5 1.5 0 0 1 0 12.5zm1.5-.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm4.5.5A1.5 1.5 0 0 1 7.5 10h1a1.5 1.5 0 0 1 1.5 1.5v1A1.5 1.5 0 0 1 8.5 14h-1A1.5 1.5 0 0 1 6 12.5zm1.5-.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm4.5.5a1.5 1.5 0 0 1 1.5-1.5h1a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5zm1.5-.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z\"/>",
+  "diagram-2": "<path fill-rule=\"evenodd\" d=\"M6 3.5A1.5 1.5 0 0 1 7.5 2h1A1.5 1.5 0 0 1 10 3.5v1A1.5 1.5 0 0 1 8.5 6v1H11a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 5 7h2.5V6A1.5 1.5 0 0 1 6 4.5zM8.5 5a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5zM3 11.5A1.5 1.5 0 0 1 4.5 10h1A1.5 1.5 0 0 1 7 11.5v1A1.5 1.5 0 0 1 5.5 14h-1A1.5 1.5 0 0 1 3 12.5zm1.5-.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm4.5.5a1.5 1.5 0 0 1 1.5-1.5h1a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5h-1A1.5 1.5 0 0 1 9 12.5zm1.5-.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z\"/>",
+  "gear": "<path d=\"M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492M5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0\"/> <path d=\"M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115z\"/>",
+  "gear-wide-connected": "<path d=\"M7.068.727c.243-.97 1.62-.97 1.864 0l.071.286a.96.96 0 0 0 1.622.434l.205-.211c.695-.719 1.888-.03 1.613.931l-.08.284a.96.96 0 0 0 1.187 1.187l.283-.081c.96-.275 1.65.918.931 1.613l-.211.205a.96.96 0 0 0 .434 1.622l.286.071c.97.243.97 1.62 0 1.864l-.286.071a.96.96 0 0 0-.434 1.622l.211.205c.719.695.03 1.888-.931 1.613l-.284-.08a.96.96 0 0 0-1.187 1.187l.081.283c.275.96-.918 1.65-1.613.931l-.205-.211a.96.96 0 0 0-1.622.434l-.071.286c-.243.97-1.62.97-1.864 0l-.071-.286a.96.96 0 0 0-1.622-.434l-.205.211c-.695.719-1.888.03-1.613-.931l.08-.284a.96.96 0 0 0-1.186-1.187l-.284.081c-.96.275-1.65-.918-.931-1.613l.211-.205a.96.96 0 0 0-.434-1.622l-.286-.071c-.97-.243-.97-1.62 0-1.864l.286-.071a.96.96 0 0 0 .434-1.622l-.211-.205c-.719-.695-.03-1.888.931-1.613l.284.08a.96.96 0 0 0 1.187-1.186l-.081-.284c-.275-.96.918-1.65 1.613-.931l.205.211a.96.96 0 0 0 1.622-.434zM12.973 8.5H8.25l-2.834 3.779A4.998 4.998 0 0 0 12.973 8.5m0-1a4.998 4.998 0 0 0-7.557-3.779l2.834 3.78zM5.048 3.967l-.087.065zm-.431.355A4.98 4.98 0 0 0 3.002 8c0 1.455.622 2.765 1.615 3.678L7.375 8zm.344 7.646.087.065z\"/>",
+  "arrow-left-right": "<path fill-rule=\"evenodd\" d=\"M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5m14-7a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H14.5a.5.5 0 0 1 .5.5\"/>",
+  "arrow-repeat": "<path d=\"M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41m-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9\"/> <path fill-rule=\"evenodd\" d=\"M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5 5 0 0 0 8 3M3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9z\"/>",
+  "shuffle": "<path fill-rule=\"evenodd\" d=\"M0 3.5A.5.5 0 0 1 .5 3H1c2.202 0 3.827 1.24 4.874 2.418.49.552.865 1.102 1.126 1.532.26-.43.636-.98 1.126-1.532C9.173 4.24 10.798 3 13 3v1c-1.798 0-3.173 1.01-4.126 2.082A9.6 9.6 0 0 0 7.556 8a9.6 9.6 0 0 0 1.317 1.918C9.828 10.99 11.204 12 13 12v1c-2.202 0-3.827-1.24-4.874-2.418A10.6 10.6 0 0 1 7 9.05c-.26.43-.636.98-1.126 1.532C4.827 11.76 3.202 13 1 13H.5a.5.5 0 0 1 0-1H1c1.798 0 3.173-1.01 4.126-2.082A9.6 9.6 0 0 0 6.444 8a9.6 9.6 0 0 0-1.317-1.918C4.172 5.01 2.796 4 1 4H.5a.5.5 0 0 1-.5-.5\"/> <path d=\"M13 5.466V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192m0 9v-3.932a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192\"/>",
+  "hdd-network": "<path d=\"M4.5 5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1M3 4.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0\"/> <path d=\"M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H8.5v3a1.5 1.5 0 0 1 1.5 1.5h5.5a.5.5 0 0 1 0 1H10A1.5 1.5 0 0 1 8.5 14h-1A1.5 1.5 0 0 1 6 12.5H.5a.5.5 0 0 1 0-1H6A1.5 1.5 0 0 1 7.5 10V7H2a2 2 0 0 1-2-2zm1 0v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1m6 7.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5\"/>",
+  "router": "<path d=\"M5.525 3.025a3.5 3.5 0 0 1 4.95 0 .5.5 0 1 0 .707-.707 4.5 4.5 0 0 0-6.364 0 .5.5 0 0 0 .707.707\"/> <path d=\"M6.94 4.44a1.5 1.5 0 0 1 2.12 0 .5.5 0 0 0 .708-.708 2.5 2.5 0 0 0-3.536 0 .5.5 0 0 0 .707.707ZM2.5 11a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1m4.5-.5a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0m2.5.5a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1m1.5-.5a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0m2 0a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0\"/> <path d=\"M2.974 2.342a.5.5 0 1 0-.948.316L3.806 8H1.5A1.5 1.5 0 0 0 0 9.5v2A1.5 1.5 0 0 0 1.5 13H2a.5.5 0 0 0 .5.5h2A.5.5 0 0 0 5 13h6a.5.5 0 0 0 .5.5h2a.5.5 0 0 0 .5-.5h.5a1.5 1.5 0 0 0 1.5-1.5v-2A1.5 1.5 0 0 0 14.5 8h-2.306l1.78-5.342a.5.5 0 1 0-.948-.316L11.14 8H4.86zM14.5 9a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5z\"/> <path d=\"M8.5 5.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0\"/>",
+  "shield-lock": "<path d=\"M5.338 1.59a61 61 0 0 0-2.837.856.48.48 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.7 10.7 0 0 0 2.287 2.233c.346.244.652.42.893.533q.18.085.293.118a1 1 0 0 0 .101.025 1 1 0 0 0 .1-.025q.114-.034.294-.118c.24-.113.547-.29.893-.533a10.7 10.7 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031 2.253-9.188a.48.48 0 0 0-.328-.39c-.651-.213-1.75-.56-2.837-.855C9.552 1.29 8.531 1.067 8 1.067c-.53 0-1.552.223-2.662.524zM5.072.56C6.157.265 7.31 0 8 0s1.843.265 2.928.56c1.11.3 2.229.655 2.887.87a1.54 1.54 0 0 1 1.044 1.262c.596 4.477-.787 7.795-2.465 9.99a11.8 11.8 0 0 1-2.517 2.453 7 7 0 0 1-1.048.625c-.28.132-.581.24-.829.24s-.548-.108-.829-.24a7 7 0 0 1-1.048-.625 11.8 11.8 0 0 1-2.517-2.453C1.928 10.487.545 7.169 1.141 2.692A1.54 1.54 0 0 1 2.185 1.43 63 63 0 0 1 5.072.56\"/> <path d=\"M9.5 6.5a1.5 1.5 0 0 1-1 1.415l.385 1.99a.5.5 0 0 1-.491.595h-.788a.5.5 0 0 1-.49-.595l.384-1.99a1.5 1.5 0 1 1 2-1.415\"/>",
+  "shield-check": "<path d=\"M5.338 1.59a61 61 0 0 0-2.837.856.48.48 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.7 10.7 0 0 0 2.287 2.233c.346.244.652.42.893.533q.18.085.293.118a1 1 0 0 0 .101.025 1 1 0 0 0 .1-.025q.114-.034.294-.118c.24-.113.547-.29.893-.533a10.7 10.7 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031 2.253-9.188a.48.48 0 0 0-.328-.39c-.651-.213-1.75-.56-2.837-.855C9.552 1.29 8.531 1.067 8 1.067c-.53 0-1.552.223-2.662.524zM5.072.56C6.157.265 7.31 0 8 0s1.843.265 2.928.56c1.11.3 2.229.655 2.887.87a1.54 1.54 0 0 1 1.044 1.262c.596 4.477-.787 7.795-2.465 9.99a11.8 11.8 0 0 1-2.517 2.453 7 7 0 0 1-1.048.625c-.28.132-.581.24-.829.24s-.548-.108-.829-.24a7 7 0 0 1-1.048-.625 11.8 11.8 0 0 1-2.517-2.453C1.928 10.487.545 7.169 1.141 2.692A1.54 1.54 0 0 1 2.185 1.43 63 63 0 0 1 5.072.56\"/> <path d=\"M10.854 5.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 7.793l2.646-2.647a.5.5 0 0 1 .708 0\"/>",
+  "key": "<path d=\"M0 8a4 4 0 0 1 7.465-2H14a.5.5 0 0 1 .354.146l1.5 1.5a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0L13 9.207l-.646.647a.5.5 0 0 1-.708 0L11 9.207l-.646.647a.5.5 0 0 1-.708 0L9 9.207l-.646.647A.5.5 0 0 1 8 10h-.535A4 4 0 0 1 0 8m4-3a3 3 0 1 0 2.712 4.285A.5.5 0 0 1 7.163 9h.63l.853-.854a.5.5 0 0 1 .708 0l.646.647.646-.647a.5.5 0 0 1 .708 0l.646.647.646-.647a.5.5 0 0 1 .708 0l.646.647.793-.793-1-1h-6.63a.5.5 0 0 1-.451-.285A3 3 0 0 0 4 5\"/> <path d=\"M4 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0\"/>",
+  "person": "<path d=\"M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10s-3.516.68-4.168 1.332c-.678.678-.83 1.418-.832 1.664z\"/>",
+  "people": "<path d=\"M15 14s1 0 1-1-1-4-5-4-5 3-5 4 1 1 1 1zm-7.978-1L7 12.996c.001-.264.167-1.03.76-1.72C8.312 10.629 9.282 10 11 10c1.717 0 2.687.63 3.24 1.276.593.69.758 1.457.76 1.72l-.008.002-.014.002zM11 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4m3-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0M6.936 9.28a6 6 0 0 0-1.23-.247A7 7 0 0 0 5 9c-4 0-5 3-5 4q0 1 1 1h4.216A2.24 2.24 0 0 1 5 13c0-1.01.377-2.042 1.09-2.904.243-.294.526-.569.846-.816M4.92 10A5.5 5.5 0 0 0 4 13H1c0-.26.164-1.03.76-1.724.545-.636 1.492-1.256 3.16-1.275ZM1.5 5.5a3 3 0 1 1 6 0 3 3 0 0 1-6 0m3-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4\"/>",
+  "laptop": "<path d=\"M13.5 3a.5.5 0 0 1 .5.5V11H2V3.5a.5.5 0 0 1 .5-.5zm-11-1A1.5 1.5 0 0 0 1 3.5V12h14V3.5A1.5 1.5 0 0 0 13.5 2zM0 12.5h16a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 12.5\"/>",
+  "phone": "<path d=\"M11 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM5 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z\"/> <path d=\"M8 14a1 1 0 1 0 0-2 1 1 0 0 0 0 2\"/>",
+  "globe": "<path d=\"M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m7.5-6.923c-.67.204-1.335.82-1.887 1.855A8 8 0 0 0 5.145 4H7.5zM4.09 4a9.3 9.3 0 0 1 .64-1.539 7 7 0 0 1 .597-.933A7.03 7.03 0 0 0 2.255 4zm-.582 3.5c.03-.877.138-1.718.312-2.5H1.674a7 7 0 0 0-.656 2.5zM4.847 5a12.5 12.5 0 0 0-.338 2.5H7.5V5zM8.5 5v2.5h2.99a12.5 12.5 0 0 0-.337-2.5zM4.51 8.5a12.5 12.5 0 0 0 .337 2.5H7.5V8.5zm3.99 0V11h2.653c.187-.765.306-1.608.338-2.5zM5.145 12q.208.58.468 1.068c.552 1.035 1.218 1.65 1.887 1.855V12zm.182 2.472a7 7 0 0 1-.597-.933A9.3 9.3 0 0 1 4.09 12H2.255a7 7 0 0 0 3.072 2.472M3.82 11a13.7 13.7 0 0 1-.312-2.5h-2.49c.062.89.291 1.733.656 2.5zm6.853 3.472A7 7 0 0 0 13.745 12H11.91a9.3 9.3 0 0 1-.64 1.539 7 7 0 0 1-.597.933M8.5 12v2.923c.67-.204 1.335-.82 1.887-1.855q.26-.487.468-1.068zm3.68-1h2.146c.365-.767.594-1.61.656-2.5h-2.49a13.7 13.7 0 0 1-.312 2.5m2.802-3.5a7 7 0 0 0-.656-2.5H12.18c.174.782.282 1.623.312 2.5zM11.27 2.461c.247.464.462.98.64 1.539h1.835a7 7 0 0 0-3.072-2.472c.218.284.418.598.597.933M10.855 4a8 8 0 0 0-.468-1.068C9.835 1.897 9.17 1.282 8.5 1.077V4z\"/>",
+  "envelope": "<path d=\"M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z\"/>",
+  "inbox": "<path d=\"M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm9.954 5H10.45a2.5 2.5 0 0 1-4.9 0H1.066l.32 2.562a.5.5 0 0 0 .497.438h12.234a.5.5 0 0 0 .496-.438zM3.809 3.563A1.5 1.5 0 0 1 4.981 3h6.038a1.5 1.5 0 0 1 1.172.563l3.7 4.625a.5.5 0 0 1 .105.374l-.39 3.124A1.5 1.5 0 0 1 14.117 13H1.883a1.5 1.5 0 0 1-1.489-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z\"/>",
+  "stack": "<path d=\"m14.12 10.163 1.715.858c.22.11.22.424 0 .534L8.267 15.34a.6.6 0 0 1-.534 0L.165 11.555a.299.299 0 0 1 0-.534l1.716-.858 5.317 2.659c.505.252 1.1.252 1.604 0l5.317-2.66zM7.733.063a.6.6 0 0 1 .534 0l7.568 3.784a.3.3 0 0 1 0 .535L8.267 8.165a.6.6 0 0 1-.534 0L.165 4.382a.299.299 0 0 1 0-.535z\"/> <path d=\"m14.12 6.576 1.715.858c.22.11.22.424 0 .534l-7.568 3.784a.6.6 0 0 1-.534 0L.165 7.968a.299.299 0 0 1 0-.534l1.716-.858 5.317 2.659c.505.252 1.1.252 1.604 0z\"/>",
+  "collection": "<path d=\"M2.5 3.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1zm2-2a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1zM0 13a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 16 13V6a1.5 1.5 0 0 0-1.5-1.5h-13A1.5 1.5 0 0 0 0 6zm1.5.5A.5.5 0 0 1 1 13V6a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5z\"/>",
+  "broadcast": "<path d=\"M3.05 3.05a7 7 0 0 0 0 9.9.5.5 0 0 1-.707.707 8 8 0 0 1 0-11.314.5.5 0 0 1 .707.707m2.122 2.122a4 4 0 0 0 0 5.656.5.5 0 1 1-.708.708 5 5 0 0 1 0-7.072.5.5 0 0 1 .708.708m5.656-.708a.5.5 0 0 1 .708 0 5 5 0 0 1 0 7.072.5.5 0 1 1-.708-.708 4 4 0 0 0 0-5.656.5.5 0 0 1 0-.708m2.122-2.12a.5.5 0 0 1 .707 0 8 8 0 0 1 0 11.313.5.5 0 0 1-.707-.707 7 7 0 0 0 0-9.9.5.5 0 0 1 0-.707zM10 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0\"/>",
+  "broadcast-pin": "<path d=\"M3.05 3.05a7 7 0 0 0 0 9.9.5.5 0 0 1-.707.707 8 8 0 0 1 0-11.314.5.5 0 0 1 .707.707m2.122 2.122a4 4 0 0 0 0 5.656.5.5 0 1 1-.708.708 5 5 0 0 1 0-7.072.5.5 0 0 1 .708.708m5.656-.708a.5.5 0 0 1 .708 0 5 5 0 0 1 0 7.072.5.5 0 1 1-.708-.708 4 4 0 0 0 0-5.656.5.5 0 0 1 0-.708m2.122-2.12a.5.5 0 0 1 .707 0 8 8 0 0 1 0 11.313.5.5 0 0 1-.707-.707 7 7 0 0 0 0-9.9.5.5 0 0 1 0-.707zM6 8a2 2 0 1 1 2.5 1.937V15.5a.5.5 0 0 1-1 0V9.937A2 2 0 0 1 6 8\"/>",
+  "clock-history": "<path d=\"M8.515 1.019A7 7 0 0 0 8 1V0a8 8 0 0 1 .589.022zm2.004.45a7 7 0 0 0-.985-.299l.219-.976q.576.129 1.126.342zm1.37.71a7 7 0 0 0-.439-.27l.493-.87a8 8 0 0 1 .979.654l-.615.789a7 7 0 0 0-.418-.302zm1.834 1.79a7 7 0 0 0-.653-.796l.724-.69q.406.429.747.91zm.744 1.352a7 7 0 0 0-.214-.468l.893-.45a8 8 0 0 1 .45 1.088l-.95.313a7 7 0 0 0-.179-.483m.53 2.507a7 7 0 0 0-.1-1.025l.985-.17q.1.58.116 1.17zm-.131 1.538q.05-.254.081-.51l.993.123a8 8 0 0 1-.23 1.155l-.964-.267q.069-.247.12-.501m-.952 2.379q.276-.436.486-.908l.914.405q-.24.54-.555 1.038zm-.964 1.205q.183-.183.35-.378l.758.653a8 8 0 0 1-.401.432z\"/> <path d=\"M8 1a7 7 0 1 0 4.95 11.95l.707.707A8.001 8.001 0 1 1 8 0z\"/> <path d=\"M7.5 3a.5.5 0 0 1 .5.5v5.21l3.248 1.856a.5.5 0 0 1-.496.868l-3.5-2A.5.5 0 0 1 7 9V3.5a.5.5 0 0 1 .5-.5\"/>",
+  "alarm": "<path d=\"M8.5 5.5a.5.5 0 0 0-1 0v3.362l-1.429 2.38a.5.5 0 1 0 .858.515l1.5-2.5A.5.5 0 0 0 8.5 9z\"/> <path d=\"M6.5 0a.5.5 0 0 0 0 1H7v1.07a7.001 7.001 0 0 0-3.273 12.474l-.602.602a.5.5 0 0 0 .707.708l.746-.746A6.97 6.97 0 0 0 8 16a6.97 6.97 0 0 0 3.422-.892l.746.746a.5.5 0 0 0 .707-.708l-.601-.602A7.001 7.001 0 0 0 9 2.07V1h.5a.5.5 0 0 0 0-1zm1.038 3.018a6 6 0 0 1 .924 0 6 6 0 1 1-.924 0M0 3.5c0 .753.333 1.429.86 1.887A8.04 8.04 0 0 1 4.387 1.86 2.5 2.5 0 0 0 0 3.5M13.5 1c-.753 0-1.429.333-1.887.86a8.04 8.04 0 0 1 3.527 3.527A2.5 2.5 0 0 0 13.5 1\"/>",
+  "calendar-check": "<path d=\"M10.854 7.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 9.793l2.646-2.647a.5.5 0 0 1 .708 0\"/> <path d=\"M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5M1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z\"/>",
+  "file-earmark-text": "<path d=\"M5.5 7a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM5 9.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5\"/> <path d=\"M9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.5zm0 1v2A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z\"/>",
+  "file-earmark-arrow-up": "<path d=\"M8.5 11.5a.5.5 0 0 1-1 0V7.707L6.354 8.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 7.707z\"/> <path d=\"M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2M9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5z\"/>",
+  "folder": "<path d=\"M.54 3.87.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3h3.982a2 2 0 0 1 1.992 2.181l-.637 7A2 2 0 0 1 13.174 14H2.826a2 2 0 0 1-1.991-1.819l-.637-7a2 2 0 0 1 .342-1.31zM2.19 4a1 1 0 0 0-.996 1.09l.637 7a1 1 0 0 0 .995.91h10.348a1 1 0 0 0 .995-.91l.637-7A1 1 0 0 0 13.81 4zm4.69-1.707A1 1 0 0 0 6.172 2H2.5a1 1 0 0 0-1 .981l.006.139q.323-.119.684-.12h5.396z\"/>",
+  "funnel": "<path d=\"M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5zm1 .5v1.308l4.372 4.858A.5.5 0 0 1 7 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.334L13.5 3.308V2z\"/>",
+  "lightning-charge": "<path d=\"M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09zM4.157 8.5H7a.5.5 0 0 1 .478.647L6.11 13.59l5.732-6.09H9a.5.5 0 0 1-.478-.647L9.89 2.41z\"/>",
+  "lightning": "<path d=\"M5.52.359A.5.5 0 0 1 6 0h4a.5.5 0 0 1 .474.658L8.694 6H12.5a.5.5 0 0 1 .395.807l-7 9a.5.5 0 0 1-.873-.454L6.823 9.5H3.5a.5.5 0 0 1-.48-.641zM6.374 1 4.168 8.5H7.5a.5.5 0 0 1 .478.647L6.78 13.04 11.478 7H8a.5.5 0 0 1-.474-.658L9.306 1z\"/>",
+  "bell": "<path d=\"M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2M8 1.918l-.797.161A4 4 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4 4 0 0 0-3.203-3.92zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5 5 0 0 1 13 6c0 .88.32 4.2 1.22 6\"/>",
+  "graph-up-arrow": "<path fill-rule=\"evenodd\" d=\"M0 0h1v15h15v1H0zm10 3.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-1 0V4.9l-3.613 4.417a.5.5 0 0 1-.74.037L7.06 6.767l-3.656 5.027a.5.5 0 0 1-.808-.588l4-5.5a.5.5 0 0 1 .758-.06l2.609 2.61L13.445 4H10.5a.5.5 0 0 1-.5-.5\"/>",
+  "speedometer2": "<path d=\"M8 4a.5.5 0 0 1 .5.5V6a.5.5 0 0 1-1 0V4.5A.5.5 0 0 1 8 4M3.732 5.732a.5.5 0 0 1 .707 0l.915.914a.5.5 0 1 1-.708.708l-.914-.915a.5.5 0 0 1 0-.707M2 10a.5.5 0 0 1 .5-.5h1.586a.5.5 0 0 1 0 1H2.5A.5.5 0 0 1 2 10m9.5 0a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 0 1H12a.5.5 0 0 1-.5-.5m.754-4.246a.39.39 0 0 0-.527-.02L7.547 9.31a.91.91 0 1 0 1.302 1.258l3.434-4.297a.39.39 0 0 0-.029-.518z\"/> <path fill-rule=\"evenodd\" d=\"M0 10a8 8 0 1 1 15.547 2.661c-.442 1.253-1.845 1.602-2.932 1.25C11.309 13.488 9.475 13 8 13c-1.474 0-3.31.488-4.615.911-1.087.352-2.49.003-2.932-1.25A8 8 0 0 1 0 10m8-7a7 7 0 0 0-6.603 9.329c.203.575.923.876 1.68.63C4.397 12.533 6.358 12 8 12s3.604.532 4.923.96c.757.245 1.477-.056 1.68-.631A7 7 0 0 0 8 3\"/>",
+  "bug": "<path d=\"M4.355.522a.5.5 0 0 1 .623.333l.291.956A5 5 0 0 1 8 1c1.007 0 1.946.298 2.731.811l.29-.956a.5.5 0 1 1 .957.29l-.41 1.352A5 5 0 0 1 13 6h.5a.5.5 0 0 0 .5-.5V5a.5.5 0 0 1 1 0v.5A1.5 1.5 0 0 1 13.5 7H13v1h1.5a.5.5 0 0 1 0 1H13v1h.5a1.5 1.5 0 0 1 1.5 1.5v.5a.5.5 0 1 1-1 0v-.5a.5.5 0 0 0-.5-.5H13a5 5 0 0 1-10 0h-.5a.5.5 0 0 0-.5.5v.5a.5.5 0 1 1-1 0v-.5A1.5 1.5 0 0 1 2.5 10H3V9H1.5a.5.5 0 0 1 0-1H3V7h-.5A1.5 1.5 0 0 1 1 5.5V5a.5.5 0 0 1 1 0v.5a.5.5 0 0 0 .5.5H3c0-1.364.547-2.601 1.432-3.503l-.41-1.352a.5.5 0 0 1 .333-.623M4 7v4a4 4 0 0 0 3.5 3.97V7zm4.5 0v7.97A4 4 0 0 0 12 11V7zM12 6a4 4 0 0 0-1.334-2.982A3.98 3.98 0 0 0 8 2a3.98 3.98 0 0 0-2.667 1.018A4 4 0 0 0 4 6z\"/>",
+  "terminal": "<path d=\"M6 9a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3A.5.5 0 0 1 6 9M3.854 4.146a.5.5 0 1 0-.708.708L4.793 6.5 3.146 8.146a.5.5 0 1 0 .708.708l2-2a.5.5 0 0 0 0-.708z\"/> <path d=\"M2 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2zm12 1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z\"/>",
+  "code-slash": "<path d=\"M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0m6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0\"/>",
+  "git": "<path d=\"M15.698 7.287 8.712.302a1.03 1.03 0 0 0-1.457 0l-1.45 1.45 1.84 1.84a1.223 1.223 0 0 1 1.55 1.56l1.773 1.774a1.224 1.224 0 0 1 1.267 2.025 1.226 1.226 0 0 1-2.002-1.334L8.58 5.963v4.353a1.226 1.226 0 1 1-1.008-.036V5.887a1.226 1.226 0 0 1-.666-1.608L5.093 2.465l-4.79 4.79a1.03 1.03 0 0 0 0 1.457l6.986 6.986a1.03 1.03 0 0 0 1.457 0l6.953-6.953a1.03 1.03 0 0 0 0-1.457\"/>",
+  "archive": "<path d=\"M0 2a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1v7.5a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 1 12.5V5a1 1 0 0 1-1-1zm2 3v7.5A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5V5zm13-3H1v2h14zM5 7.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5\"/>",
+  "search": "<path d=\"M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0\"/>",
+  "table": "<path d=\"M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm15 2h-4v3h4zm0 4h-4v3h4zm0 4h-4v3h3a1 1 0 0 0 1-1zm-5 3v-3H6v3zm-5 0v-3H1v2a1 1 0 0 0 1 1zm-4-4h4V8H1zm0-4h4V4H1zm5-3v3h4V4zm4 4H6v3h4z\"/>",
+  "list-check": "<path fill-rule=\"evenodd\" d=\"M5 11.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5M3.854 2.146a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0l-.5-.5a.5.5 0 1 1 .708-.708L2 3.293l1.146-1.147a.5.5 0 0 1 .708 0m0 4a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0l-.5-.5a.5.5 0 1 1 .708-.708L2 7.293l1.146-1.147a.5.5 0 0 1 .708 0m0 4a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0l-.5-.5a.5.5 0 0 1 .708-.708l.146.147 1.146-1.147a.5.5 0 0 1 .708 0\"/>",
+  "check2-circle": "<path d=\"M2.5 8a5.5 5.5 0 0 1 8.25-4.764.5.5 0 0 0 .5-.866A6.5 6.5 0 1 0 14.5 8a.5.5 0 0 0-1 0 5.5 5.5 0 1 1-11 0\"/> <path d=\"M15.354 3.354a.5.5 0 0 0-.708-.708L8 9.293 5.354 6.646a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0z\"/>",
+  "exclamation-triangle": "<path d=\"M7.938 2.016A.13.13 0 0 1 8.002 2a.13.13 0 0 1 .063.016.15.15 0 0 1 .054.057l6.857 11.667c.036.06.035.124.002.183a.2.2 0 0 1-.054.06.1.1 0 0 1-.066.017H1.146a.1.1 0 0 1-.066-.017.2.2 0 0 1-.054-.06.18.18 0 0 1 .002-.183L7.884 2.073a.15.15 0 0 1 .054-.057m1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767z\"/> <path d=\"M7.002 12a1 1 0 1 1 2 0 1 1 0 0 1-2 0M7.1 5.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0z\"/>",
+  "cloud-upload": "<path fill-rule=\"evenodd\" d=\"M4.406 1.342A5.53 5.53 0 0 1 8 0c2.69 0 4.923 2 5.166 4.579C14.758 4.804 16 6.137 16 7.773 16 9.569 14.502 11 12.687 11H10a.5.5 0 0 1 0-1h2.688C13.979 10 15 8.988 15 7.773c0-1.216-1.02-2.228-2.313-2.228h-.5v-.5C12.188 2.825 10.328 1 8 1a4.53 4.53 0 0 0-2.941 1.1c-.757.652-1.153 1.438-1.153 2.055v.448l-.445.049C2.064 4.805 1 5.952 1 7.318 1 8.785 2.23 10 3.781 10H6a.5.5 0 0 1 0 1H3.781C1.708 11 0 9.366 0 7.318c0-1.763 1.266-3.223 2.942-3.593.143-.863.698-1.723 1.464-2.383\"/> <path fill-rule=\"evenodd\" d=\"M7.646 4.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707V14.5a.5.5 0 0 1-1 0V5.707L5.354 7.854a.5.5 0 1 1-.708-.708z\"/>",
+  "cloud-download": "<path d=\"M4.406 1.342A5.53 5.53 0 0 1 8 0c2.69 0 4.923 2 5.166 4.579C14.758 4.804 16 6.137 16 7.773 16 9.569 14.502 11 12.687 11H10a.5.5 0 0 1 0-1h2.688C13.979 10 15 8.988 15 7.773c0-1.216-1.02-2.228-2.313-2.228h-.5v-.5C12.188 2.825 10.328 1 8 1a4.53 4.53 0 0 0-2.941 1.1c-.757.652-1.153 1.438-1.153 2.055v.448l-.445.049C2.064 4.805 1 5.952 1 7.318 1 8.785 2.23 10 3.781 10H6a.5.5 0 0 1 0 1H3.781C1.708 11 0 9.366 0 7.318c0-1.763 1.266-3.223 2.942-3.593.143-.863.698-1.723 1.464-2.383\"/> <path d=\"M7.646 15.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 14.293V5.5a.5.5 0 0 0-1 0v8.793l-2.146-2.147a.5.5 0 0 0-.708.708z\"/>",
+  "window-stack": "<path d=\"M4.5 6a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1M6 6a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0\"/> <path d=\"M12 1a2 2 0 0 1 2 2 2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2 2 2 0 0 1-2-2V3a2 2 0 0 1 2-2zM2 12V5a2 2 0 0 1 2-2h9a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1m1-4v5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8zm12-1V5a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v2z\"/>",
+  "pc-display": "<path d=\"M8 1a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1zm1 13.5a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0m2 0a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0M9.5 1a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM9 3.5a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 0-1h-5a.5.5 0 0 0-.5.5M1.5 2A1.5 1.5 0 0 0 0 3.5v7A1.5 1.5 0 0 0 1.5 12H6v2h-.5a.5.5 0 0 0 0 1H7v-4H1.5a.5.5 0 0 1-.5-.5v-7a.5.5 0 0 1 .5-.5H7V2z\"/>",
+  "display": "<path d=\"M0 4s0-2 2-2h12s2 0 2 2v6s0 2-2 2h-4q0 1 .25 1.5H11a.5.5 0 0 1 0 1H5a.5.5 0 0 1 0-1h.75Q6 13 6 12H2s-2 0-2-2zm1.398-.855a.76.76 0 0 0-.254.302A1.5 1.5 0 0 0 1 4.01V10c0 .325.078.502.145.602q.105.156.302.254a1.5 1.5 0 0 0 .538.143L2.01 11H14c.325 0 .502-.078.602-.145a.76.76 0 0 0 .254-.302 1.5 1.5 0 0 0 .143-.538L15 9.99V4c0-.325-.078-.502-.145-.602a.76.76 0 0 0-.302-.254A1.5 1.5 0 0 0 13.99 3H2c-.325 0-.502.078-.602.145\"/>",
+  "door-open": "<path d=\"M8.5 10c-.276 0-.5-.448-.5-1s.224-1 .5-1 .5.448.5 1-.224 1-.5 1\"/> <path d=\"M10.828.122A.5.5 0 0 1 11 .5V1h.5A1.5 1.5 0 0 1 13 2.5V15h1.5a.5.5 0 0 1 0 1h-13a.5.5 0 0 1 0-1H3V1.5a.5.5 0 0 1 .43-.495l7-1a.5.5 0 0 1 .398.117M11.5 2H11v13h1V2.5a.5.5 0 0 0-.5-.5M4 1.934V15h6V1.077z\"/>",
+  "signpost-split": "<path d=\"M7 7V1.414a1 1 0 0 1 2 0V2h5a1 1 0 0 1 .8.4l.975 1.3a.5.5 0 0 1 0 .6L14.8 5.6a1 1 0 0 1-.8.4H9v10H7v-5H2a1 1 0 0 1-.8-.4L.225 9.3a.5.5 0 0 1 0-.6L1.2 7.4A1 1 0 0 1 2 7zm1 3V8H2l-.75 1L2 10zm0-5h6l.75-1L14 3H8z\"/>",
+  "distribute-vertical": "<path fill-rule=\"evenodd\" d=\"M1 1.5a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 0-1h-13a.5.5 0 0 0-.5.5m0 13a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 0-1h-13a.5.5 0 0 0-.5.5\"/> <path d=\"M2 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z\"/>",
+  "activity": "<path fill-rule=\"evenodd\" d=\"M6 2a.5.5 0 0 1 .47.33L10 12.036l1.53-4.208A.5.5 0 0 1 12 7.5h3.5a.5.5 0 0 1 0 1h-3.15l-1.88 5.17a.5.5 0 0 1-.94 0L6 3.964 4.47 8.171A.5.5 0 0 1 4 8.5H.5a.5.5 0 0 1 0-1h3.15l1.88-5.17A.5.5 0 0 1 6 2\"/>",
+  "hourglass-split": "<path d=\"M2.5 15a.5.5 0 1 1 0-1h1v-1a4.5 4.5 0 0 1 2.557-4.06c.29-.139.443-.377.443-.59v-.7c0-.213-.154-.451-.443-.59A4.5 4.5 0 0 1 3.5 3V2h-1a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-1v1a4.5 4.5 0 0 1-2.557 4.06c-.29.139-.443.377-.443.59v.7c0 .213.154.451.443.59A4.5 4.5 0 0 1 12.5 13v1h1a.5.5 0 0 1 0 1zm2-13v1c0 .537.12 1.045.337 1.5h6.326c.216-.455.337-.963.337-1.5V2zm3 6.35c0 .701-.478 1.236-1.011 1.492A3.5 3.5 0 0 0 4.5 13s.866-1.299 3-1.48zm1 0v3.17c2.134.181 3 1.48 3 1.48a3.5 3.5 0 0 0-1.989-3.158C8.978 9.586 8.5 9.052 8.5 8.351z\"/>",
+  "send": "<path d=\"M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576zm6.787-8.201L1.591 6.602l4.339 2.76z\"/>",
+  "chat-dots": "<path d=\"M5 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2\"/> <path d=\"m2.165 15.803.02-.004c1.83-.363 2.948-.842 3.468-1.105A9 9 0 0 0 8 15c4.418 0 8-3.134 8-7s-3.582-7-8-7-8 3.134-8 7c0 1.76.743 3.37 1.97 4.6a10.4 10.4 0 0 1-.524 2.318l-.003.011a11 11 0 0 1-.244.637c-.079.186.074.394.273.362a22 22 0 0 0 .693-.125m.8-3.108a1 1 0 0 0-.287-.801C1.618 10.83 1 9.468 1 8c0-3.192 3.004-6 7-6s7 2.808 7 6-3.004 6-7 6a8 8 0 0 1-2.088-.272 1 1 0 0 0-.711.074c-.387.196-1.24.57-2.634.893a11 11 0 0 0 .398-2\"/>",
+  "journal-text": "<path d=\"M5 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5m0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5\"/> <path d=\"M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-1h1v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v1H1V2a2 2 0 0 1 2-2\"/> <path d=\"M1 5v-.5a.5.5 0 0 1 1 0V5h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1zm0 3v-.5a.5.5 0 0 1 1 0V8h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1zm0 3v-.5a.5.5 0 0 1 1 0v.5h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1z\"/>",
+  "lock": "<path fill-rule=\"evenodd\" d=\"M8 0a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 2 13.5v-5a2.5 2.5 0 0 1 2-2.45V4a4 4 0 0 1 4-4M4.5 7A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7zM8 1a3 3 0 0 0-3 3v2h6V4a3 3 0 0 0-3-3\"/>",
+  "fingerprint": "<path d=\"M8.06 6.5a.5.5 0 0 1 .5.5v.776a11.5 11.5 0 0 1-.552 3.519l-1.331 4.14a.5.5 0 0 1-.952-.305l1.33-4.141a10.5 10.5 0 0 0 .504-3.213V7a.5.5 0 0 1 .5-.5Z\"/> <path d=\"M6.06 7a2 2 0 1 1 4 0 .5.5 0 1 1-1 0 1 1 0 1 0-2 0v.332q0 .613-.066 1.221A.5.5 0 0 1 6 8.447q.06-.555.06-1.115zm3.509 1a.5.5 0 0 1 .487.513 11.5 11.5 0 0 1-.587 3.339l-1.266 3.8a.5.5 0 0 1-.949-.317l1.267-3.8a10.5 10.5 0 0 0 .535-3.048A.5.5 0 0 1 9.569 8m-3.356 2.115a.5.5 0 0 1 .33.626L5.24 14.939a.5.5 0 1 1-.955-.296l1.303-4.199a.5.5 0 0 1 .625-.329\"/> <path d=\"M4.759 5.833A3.501 3.501 0 0 1 11.559 7a.5.5 0 0 1-1 0 2.5 2.5 0 0 0-4.857-.833.5.5 0 1 1-.943-.334m.3 1.67a.5.5 0 0 1 .449.546 10.7 10.7 0 0 1-.4 2.031l-1.222 4.072a.5.5 0 1 1-.958-.287L4.15 9.793a9.7 9.7 0 0 0 .363-1.842.5.5 0 0 1 .546-.449Zm6 .647a.5.5 0 0 1 .5.5c0 1.28-.213 2.552-.632 3.762l-1.09 3.145a.5.5 0 0 1-.944-.327l1.089-3.145c.382-1.105.578-2.266.578-3.435a.5.5 0 0 1 .5-.5Z\"/> <path d=\"M3.902 4.222a5 5 0 0 1 5.202-2.113.5.5 0 0 1-.208.979 4 4 0 0 0-4.163 1.69.5.5 0 0 1-.831-.556m6.72-.955a.5.5 0 0 1 .705-.052A4.99 4.99 0 0 1 13.059 7v1.5a.5.5 0 1 1-1 0V7a3.99 3.99 0 0 0-1.386-3.028.5.5 0 0 1-.051-.705M3.68 5.842a.5.5 0 0 1 .422.568q-.044.289-.044.59c0 .71-.1 1.417-.298 2.1l-1.14 3.923a.5.5 0 1 1-.96-.279L2.8 8.821A6.5 6.5 0 0 0 3.058 7q0-.375.054-.736a.5.5 0 0 1 .568-.422m8.882 3.66a.5.5 0 0 1 .456.54c-.084 1-.298 1.986-.64 2.934l-.744 2.068a.5.5 0 0 1-.941-.338l.745-2.07a10.5 10.5 0 0 0 .584-2.678.5.5 0 0 1 .54-.456\"/> <path d=\"M4.81 1.37A6.5 6.5 0 0 1 14.56 7a.5.5 0 1 1-1 0 5.5 5.5 0 0 0-8.25-4.765.5.5 0 0 1-.5-.865m-.89 1.257a.5.5 0 0 1 .04.706A5.48 5.48 0 0 0 2.56 7a.5.5 0 0 1-1 0c0-1.664.626-3.184 1.655-4.333a.5.5 0 0 1 .706-.04ZM1.915 8.02a.5.5 0 0 1 .346.616l-.779 2.767a.5.5 0 1 1-.962-.27l.778-2.767a.5.5 0 0 1 .617-.346m12.15.481a.5.5 0 0 1 .49.51c-.03 1.499-.161 3.025-.727 4.533l-.07.187a.5.5 0 0 1-.936-.351l.07-.187c.506-1.35.634-2.74.663-4.202a.5.5 0 0 1 .51-.49\"/>",
+  "link-45deg": "<path d=\"M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1 1 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4 4 0 0 1-.128-1.287z\"/> <path d=\"M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243z\"/>",
+  "plug": "<path d=\"M6 0a.5.5 0 0 1 .5.5V3h3V.5a.5.5 0 0 1 1 0V3h1a.5.5 0 0 1 .5.5v3A3.5 3.5 0 0 1 8.5 10c-.002.434-.01.845-.04 1.22-.041.514-.126 1.003-.317 1.424a2.08 2.08 0 0 1-.97 1.028C6.725 13.9 6.169 14 5.5 14c-.998 0-1.61.33-1.974.718A1.92 1.92 0 0 0 3 16H2c0-.616.232-1.367.797-1.968C3.374 13.42 4.261 13 5.5 13c.581 0 .962-.088 1.218-.219.241-.123.4-.3.514-.55.121-.266.193-.621.23-1.09.027-.34.035-.718.037-1.141A3.5 3.5 0 0 1 4 6.5v-3a.5.5 0 0 1 .5-.5h1V.5A.5.5 0 0 1 6 0M5 4v2.5A2.5 2.5 0 0 0 7.5 9h1A2.5 2.5 0 0 0 11 6.5V4z\"/>",
+  "robot": "<path d=\"M6 12.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5M3 8.062C3 6.76 4.235 5.765 5.53 5.886a26.6 26.6 0 0 0 4.94 0C11.765 5.765 13 6.76 13 8.062v1.157a.93.93 0 0 1-.765.935c-.845.147-2.34.346-4.235.346s-3.39-.2-4.235-.346A.93.93 0 0 1 3 9.219zm4.542-.827a.25.25 0 0 0-.217.068l-.92.9a25 25 0 0 1-1.871-.183.25.25 0 0 0-.068.495c.55.076 1.232.149 2.02.193a.25.25 0 0 0 .189-.071l.754-.736.847 1.71a.25.25 0 0 0 .404.062l.932-.97a25 25 0 0 0 1.922-.188.25.25 0 0 0-.068-.495c-.538.074-1.207.145-1.98.189a.25.25 0 0 0-.166.076l-.754.785-.842-1.7a.25.25 0 0 0-.182-.135\"/> <path d=\"M8.5 1.866a1 1 0 1 0-1 0V3h-2A4.5 4.5 0 0 0 1 7.5V8a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1v-.5A4.5 4.5 0 0 0 10.5 3h-2zM14 7.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5A3.5 3.5 0 0 1 5.5 4h5A3.5 3.5 0 0 1 14 7.5\"/>",
+  "cart": "<path d=\"M0 1.5A.5.5 0 0 1 .5 1H2a.5.5 0 0 1 .485.379L2.89 3H14.5a.5.5 0 0 1 .491.592l-1.5 8A.5.5 0 0 1 13 12H4a.5.5 0 0 1-.491-.408L2.01 3.607 1.61 2H.5a.5.5 0 0 1-.5-.5M3.102 4l1.313 7h8.17l1.313-7zM5 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4m7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4m-7 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2m7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2\"/>",
+  "credit-card": "<path d=\"M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1zm13 4H1v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1z\"/> <path d=\"M2 10a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z\"/>",
+  "kanban": "<path d=\"M13.5 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zm-11-1a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z\"/> <path d=\"M6.5 3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1zm-4 0a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1zm8 0a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1z\"/>",
+  "sliders": "<path fill-rule=\"evenodd\" d=\"M11.5 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M9.05 3a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0V3zM4.5 7a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M2.05 8a2.5 2.5 0 0 1 4.9 0H16v1H6.95a2.5 2.5 0 0 1-4.9 0H0V8zm9.45 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3m-2.45 1a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0v-1z\"/>",
+  "hdd": "<path d=\"M4.5 11a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1M3 10.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0\"/> <path d=\"M16 11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V9.51c0-.418.105-.83.305-1.197l2.472-4.531A1.5 1.5 0 0 1 4.094 3h7.812a1.5 1.5 0 0 1 1.317.782l2.472 4.53c.2.368.305.78.305 1.198zM3.655 4.26 1.592 8.043Q1.79 8 2 8h12q.21 0 .408.042L12.345 4.26a.5.5 0 0 0-.439-.26H4.094a.5.5 0 0 0-.44.26zM1 10v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1\"/>",
+  "sd-card": "<path d=\"M6.25 3.5a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0z\"/> <path fill-rule=\"evenodd\" d=\"M5.914 0H12.5A1.5 1.5 0 0 1 14 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5V3.914c0-.398.158-.78.44-1.06L4.853.439A1.5 1.5 0 0 1 5.914 0M13 1.5a.5.5 0 0 0-.5-.5H5.914a.5.5 0 0 0-.353.146L3.146 3.561A.5.5 0 0 0 3 3.914V14.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5z\"/>",
+  "filetype-json": "<path fill-rule=\"evenodd\" d=\"M14 4.5V11h-1V4.5h-2A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v9H2V2a2 2 0 0 1 2-2h5.5zM4.151 15.29a1.2 1.2 0 0 1-.111-.449h.764a.58.58 0 0 0 .255.384q.105.073.25.114.142.041.319.041.245 0 .413-.07a.56.56 0 0 0 .255-.193.5.5 0 0 0 .084-.29.39.39 0 0 0-.152-.326q-.152-.12-.463-.193l-.618-.143a1.7 1.7 0 0 1-.539-.214 1 1 0 0 1-.352-.367 1.1 1.1 0 0 1-.123-.524q0-.366.19-.639.192-.272.528-.422.337-.15.777-.149.456 0 .779.152.326.153.5.41.18.255.2.566h-.75a.56.56 0 0 0-.12-.258.6.6 0 0 0-.246-.181.9.9 0 0 0-.37-.068q-.324 0-.512.152a.47.47 0 0 0-.185.384q0 .18.144.3a1 1 0 0 0 .404.175l.621.143q.326.075.566.211a1 1 0 0 1 .375.358q.135.222.135.56 0 .37-.188.656a1.2 1.2 0 0 1-.539.439q-.351.158-.858.158-.381 0-.665-.09a1.4 1.4 0 0 1-.478-.252 1.1 1.1 0 0 1-.29-.375m-3.104-.033a1.3 1.3 0 0 1-.082-.466h.764a.6.6 0 0 0 .074.27.5.5 0 0 0 .454.246q.285 0 .422-.164.137-.165.137-.466v-2.745h.791v2.725q0 .66-.357 1.005-.355.345-.985.345a1.6 1.6 0 0 1-.568-.094 1.15 1.15 0 0 1-.407-.266 1.1 1.1 0 0 1-.243-.39m9.091-1.585v.522q0 .384-.117.641a.86.86 0 0 1-.322.387.9.9 0 0 1-.47.126.9.9 0 0 1-.47-.126.87.87 0 0 1-.32-.387 1.55 1.55 0 0 1-.117-.641v-.522q0-.386.117-.641a.87.87 0 0 1 .32-.387.87.87 0 0 1 .47-.129q.265 0 .47.129a.86.86 0 0 1 .322.387q.117.255.117.641m.803.519v-.513q0-.565-.205-.973a1.46 1.46 0 0 0-.59-.63q-.38-.22-.916-.22-.534 0-.92.22a1.44 1.44 0 0 0-.589.628q-.205.407-.205.975v.513q0 .562.205.973.205.407.589.626.386.217.92.217.536 0 .917-.217.384-.22.589-.626.204-.41.205-.973m1.29-.935v2.675h-.746v-3.999h.662l1.752 2.66h.032v-2.66h.75v4h-.656l-1.761-2.676z\"/>",
+  "filetype-xml": "<path fill-rule=\"evenodd\" d=\"M14 4.5V14a2 2 0 0 1-2 2v-1a1 1 0 0 0 1-1V4.5h-2A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v9H2V2a2 2 0 0 1 2-2h5.5zM3.527 11.85h-.893l-.823 1.439h-.036L.943 11.85H.012l1.227 1.983L0 15.85h.861l.853-1.415h.035l.85 1.415h.908l-1.254-1.992zm.954 3.999v-2.66h.038l.952 2.159h.516l.946-2.16h.038v2.661h.715V11.85h-.8l-1.14 2.596h-.025L4.58 11.85h-.806v3.999zm4.71-.674h1.696v.674H8.4V11.85h.791z\"/>",
+  "filetype-csv": "<path fill-rule=\"evenodd\" d=\"M14 4.5V14a2 2 0 0 1-2 2h-1v-1h1a1 1 0 0 0 1-1V4.5h-2A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v9H2V2a2 2 0 0 1 2-2h5.5zM3.517 14.841a1.13 1.13 0 0 0 .401.823q.195.162.478.252.284.091.665.091.507 0 .859-.158.354-.158.539-.44.187-.284.187-.656 0-.336-.134-.56a1 1 0 0 0-.375-.357 2 2 0 0 0-.566-.21l-.621-.144a1 1 0 0 1-.404-.176.37.37 0 0 1-.144-.299q0-.234.185-.384.188-.152.512-.152.214 0 .37.068a.6.6 0 0 1 .246.181.56.56 0 0 1 .12.258h.75a1.1 1.1 0 0 0-.2-.566 1.2 1.2 0 0 0-.5-.41 1.8 1.8 0 0 0-.78-.152q-.439 0-.776.15-.337.149-.527.421-.19.273-.19.639 0 .302.122.524.124.223.352.367.228.143.539.213l.618.144q.31.073.463.193a.39.39 0 0 1 .152.326.5.5 0 0 1-.085.29.56.56 0 0 1-.255.193q-.167.07-.413.07-.175 0-.32-.04a.8.8 0 0 1-.248-.115.58.58 0 0 1-.255-.384zM.806 13.693q0-.373.102-.633a.87.87 0 0 1 .302-.399.8.8 0 0 1 .475-.137q.225 0 .398.097a.7.7 0 0 1 .272.26.85.85 0 0 1 .12.381h.765v-.072a1.33 1.33 0 0 0-.466-.964 1.4 1.4 0 0 0-.489-.272 1.8 1.8 0 0 0-.606-.097q-.534 0-.911.223-.375.222-.572.632-.195.41-.196.979v.498q0 .568.193.976.197.407.572.626.375.217.914.217.439 0 .785-.164t.55-.454a1.27 1.27 0 0 0 .226-.674v-.076h-.764a.8.8 0 0 1-.118.363.7.7 0 0 1-.272.25.9.9 0 0 1-.401.087.85.85 0 0 1-.478-.132.83.83 0 0 1-.299-.392 1.7 1.7 0 0 1-.102-.627zm8.239 2.238h-.953l-1.338-3.999h.917l.896 3.138h.038l.888-3.138h.879z\"/>",
+  "arrow-down-up": "<path fill-rule=\"evenodd\" d=\"M11.5 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L11 2.707V14.5a.5.5 0 0 0 .5.5m-7-14a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L4 13.293V1.5a.5.5 0 0 1 .5-.5\"/>",
+  "box-arrow-in-right": "<path fill-rule=\"evenodd\" d=\"M6 3.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 0-1 0v2A1.5 1.5 0 0 0 6.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-8A1.5 1.5 0 0 0 5 3.5v2a.5.5 0 0 0 1 0z\"/> <path fill-rule=\"evenodd\" d=\"M11.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H1.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708z\"/>",
+  "box-arrow-right": "<path fill-rule=\"evenodd\" d=\"M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0z\"/> <path fill-rule=\"evenodd\" d=\"M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708z\"/>",
+  "columns-gap": "<path d=\"M6 1v3H1V1zM1 0a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm14 12v3h-5v-3zm-5-1a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1zM6 8v7H1V8zM1 7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm14-6v7h-5V1zm-5-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1z\"/>",
+  "ui-checks-grid": "<path d=\"M2 10h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1m9-9h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1m0 9a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1zm0-10a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zM2 9a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2zm7 2a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2zM0 2a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5.354.854a.5.5 0 1 0-.708-.708L3 3.793l-.646-.647a.5.5 0 1 0-.708.708l1 1a.5.5 0 0 0 .708 0z\"/>",
+  "bezier2": "<path fill-rule=\"evenodd\" d=\"M1 2.5A1.5 1.5 0 0 1 2.5 1h1A1.5 1.5 0 0 1 5 2.5h4.134a1 1 0 1 1 0 1h-2.01q.269.27.484.605C8.246 5.097 8.5 6.459 8.5 8c0 1.993.257 3.092.713 3.7.356.476.895.721 1.787.784A1.5 1.5 0 0 1 12.5 11h1a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5H6.866a1 1 0 1 1 0-1h1.711a3 3 0 0 1-.165-.2C7.743 11.407 7.5 10.007 7.5 8c0-1.46-.246-2.597-.733-3.355-.39-.605-.952-1-1.767-1.112A1.5 1.5 0 0 1 3.5 5h-1A1.5 1.5 0 0 1 1 3.5zM2.5 2a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm10 10a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z\"/>",
+  "tags": "<path d=\"M3 2v4.586l7 7L14.586 9l-7-7zM2 2a1 1 0 0 1 1-1h4.586a1 1 0 0 1 .707.293l7 7a1 1 0 0 1 0 1.414l-4.586 4.586a1 1 0 0 1-1.414 0l-7-7A1 1 0 0 1 2 6.586z\"/> <path d=\"M5.5 5a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1m0 1a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3M1 7.086a1 1 0 0 0 .293.707L8.75 15.25l-.043.043a1 1 0 0 1-1.414 0l-7-7A1 1 0 0 1 0 7.586V3a1 1 0 0 1 1-1z\"/>",
+  "sim": "<path d=\"M2 1.5A1.5 1.5 0 0 1 3.5 0h7.086a1.5 1.5 0 0 1 1.06.44l1.915 1.914A1.5 1.5 0 0 1 14 3.414V14.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5zM3.5 1a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5V3.414a.5.5 0 0 0-.146-.353l-1.915-1.915A.5.5 0 0 0 10.586 1z\"/> <path d=\"M5.5 4a.5.5 0 0 0-.5.5V6h2.5V4zm3 0v2H11V4.5a.5.5 0 0 0-.5-.5zM11 7H5v2h6zm0 3H8.5v2h2a.5.5 0 0 0 .5-.5zm-3.5 2v-2H5v1.5a.5.5 0 0 0 .5.5zM4 4.5A1.5 1.5 0 0 1 5.5 3h5A1.5 1.5 0 0 1 12 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 4 11.5z\"/>",
+  "wifi": "<path d=\"M15.384 6.115a.485.485 0 0 0-.047-.736A12.44 12.44 0 0 0 8 3C5.259 3 2.723 3.882.663 5.379a.485.485 0 0 0-.048.736.52.52 0 0 0 .668.05A11.45 11.45 0 0 1 8 4c2.507 0 4.827.802 6.716 2.164.205.148.49.13.668-.049\"/> <path d=\"M13.229 8.271a.482.482 0 0 0-.063-.745A9.46 9.46 0 0 0 8 6c-1.905 0-3.68.56-5.166 1.526a.48.48 0 0 0-.063.745.525.525 0 0 0 .652.065A8.46 8.46 0 0 1 8 7a8.46 8.46 0 0 1 4.576 1.336c.206.132.48.108.653-.065m-2.183 2.183c.226-.226.185-.605-.1-.75A6.5 6.5 0 0 0 8 9c-1.06 0-2.062.254-2.946.704-.285.145-.326.524-.1.75l.015.015c.16.16.407.19.611.09A5.5 5.5 0 0 1 8 10c.868 0 1.69.201 2.42.56.203.1.45.07.61-.091zM9.06 12.44c.196-.196.198-.52-.04-.66A2 2 0 0 0 8 11.5a2 2 0 0 0-1.02.28c-.238.14-.236.464-.04.66l.706.706a.5.5 0 0 0 .707 0l.707-.707z\"/>",
+  "usb-drive": "<path d=\"M6 .5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v4H6zM7 1v1h1V1zm2 0v1h1V1zM6 5a1 1 0 0 0-1 1v8.5A1.5 1.5 0 0 0 6.5 16h4a1.5 1.5 0 0 0 1.5-1.5V6a1 1 0 0 0-1-1zm0 1h5v8.5a.5.5 0 0 1-.5.5h-4a.5.5 0 0 1-.5-.5z\"/>",
+  "printer": "<path d=\"M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1\"/> <path d=\"M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1\"/>",
+  "question-circle": "<path d=\"M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16\"/> <path d=\"M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286m1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94\"/>",
+  "info-circle": "<path d=\"M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16\"/> <path d=\"m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0\"/>",
+  "star": "<path d=\"M2.866 14.85c-.078.444.36.791.746.593l4.39-2.256 4.389 2.256c.386.198.824-.149.746-.592l-.83-4.73 3.522-3.356c.33-.314.16-.888-.282-.95l-4.898-.696L8.465.792a.513.513 0 0 0-.927 0L5.354 5.12l-4.898.696c-.441.062-.612.636-.283.95l3.523 3.356-.83 4.73zm4.905-2.767-3.686 1.894.694-3.957a.56.56 0 0 0-.163-.505L1.71 6.745l4.052-.576a.53.53 0 0 0 .393-.288L8 2.223l1.847 3.658a.53.53 0 0 0 .393.288l4.052.575-2.906 2.77a.56.56 0 0 0-.163.506l.694 3.957-3.686-1.894a.5.5 0 0 0-.461 0z\"/>",
+  "flag": "<path d=\"M14.778.085A.5.5 0 0 1 15 .5V8a.5.5 0 0 1-.314.464L14.5 8l.186.464-.003.001-.006.003-.023.009a12 12 0 0 1-.397.15c-.264.095-.631.223-1.047.35-.816.252-1.879.523-2.71.523-.847 0-1.548-.28-2.158-.525l-.028-.01C7.68 8.71 7.14 8.5 6.5 8.5c-.7 0-1.638.23-2.437.477A20 20 0 0 0 3 9.342V15.5a.5.5 0 0 1-1 0V.5a.5.5 0 0 1 1 0v.282c.226-.079.496-.17.79-.26C4.606.272 5.67 0 6.5 0c.84 0 1.524.277 2.121.519l.043.018C9.286.788 9.828 1 10.5 1c.7 0 1.638-.23 2.437-.477a20 20 0 0 0 1.349-.476l.019-.007.004-.002h.001M14 1.221c-.22.078-.48.167-.766.255-.81.252-1.872.523-2.734.523-.886 0-1.592-.286-2.203-.534l-.008-.003C7.662 1.21 7.139 1 6.5 1c-.669 0-1.606.229-2.415.478A21 21 0 0 0 3 1.845v6.433c.22-.078.48-.167.766-.255C4.576 7.77 5.638 7.5 6.5 7.5c.847 0 1.548.28 2.158.525l.028.01C9.32 8.29 9.86 8.5 10.5 8.5c.668 0 1.606-.229 2.415-.478A21 21 0 0 0 14 7.655V1.222z\"/>",
+  "geo-alt": "<path d=\"M12.166 8.94c-.524 1.062-1.234 2.12-1.96 3.07A32 32 0 0 1 8 14.58a32 32 0 0 1-2.206-2.57c-.726-.95-1.436-2.008-1.96-3.07C3.304 7.867 3 6.862 3 6a5 5 0 0 1 10 0c0 .862-.305 1.867-.834 2.94M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10\"/> <path d=\"M8 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4m0 1a3 3 0 1 0 0-6 3 3 0 0 0 0 6\"/>",
+  "buildings": "<path d=\"M14.763.075A.5.5 0 0 1 15 .5v15a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5V14h-1v1.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V10a.5.5 0 0 1 .342-.474L6 7.64V4.5a.5.5 0 0 1 .276-.447l8-4a.5.5 0 0 1 .487.022M6 8.694 1 10.36V15h5zM7 15h2v-1.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5V15h2V1.309l-7 3.5z\"/> <path d=\"M2 11h1v1H2zm2 0h1v1H4zm-2 2h1v1H2zm2 0h1v1H4zm4-4h1v1H8zm2 0h1v1h-1zm-2 2h1v1H8zm2 0h1v1h-1zm2-2h1v1h-1zm0 2h1v1h-1zM8 7h1v1H8zm2 0h1v1h-1zm2 0h1v1h-1zM8 5h1v1H8zm2 0h1v1h-1zm2 0h1v1h-1zm0-2h1v1h-1z\"/>",
+  "bank": "<path d=\"m8 0 6.61 3h.89a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5H15v7a.5.5 0 0 1 .485.38l.5 2a.498.498 0 0 1-.485.62H.5a.498.498 0 0 1-.485-.62l.5-2A.5.5 0 0 1 1 13V6H.5a.5.5 0 0 1-.5-.5v-2A.5.5 0 0 1 .5 3h.89zM3.777 3h8.447L8 1zM2 6v7h1V6zm2 0v7h2.5V6zm3.5 0v7h1V6zm2 0v7H12V6zM13 6v7h1V6zm2-1V4H1v1zm-.39 9H1.39l-.25 1h13.72z\"/>",
+  "briefcase": "<path d=\"M6.5 1A1.5 1.5 0 0 0 5 2.5V3H1.5A1.5 1.5 0 0 0 0 4.5v8A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 14.5 3H11v-.5A1.5 1.5 0 0 0 9.5 1zm0 1h3a.5.5 0 0 1 .5.5V3H6v-.5a.5.5 0 0 1 .5-.5m1.886 6.914L15 7.151V12.5a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5V7.15l6.614 1.764a1.5 1.5 0 0 0 .772 0M1.5 4h13a.5.5 0 0 1 .5.5v1.616L8.129 7.948a.5.5 0 0 1-.258 0L1 6.116V4.5a.5.5 0 0 1 .5-.5\"/>",
+  "mailbox": "<path d=\"M4 4a3 3 0 0 0-3 3v6h6V7a3 3 0 0 0-3-3m0-1h8a4 4 0 0 1 4 4v6a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V7a4 4 0 0 1 4-4m2.646 1A4 4 0 0 1 8 7v6h7V7a3 3 0 0 0-3-3z\"/> <path d=\"M11.793 8.5H9v-1h5a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.354-.146zM5 7c0 .552-.448 0-1 0s-1 .552-1 0a1 1 0 0 1 2 0\"/>",
+  "megaphone": "<path d=\"M13 2.5a1.5 1.5 0 0 1 3 0v11a1.5 1.5 0 0 1-3 0v-.214c-2.162-1.241-4.49-1.843-6.912-2.083l.405 2.712A1 1 0 0 1 5.51 15.1h-.548a1 1 0 0 1-.916-.599l-1.85-3.49-.202-.003A2.014 2.014 0 0 1 0 9V7a2.02 2.02 0 0 1 1.992-2.013 75 75 0 0 0 2.483-.075c3.043-.154 6.148-.849 8.525-2.199zm1 0v11a.5.5 0 0 0 1 0v-11a.5.5 0 0 0-1 0m-1 1.35c-2.344 1.205-5.209 1.842-8 2.033v4.233q.27.015.537.036c2.568.189 5.093.744 7.463 1.993zm-9 6.215v-4.13a95 95 0 0 1-1.992.052A1.02 1.02 0 0 0 1 7v2c0 .55.448 1.002 1.006 1.009A61 61 0 0 1 4 10.065m-.657.975 1.609 3.037.01.024h.548l-.002-.014-.443-2.966a68 68 0 0 0-1.722-.082z\"/>",
+  "rss": "<path d=\"M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z\"/> <path d=\"M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1m0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1\"/>",
+  "share": "<path d=\"M13.5 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M11 2.5a2.5 2.5 0 1 1 .603 1.628l-6.718 3.12a2.5 2.5 0 0 1 0 1.504l6.718 3.12a2.5 2.5 0 1 1-.488.876l-6.718-3.12a2.5 2.5 0 1 1 0-3.256l6.718-3.12A2.5 2.5 0 0 1 11 2.5m-8.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3m11 5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3\"/>",
+  "safe": "<path d=\"M1 1.5A1.5 1.5 0 0 1 2.5 0h12A1.5 1.5 0 0 1 16 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 1 14.5V13H.5a.5.5 0 0 1 0-1H1V8.5H.5a.5.5 0 0 1 0-1H1V4H.5a.5.5 0 0 1 0-1H1zM2.5 1a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h12a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5z\"/> <path d=\"M13.5 6a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3a.5.5 0 0 1 .5-.5M4.828 4.464a.5.5 0 0 1 .708 0l1.09 1.09a3 3 0 0 1 3.476 0l1.09-1.09a.5.5 0 1 1 .707.708l-1.09 1.09c.74 1.037.74 2.44 0 3.476l1.09 1.09a.5.5 0 1 1-.707.708l-1.09-1.09a3 3 0 0 1-3.476 0l-1.09 1.09a.5.5 0 1 1-.708-.708l1.09-1.09a3 3 0 0 1 0-3.476l-1.09-1.09a.5.5 0 0 1 0-.708M6.95 6.586a2 2 0 1 0 2.828 2.828A2 2 0 0 0 6.95 6.586\"/>",
+  "hdd-rack": "<path d=\"M4.5 5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1M3 4.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m2 7a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-2.5.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1\"/> <path d=\"M2 2a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1v2H2a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2h-1V7h1a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm13 2v1a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1m0 7v1a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-1a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1m-3-4v2H4V7z\"/>",
+  "ethernet": "<path d=\"M14 13.5v-7a.5.5 0 0 0-.5-.5H12V4.5a.5.5 0 0 0-.5-.5h-1v-.5A.5.5 0 0 0 10 3H6a.5.5 0 0 0-.5.5V4h-1a.5.5 0 0 0-.5.5V6H2.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5M3.75 11h.5a.25.25 0 0 1 .25.25v1.5a.25.25 0 0 1-.25.25h-.5a.25.25 0 0 1-.25-.25v-1.5a.25.25 0 0 1 .25-.25m2 0h.5a.25.25 0 0 1 .25.25v1.5a.25.25 0 0 1-.25.25h-.5a.25.25 0 0 1-.25-.25v-1.5a.25.25 0 0 1 .25-.25m1.75.25a.25.25 0 0 1 .25-.25h.5a.25.25 0 0 1 .25.25v1.5a.25.25 0 0 1-.25.25h-.5a.25.25 0 0 1-.25-.25zM9.75 11h.5a.25.25 0 0 1 .25.25v1.5a.25.25 0 0 1-.25.25h-.5a.25.25 0 0 1-.25-.25v-1.5a.25.25 0 0 1 .25-.25m1.75.25a.25.25 0 0 1 .25-.25h.5a.25.25 0 0 1 .25.25v1.5a.25.25 0 0 1-.25.25h-.5a.25.25 0 0 1-.25-.25z\"/> <path d=\"M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zM1 2a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1z\"/>",
+  "nut": "<path d=\"m11.42 2 3.428 6-3.428 6H4.58L1.152 8 4.58 2zM4.58 1a1 1 0 0 0-.868.504l-3.428 6a1 1 0 0 0 0 .992l3.428 6A1 1 0 0 0 4.58 15h6.84a1 1 0 0 0 .868-.504l3.429-6a1 1 0 0 0 0-.992l-3.429-6A1 1 0 0 0 11.42 1z\"/> <path d=\"M6.848 5.933a2.5 2.5 0 1 0 2.5 4.33 2.5 2.5 0 0 0-2.5-4.33m-1.78 3.915a3.5 3.5 0 1 1 6.061-3.5 3.5 3.5 0 0 1-6.062 3.5z\"/>",
+  "layers": "<path d=\"M8.235 1.559a.5.5 0 0 0-.47 0l-7.5 4a.5.5 0 0 0 0 .882L3.188 8 .264 9.559a.5.5 0 0 0 0 .882l7.5 4a.5.5 0 0 0 .47 0l7.5-4a.5.5 0 0 0 0-.882L12.813 8l2.922-1.559a.5.5 0 0 0 0-.882zm3.515 7.008L14.438 10 8 13.433 1.562 10 4.25 8.567l3.515 1.874a.5.5 0 0 0 .47 0zM8 9.433 1.562 6 8 2.567 14.438 6z\"/>",
+  "reception-4": "<path d=\"M0 11.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5zm4-3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5zm4-3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5zm4-3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5z\"/>",
+  "signpost": "<path d=\"M7 1.414V4H2a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h5v6h2v-6h3.532a1 1 0 0 0 .768-.36l1.933-2.32a.5.5 0 0 0 0-.64L13.3 4.36a1 1 0 0 0-.768-.36H9V1.414a1 1 0 0 0-2 0M12.532 5l1.666 2-1.666 2H2V5z\"/>",
+  "node-plus": "<path fill-rule=\"evenodd\" d=\"M11 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8M6.025 7.5a5 5 0 1 1 0 1H4A1.5 1.5 0 0 1 2.5 10h-1A1.5 1.5 0 0 1 0 8.5v-1A1.5 1.5 0 0 1 1.5 6h1A1.5 1.5 0 0 1 4 7.5zM11 5a.5.5 0 0 1 .5.5v2h2a.5.5 0 0 1 0 1h-2v2a.5.5 0 0 1-1 0v-2h-2a.5.5 0 0 1 0-1h2v-2A.5.5 0 0 1 11 5M1.5 7a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z\"/>",
+};
+
+        const ICON_NAMES = Object.keys(ICONS);
+
+        function icon(name, size, cls) {
+            const inner = ICONS[name];
+            if (!inner) return '';
+            return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size +
+                '" fill="currentColor" viewBox="0 0 16 16"' + (cls ? ' class="' + cls + '"' : '') + '>' + inner + '</svg>';
+        }
+
+        /* ============================================================
+           Constants
+           ============================================================ */
+        const COLORS = [
+            { k: 'slate', v: '#5b6470' }, { k: 'blue', v: '#2f6fdb' }, { k: 'teal', v: '#0f9aa8' },
+            { k: 'green', v: '#1f9d63' }, { k: 'amber', v: '#d08a12' }, { k: 'red', v: '#d6453f' },
+            { k: 'purple', v: '#7a52d1' }, { k: 'pink', v: '#c94f8f' }
+        ];
+        const C = Object.fromEntries(COLORS.map(c => [c.k, c.v]));
+
+        const SHAPES = [
+            ['rect', 'Rectangle'], ['round', 'Rounded'], ['pill', 'Pill'], ['cyl', 'Cylinder'],
+            ['queue', 'Queue'], ['hex', 'Hexagon'], ['diamond', 'Diamond'], ['circle', 'Circle'],
+            ['note', 'Note'], ['group', 'Group / zone']
+        ];
+
+        const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif";
+        const GRID = 10;
+        const DEF_W = 168, DEF_H = 62;
+
+        const PALETTE = [
+            {
+                cat: 'Services & compute', items: [
+                    { t: 'Service', i: 'box-seam', c: 'blue' },
+                    { t: 'Microservice', i: 'boxes', c: 'blue' },
+                    { t: 'API', i: 'code-slash', c: 'blue', s: 'round' },
+                    { t: 'API Gateway', i: 'door-open', c: 'blue' },
+                    { t: 'Function', i: 'lightning-charge', c: 'blue' },
+                    { t: 'Container', i: 'box-seam', c: 'slate' },
+                    { t: 'Server', i: 'server', c: 'slate' },
+                    { t: 'Worker', i: 'gear-wide-connected', c: 'slate' },
+                    { t: 'Batch Job', i: 'hourglass-split', c: 'slate' },
+                    { t: 'Web App', i: 'window-stack', c: 'blue' },
+                    { t: 'Mobile App', i: 'phone', c: 'blue' },
+                    { t: 'Desktop App', i: 'pc-display', c: 'blue' }
+                ]
+            },
+            {
+                cat: 'Data & storage', items: [
+                    { t: 'Database', i: 'database', c: 'green', s: 'cyl' },
+                    { t: 'SQL Database', i: 'database', c: 'green', s: 'cyl' },
+                    { t: 'NoSQL Store', i: 'hdd-stack', c: 'green', s: 'cyl' },
+                    { t: 'Cache', i: 'lightning', c: 'green', s: 'cyl' },
+                    { t: 'Data Warehouse', i: 'layers', c: 'green', s: 'cyl' },
+                    { t: 'Search Index', i: 'search', c: 'green', s: 'cyl' },
+                    { t: 'Object Storage', i: 'archive', c: 'green' },
+                    { t: 'File Share', i: 'folder', c: 'green' },
+                    { t: 'File Write', i: 'file-earmark-arrow-up', c: 'green' },
+                    { t: 'CSV Export', i: 'filetype-csv', c: 'green' },
+                    { t: 'JSON Payload', i: 'filetype-json', c: 'green' },
+                    { t: 'XML Payload', i: 'filetype-xml', c: 'green' },
+                    { t: 'Table', i: 'table', c: 'green' },
+                    { t: 'Disk', i: 'hdd', c: 'slate' }
+                ]
+            },
+            {
+                cat: 'Messaging & events', items: [
+                    { t: 'Queue', i: 'stack', c: 'amber', s: 'queue' },
+                    { t: 'Topic', i: 'broadcast-pin', c: 'amber', s: 'queue' },
+                    { t: 'Event Bus', i: 'broadcast', c: 'amber' },
+                    { t: 'Stream', i: 'activity', c: 'amber', s: 'queue' },
+                    { t: 'Message Broker', i: 'shuffle', c: 'amber' },
+                    { t: 'Dead Letter Queue', i: 'exclamation-triangle', c: 'red', s: 'queue' },
+                    { t: 'Webhook', i: 'link-45deg', c: 'amber' },
+                    { t: 'Notification', i: 'bell', c: 'amber' },
+                    { t: 'Email', i: 'envelope', c: 'amber' },
+                    { t: 'Inbox', i: 'inbox', c: 'amber' },
+                    { t: 'Publisher', i: 'megaphone', c: 'amber' },
+                    { t: 'Feed', i: 'rss', c: 'amber' }
+                ]
+            },
+            {
+                cat: 'Integration & routing', items: [
+                    { t: 'Middleware', i: 'gear', c: 'purple' },
+                    { t: 'ESB', i: 'diagram-3', c: 'purple' },
+                    { t: 'Adapter', i: 'plug', c: 'purple' },
+                    { t: 'Transformer', i: 'arrow-left-right', c: 'purple' },
+                    { t: 'Router', i: 'signpost-split', c: 'purple' },
+                    { t: 'Load Balancer', i: 'distribute-vertical', c: 'purple' },
+                    { t: 'Proxy', i: 'router', c: 'purple' },
+                    { t: 'Filter', i: 'funnel', c: 'purple' },
+                    { t: 'ETL Pipeline', i: 'bezier2', c: 'purple' },
+                    { t: 'Sync', i: 'arrow-repeat', c: 'purple' },
+                    { t: 'Ingress', i: 'box-arrow-in-right', c: 'purple' },
+                    { t: 'Egress', i: 'box-arrow-right', c: 'purple' }
+                ]
+            },
+            {
+                cat: 'Scheduling', items: [
+                    { t: 'Cron Job', i: 'clock-history', c: 'teal' },
+                    { t: 'Scheduler', i: 'calendar-check', c: 'teal' },
+                    { t: 'Timer', i: 'alarm', c: 'teal' },
+                    { t: 'Retry', i: 'arrow-repeat', c: 'teal' },
+                    { t: 'Backlog', i: 'kanban', c: 'teal' }
+                ]
+            },
+            {
+                cat: 'Security', items: [
+                    { t: 'Auth Service', i: 'shield-lock', c: 'red' },
+                    { t: 'Identity Provider', i: 'fingerprint', c: 'red' },
+                    { t: 'Firewall', i: 'shield-check', c: 'red' },
+                    { t: 'Secret Vault', i: 'safe', c: 'red' },
+                    { t: 'Certificate', i: 'key', c: 'red' },
+                    { t: 'Access Control', i: 'lock', c: 'red' }
+                ]
+            },
+            {
+                cat: 'Operations', items: [
+                    { t: 'Monitoring', i: 'speedometer2', c: 'slate' },
+                    { t: 'Metrics', i: 'graph-up-arrow', c: 'slate' },
+                    { t: 'Logging', i: 'journal-text', c: 'slate' },
+                    { t: 'Alerting', i: 'bell', c: 'red' },
+                    { t: 'CI/CD', i: 'git', c: 'slate' },
+                    { t: 'Config', i: 'sliders', c: 'slate' },
+                    { t: 'Health Check', i: 'check2-circle', c: 'green' },
+                    { t: 'Incident', i: 'bug', c: 'red' },
+                    { t: 'Terminal', i: 'terminal', c: 'slate' }
+                ]
+            },
+            {
+                cat: 'Actors & context', items: [
+                    { t: 'User', i: 'person', c: 'slate', s: 'circle', w: 96, h: 96 },
+                    { t: 'Team', i: 'people', c: 'slate' },
+                    { t: 'External System', i: 'buildings', c: 'slate' },
+                    { t: 'Third Party', i: 'briefcase', c: 'slate' },
+                    { t: 'Internet', i: 'globe', c: 'slate' },
+                    { t: 'Cloud', i: 'cloud', c: 'slate' },
+                    { t: 'Network', i: 'hdd-network', c: 'slate' },
+                    { t: 'Device', i: 'sim', c: 'slate' },
+                    { t: 'Printer', i: 'printer', c: 'slate' },
+                    { t: 'Payment', i: 'credit-card', c: 'pink' },
+                    { t: 'Location', i: 'geo-alt', c: 'pink' }
+                ]
+            },
+            {
+                cat: 'Flow', items: [
+                    { t: 'Start', i: '', c: 'slate', s: 'pill', w: 120, h: 44 },
+                    { t: 'End', i: '', c: 'slate', s: 'pill', w: 120, h: 44 },
+                    { t: 'Step', i: '', c: 'slate', s: 'rect', w: 150, h: 54 },
+                    { t: 'Decision', i: '', c: 'amber', s: 'diamond', w: 148, h: 92 },
+                    { t: 'Note', i: '', c: 'amber', s: 'note', w: 176, h: 84 },
+                    { t: 'Zone / Group', i: '', c: 'slate', s: 'group', w: 340, h: 220 }
+                ]
+            }
+        ];
+
+        /* ============================================================
+           Utilities
+           ============================================================ */
+        const $ = s => document.querySelector(s);
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+        let idSeq = 1;
+        const uid = p => p + (Date.now().toString(36).slice(-4)) + (idSeq++).toString(36);
+        const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const clone = o => JSON.parse(JSON.stringify(o));
+
+        function hex2rgb(h) {
+            h = h.replace('#', '');
+            if (h.length === 3) h = h.split('').map(x => x + x).join('');
+            return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+        }
+        function rgb2hex(r) { return '#' + r.map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join(''); }
+        function mix(a, b, t) { const A = hex2rgb(a), B = hex2rgb(b); return rgb2hex([0, 1, 2].map(i => A[i] * (1 - t) + B[i] * t)); }
+
+        /* ============================================================
+           State
+           ============================================================ */
+        const STORE = 'architect-diagram-v1';
+
+        function blank() {
+            return { title: 'Untitled diagram', nodes: [], edges: [], theme: 'light', snap: true, grid: true };
+        }
+
+        let state = blank();
+        let view = { x: 0, y: 0, k: 1 };
+        let sel = new Set();          // selected node + edge ids
+        let hoverId = null;
+        let tool = 'select';
+        let spaceDown = false;
+        let drag = null;
+        let past = [], future = [];
+        let lastType = PALETTE[0].items[0];
+
+        const nodeById = id => state.nodes.find(n => n.id === id);
+        const edgeById = id => state.edges.find(e => e.id === id);
+        const selNodes = () => state.nodes.filter(n => sel.has(n.id));
+        const selEdges = () => state.edges.filter(e => sel.has(e.id));
+
+        function mark() { past.push(clone({ nodes: state.nodes, edges: state.edges, title: state.title })); if (past.length > 120) past.shift(); future.length = 0; }
+
+        function undo() {
+            if (!past.length) return;
+            future.push(clone({ nodes: state.nodes, edges: state.edges, title: state.title }));
+            const p = past.pop();
+            state.nodes = p.nodes; state.edges = p.edges; state.title = p.title;
+            $('#docTitle').value = state.title;
+            pruneSel(); render(); inspect(); save();
+        }
+        function redo() {
+            if (!future.length) return;
+            past.push(clone({ nodes: state.nodes, edges: state.edges, title: state.title }));
+            const f = future.pop();
+            state.nodes = f.nodes; state.edges = f.edges; state.title = f.title;
+            $('#docTitle').value = state.title;
+            pruneSel(); render(); inspect(); save();
+        }
+        function pruneSel() {
+            const ids = new Set([...state.nodes.map(n => n.id), ...state.edges.map(e => e.id)]);
+            [...sel].forEach(id => { if (!ids.has(id)) sel.delete(id); });
+        }
+
+        let saveTimer = null;
+        function save() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => {
+                try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { }
+            }, 250);
+        }
+
+        /* ============================================================
+           Theme colours (resolved for rendering + export)
+           ============================================================ */
+        function theme() {
+            const dark = state.theme === 'dark';
+            return {
+                dark,
+                bg: dark ? '#0f1113' : '#ffffff',
+                surface: dark ? '#181b1f' : '#ffffff',
+                ink: dark ? '#e8eaed' : '#141414',
+                muted: dark ? '#949aa2' : '#767676',
+                line: dark ? '#2c3138' : '#dcdcdc',
+                grid: dark ? '#1b1f24' : '#eeeeee',
+                edge: dark ? '#8b939d' : '#6a7280',
+                sel: dark ? '#5b9dff' : '#2f6fdb'
+            };
+        }
+
+        function nodePaint(n) {
+            const T = theme();
+            const acc = C[n.color] || n.color || C.slate;
+            if (n.shape === 'group') {
+                return { acc, fill: mix(acc, T.bg, T.dark ? 0.93 : 0.965), stroke: mix(acc, T.bg, 0.45), ink: T.ink, muted: T.muted };
+            }
+            return {
+                acc,
+                fill: mix(acc, T.surface, T.dark ? 0.9 : 0.955),
+                stroke: mix(acc, T.surface, T.dark ? 0.62 : 0.55),
+                ink: T.ink,
+                muted: T.muted
+            };
+        }
+
+        /* ============================================================
+           Geometry — shapes
+           ============================================================ */
+        function rr(x, y, w, h, r) {
+            r = Math.min(r, w / 2, h / 2);
+            return `M${x + r},${y}H${x + w - r}A${r},${r} 0 0 1 ${x + w},${y + r}V${y + h - r}A${r},${r} 0 0 1 ${x + w - r},${y + h}H${x + r}A${r},${r} 0 0 1 ${x},${y + h - r}V${y + r}A${r},${r} 0 0 1 ${x + r},${y}Z`;
+        }
+
+        function shapeMarkup(n, p, extraAttr) {
+            const { x, y, w, h } = n, a = extraAttr || '';
+            const base = `fill="${p.fill}" stroke="${p.stroke}" stroke-width="1.5"`;
+            switch (n.shape) {
+                case 'pill': return `<path d="${rr(x, y, w, h, h / 2)}" ${base} ${a}/>`;
+                case 'round': return `<path d="${rr(x, y, w, h, 16)}" ${base} ${a}/>`;
+                case 'group': return `<path d="${rr(x, y, w, h, 12)}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="1.5" stroke-dasharray="7 5" ${a}/>`;
+                case 'cyl': {
+                    const ry = Math.min(15, h * 0.22);
+                    const body = `M${x},${y + ry}C${x},${y - ry * .333} ${x + w},${y - ry * .333} ${x + w},${y + ry}` +
+                        `L${x + w},${y + h - ry}C${x + w},${y + h + ry * .333} ${x},${y + h + ry * .333} ${x},${y + h - ry}Z`;
+                    const rim = `M${x},${y + ry}C${x},${y + ry + ry * 1.333} ${x + w},${y + ry + ry * 1.333} ${x + w},${y + ry}`;
+                    return `<path d="${body}" ${base} ${a}/><path d="${rim}" fill="none" stroke="${p.stroke}" stroke-width="1.5"/>`;
+                }
+                case 'queue': {
+                    const bars = [w - 10, w - 19, w - 28].map(dx =>
+                        `<line x1="${x + dx}" y1="${y + 8}" x2="${x + dx}" y2="${y + h - 8}" stroke="${p.stroke}" stroke-width="1.5"/>`).join('');
+                    return `<path d="${rr(x, y, w, h, 6)}" ${base} ${a}/>${bars}`;
+                }
+                case 'hex': {
+                    const i = Math.min(22, w * 0.16);
+                    return `<path d="M${x + i},${y}H${x + w - i}L${x + w},${y + h / 2}L${x + w - i},${y + h}H${x + i}L${x},${y + h / 2}Z" ${base} ${a}/>`;
+                }
+                case 'diamond':
+                    return `<path d="M${x + w / 2},${y}L${x + w},${y + h / 2}L${x + w / 2},${y + h}L${x},${y + h / 2}Z" ${base} ${a}/>`;
+                case 'circle':
+                    return `<ellipse cx="${x + w / 2}" cy="${y + h / 2}" rx="${w / 2}" ry="${h / 2}" ${base} ${a}/>`;
+                case 'note': {
+                    const f = 18;
+                    return `<path d="M${x},${y}H${x + w - f}L${x + w},${y + f}V${y + h}H${x}Z" ${base} ${a}/>` +
+                        `<path d="M${x + w - f},${y}V${y + f}H${x + w}" fill="none" stroke="${p.stroke}" stroke-width="1.5"/>`;
+                }
+                default: return `<path d="${rr(x, y, w, h, 8)}" ${base} ${a}/>`;
+            }
+        }
+
+        const CENTERED = new Set(['circle', 'diamond', 'hex', 'pill']);
+
+        const _meas = document.createElement('canvas').getContext('2d');
+        function textW(s, fs, weight) {
+            _meas.font = (weight || 400) + ' ' + fs + 'px ' + SANS;
+            return _meas.measureText(s).width;
+        }
+        function fitText(s, px, fontPx, weight) {
+            s = String(s == null ? '' : s);
+            if (!s || textW(s, fontPx, weight) <= px) return s;
+            let lo = 0, hi = s.length;
+            while (lo < hi) {
+                const mid = (lo + hi + 1) >> 1;
+                if (textW(s.slice(0, mid) + '…', fontPx, weight) <= px) lo = mid; else hi = mid - 1;
+            }
+            return lo ? s.slice(0, lo) + '…' : '';
+        }
+
+        /* ============================================================
+           Geometry — edges
+           ============================================================ */
+        function anchor(n, side) {
+            const { x, y, w, h } = n;
+            switch (side) {
+                case 'n': return { x: x + w / 2, y: y, nx: 0, ny: -1 };
+                case 's': return { x: x + w / 2, y: y + h, nx: 0, ny: 1 };
+                case 'w': return { x: x, y: y + h / 2, nx: -1, ny: 0 };
+                default: return { x: x + w, y: y + h / 2, nx: 1, ny: 0 };
+            }
+        }
+
+        function autoSide(a, b) {
+            const dx = (b.x + b.w / 2) - (a.x + a.w / 2);
+            const dy = (b.y + b.h / 2) - (a.y + a.h / 2);
+            if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'e' : 'w';
+            return dy >= 0 ? 's' : 'n';
+        }
+        const opposite = s => ({ n: 's', s: 'n', e: 'w', w: 'e' }[s]);
+
+        function polyD(pts, r) {
+            if (pts.length < 2) return '';
+            let d = `M${pts[0].x},${pts[0].y}`;
+            for (let i = 1; i < pts.length - 1; i++) {
+                const p = pts[i], a = pts[i - 1], b = pts[i + 1];
+                const l1 = Math.hypot(p.x - a.x, p.y - a.y), l2 = Math.hypot(b.x - p.x, b.y - p.y);
+                const rr2 = Math.min(r, l1 / 2, l2 / 2);
+                if (rr2 < 1) { d += `L${p.x},${p.y}`; continue; }
+                const u1 = { x: (p.x - a.x) / (l1 || 1), y: (p.y - a.y) / (l1 || 1) };
+                const u2 = { x: (b.x - p.x) / (l2 || 1), y: (b.y - p.y) / (l2 || 1) };
+                d += `L${p.x - u1.x * rr2},${p.y - u1.y * rr2}Q${p.x},${p.y} ${p.x + u2.x * rr2},${p.y + u2.y * rr2}`;
+            }
+            const e = pts[pts.length - 1];
+            d += `L${e.x},${e.y}`;
+            return d;
+        }
+
+        function polyMid(pts) {
+            let total = 0; const segs = [];
+            for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); segs.push(l); total += l; }
+            let want = total / 2;
+            for (let i = 0; i < segs.length; i++) {
+                if (want <= segs[i] || i === segs.length - 1) {
+                    const t = segs[i] ? want / segs[i] : 0;
+                    return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t, y: pts[i].y + (pts[i + 1].y - pts[i].y) * t };
+                }
+                want -= segs[i];
+            }
+            return pts[0];
+        }
+
+        function selfLoop(n) {
+            const x = n.x + n.w, y = n.y + n.h * 0.3, x2 = n.x + n.w * 0.7, y2 = n.y;
+            const d = `M${x},${y}C${x + 62},${y - 26} ${x2 + 40},${y2 - 54} ${x2},${y2 - 2}`;
+            return { d, mid: { x: x + 34, y: y2 - 34 }, endDir: { x: -0.6, y: 0.8 }, end: { x: x2, y: y2 - 2 }, start: { x, y }, startDir: { x: 1, y: -0.4 } };
+        }
+
+        function edgeGeom(e) {
+            const A = nodeById(e.from), B = nodeById(e.to);
+            if (!A || !B) return null;
+            if (A === B) return selfLoop(A);
+
+            let sa = e.fromSide && e.fromSide !== 'auto' ? e.fromSide : autoSide(A, B);
+            let sb = e.toSide && e.toSide !== 'auto' ? e.toSide : autoSide(B, A);
+            const pa = anchor(A, sa), pb = anchor(B, sb);
+            const gap = 2;
+            const s = { x: pa.x + pa.nx * gap, y: pa.y + pa.ny * gap };
+            const t = { x: pb.x + pb.nx * gap, y: pb.y + pb.ny * gap };
+
+            if (e.route === 'straight') {
+                const dx = t.x - s.x, dy = t.y - s.y, L = Math.hypot(dx, dy) || 1;
+                return { d: `M${s.x},${s.y}L${t.x},${t.y}`, mid: { x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 }, end: t, start: s, endDir: { x: dx / L, y: dy / L }, startDir: { x: -dx / L, y: -dy / L } };
+            }
+
+            if (e.route === 'curve') {
+                const dist = clamp(Math.hypot(t.x - s.x, t.y - s.y) * 0.42, 34, 150);
+                const c1 = { x: s.x + pa.nx * dist, y: s.y + pa.ny * dist };
+                const c2 = { x: t.x + pb.nx * dist, y: t.y + pb.ny * dist };
+                const bp = (a, b, c, d, u) => {
+                    const m = 1 - u;
+                    return { x: m * m * m * a.x + 3 * m * m * u * b.x + 3 * m * u * u * c.x + u * u * u * d.x, y: m * m * m * a.y + 3 * m * m * u * b.y + 3 * m * u * u * c.y + u * u * u * d.y };
+                };
+                const near = bp(s, c1, c2, t, 0.96);
+                const L = Math.hypot(t.x - near.x, t.y - near.y) || 1;
+                const nearS = bp(s, c1, c2, t, 0.04);
+                const LS = Math.hypot(s.x - nearS.x, s.y - nearS.y) || 1;
+                return {
+                    d: `M${s.x},${s.y}C${c1.x},${c1.y} ${c2.x},${c2.y} ${t.x},${t.y}`,
+                    mid: bp(s, c1, c2, t, 0.5), end: t, start: s,
+                    endDir: { x: (t.x - near.x) / L, y: (t.y - near.y) / L },
+                    startDir: { x: (s.x - nearS.x) / LS, y: (s.y - nearS.y) / LS }
+                };
+            }
+
+            /* orthogonal */
+            const ext = 22;
+            const s1 = { x: s.x + pa.nx * ext, y: s.y + pa.ny * ext };
+            const t1 = { x: t.x + pb.nx * ext, y: t.y + pb.ny * ext };
+            const hA = pa.nx !== 0, hB = pb.nx !== 0;
+            const pts = [s, s1];
+            if (hA && hB) {
+                const mx = (s1.x + t1.x) / 2;
+                if (Math.abs(s1.y - t1.y) < 1) { /* straight across */ }
+                else { pts.push({ x: mx, y: s1.y }, { x: mx, y: t1.y }); }
+            } else if (!hA && !hB) {
+                const my = (s1.y + t1.y) / 2;
+                if (Math.abs(s1.x - t1.x) > 1) pts.push({ x: s1.x, y: my }, { x: t1.x, y: my });
+            } else if (hA) {
+                pts.push({ x: t1.x, y: s1.y });
+            } else {
+                pts.push({ x: s1.x, y: t1.y });
+            }
+            pts.push(t1, t);
+            const clean = pts.filter((p, i) => i === 0 || Math.abs(p.x - pts[i - 1].x) > 0.5 || Math.abs(p.y - pts[i - 1].y) > 0.5);
+            const last = clean[clean.length - 1], prev = clean[clean.length - 2] || last;
+            const L = Math.hypot(last.x - prev.x, last.y - prev.y) || 1;
+            const f0 = clean[0], f1 = clean[1] || f0;
+            const L0 = Math.hypot(f1.x - f0.x, f1.y - f0.y) || 1;
+            return {
+                d: polyD(clean, 10), mid: polyMid(clean), end: last, start: f0,
+                endDir: { x: (last.x - prev.x) / L, y: (last.y - prev.y) / L },
+                startDir: { x: (f0.x - f1.x) / L0, y: (f0.y - f1.y) / L0 }
+            };
+        }
+
+        function arrowHead(p, dir, color) {
+            const n = { x: -dir.y, y: dir.x }, len = 10, wd = 4.6;
+            const b = { x: p.x - dir.x * len, y: p.y - dir.y * len };
+            return `<path d="M${p.x},${p.y}L${b.x + n.x * wd},${b.y + n.y * wd}L${b.x - n.x * wd},${b.y - n.y * wd}Z" fill="${color}" stroke="none"/>`;
+        }
+
+        /* ============================================================
+           Rendering
+           ============================================================ */
+        const cv = $('#cv');
+
+        function renderNode(n) {
+            const p = nodePaint(n);
+            const out = [];
+            out.push(`<g data-node="${n.id}" style="cursor:move">`);
+            out.push(shapeMarkup(n, p));
+
+            const hasIcon = !!(n.icon && ICONS[n.icon]);
+            const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+
+            if (n.shape === 'group') {
+                out.push(`<text x="${n.x + 13}" y="${n.y + 20}" font-family="${SANS}" font-size="12" font-weight="700" fill="${p.acc}" letter-spacing=".04em">${esc(fitText((n.label || '').toUpperCase(), n.w - 26, 12, 700))}</text>`);
+                if (n.sub) out.push(`<text x="${n.x + 13}" y="${n.y + 36}" font-family="${SANS}" font-size="11" fill="${p.muted}">${esc(fitText(n.sub, n.w - 26, 11))}</text>`);
+                out.push(`</g>`);
+                return out.join('');
+            }
+
+            const centered = CENTERED.has(n.shape) || !hasIcon;
+            const yShift = n.shape === 'cyl' ? Math.min(15, n.h * 0.22) * 0.5 : 0;
+
+            if (centered) {
+                let ty = cy + yShift;
+                if (hasIcon) {
+                    out.push(`<g transform="translate(${cx - 10},${ty - (n.sub ? 30 : 24)}) scale(1.25)" fill="${p.acc}">${ICONS[n.icon]}</g>`);
+                    ty += 8;
+                }
+                const availW = n.shape === 'diamond' ? n.w * 0.62 : n.w - 20;
+                out.push(`<text x="${cx}" y="${ty + (n.sub ? -1 : 5)}" text-anchor="middle" font-family="${SANS}" font-size="13" font-weight="600" fill="${p.ink}">${esc(fitText(n.label, availW, 13, 600))}</text>`);
+                if (n.sub) out.push(`<text x="${cx}" y="${ty + 15}" text-anchor="middle" font-family="${SANS}" font-size="11" fill="${p.muted}">${esc(fitText(n.sub, availW, 11))}</text>`);
+            } else {
+                const ix = n.x + 14, iy = cy - 10 + yShift;
+                out.push(`<g transform="translate(${ix},${iy}) scale(1.25)" fill="${p.acc}">${ICONS[n.icon]}</g>`);
+                const tx = n.x + 46, availW = n.w - 58 - (n.shape === 'queue' ? 26 : 0);
+                const by = cy + yShift;
+                out.push(`<text x="${tx}" y="${by + (n.sub ? -1 : 5)}" font-family="${SANS}" font-size="13" font-weight="600" fill="${p.ink}">${esc(fitText(n.label, availW, 13, 600))}</text>`);
+                if (n.sub) out.push(`<text x="${tx}" y="${by + 15}" font-family="${SANS}" font-size="11" fill="${p.muted}">${esc(fitText(n.sub, availW, 11))}</text>`);
+            }
+            out.push(`</g>`);
+            return out.join('');
+        }
+
+        function renderEdge(e) {
+            const g = edgeGeom(e);
+            if (!g) return { main: '', hit: '' };
+            const T = theme();
+            const isSel = sel.has(e.id);
+            const col = isSel ? T.sel : (e.color ? (C[e.color] || e.color) : T.edge);
+            const dash = e.line === 'dashed' ? ' stroke-dasharray="8 5"' : e.line === 'dotted' ? ' stroke-dasharray="1.5 4.5" stroke-linecap="round"' : '';
+            const w = isSel ? 2.4 : 1.7;
+            let s = `<path d="${g.d}" fill="none" stroke="${col}" stroke-width="${w}"${dash} stroke-linejoin="round"/>`;
+            if (e.arrows !== 'none') s += arrowHead(g.end, g.endDir, col);
+            if (e.arrows === 'both') s += arrowHead(g.start, g.startDir, col);
+            if (e.label) {
+                const fs = 11, tw = textW(e.label, fs) + 13;
+                s += `<rect x="${g.mid.x - tw / 2}" y="${g.mid.y - 9}" width="${tw}" height="18" rx="4" fill="${T.bg}" stroke="${mix(col, T.bg, 0.72)}" stroke-width="1"/>` +
+                    `<text x="${g.mid.x}" y="${g.mid.y + 4}" text-anchor="middle" font-family="${SANS}" font-size="${fs}" fill="${isSel ? T.sel : T.muted}">${esc(e.label)}</text>`;
+            }
+            return { main: s, hit: `<path class="hit" data-edge="${e.id}" d="${g.d}" fill="none" stroke="transparent" stroke-width="16" style="cursor:pointer"/>` };
+        }
+
+        function renderUI() {
+            const T = theme();
+            let s = '';
+            const selN = selNodes();
+
+            /* selection outlines */
+            selN.forEach(n => {
+                s += `<rect x="${n.x - 5}" y="${n.y - 5}" width="${n.w + 10}" height="${n.h + 10}" rx="8" fill="none" stroke="${T.sel}" stroke-width="1.2" stroke-dasharray="4 3"/>`;
+            });
+
+            /* resize handles for single node */
+            if (selN.length === 1 && !drag) {
+                const n = selN[0];
+                [['nw', n.x, n.y], ['ne', n.x + n.w, n.y], ['se', n.x + n.w, n.y + n.h], ['sw', n.x, n.y + n.h]].forEach(([k, x, y]) => {
+                    s += `<rect data-resize="${k}" data-rnode="${n.id}" x="${x - 4}" y="${y - 4}" width="8" height="8" fill="${T.bg}" stroke="${T.sel}" stroke-width="1.5" style="pointer-events:all;cursor:${k === 'nw' || k === 'se' ? 'nwse' : 'nesw'}-resize"/>`;
+                });
+            }
+
+            /* ports on hovered / single-selected node */
+            const portNode = nodeById(hoverId) || (selN.length === 1 ? selN[0] : null);
+            if (portNode && (!drag || drag.mode === 'link')) {
+                ['n', 'e', 's', 'w'].forEach(side => {
+                    const a = anchor(portNode, side);
+                    s += `<circle data-port="${side}" data-pnode="${portNode.id}" cx="${a.x}" cy="${a.y}" r="5" fill="${T.bg}" stroke="${T.sel}" stroke-width="1.6" style="pointer-events:all;cursor:crosshair"/>`;
+                });
+            }
+
+            /* live link */
+            if (drag && drag.mode === 'link' && drag.cur) {
+                const a = anchor(nodeById(drag.node), drag.side);
+                s += `<path d="M${a.x},${a.y}L${drag.cur.x},${drag.cur.y}" stroke="${T.sel}" stroke-width="1.8" stroke-dasharray="5 4" fill="none"/>` +
+                    `<circle cx="${drag.cur.x}" cy="${drag.cur.y}" r="3.5" fill="${T.sel}"/>`;
+                if (drag.over) {
+                    const t = nodeById(drag.over);
+                    if (t) s += `<rect x="${t.x - 4}" y="${t.y - 4}" width="${t.w + 8}" height="${t.h + 8}" rx="8" fill="none" stroke="${T.sel}" stroke-width="2"/>`;
+                }
+            }
+
+            /* marquee */
+            if (drag && drag.mode === 'marquee' && drag.cur) {
+                const x = Math.min(drag.start.x, drag.cur.x), y = Math.min(drag.start.y, drag.cur.y);
+                const w = Math.abs(drag.cur.x - drag.start.x), h = Math.abs(drag.cur.y - drag.start.y);
+                s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${T.sel}" fill-opacity=".08" stroke="${T.sel}" stroke-width="1" stroke-dasharray="4 3"/>`;
+            }
+            return s;
+        }
+
+        function render() {
+            const T = theme();
+            const groups = state.nodes.filter(n => n.shape === 'group');
+            const nodes = state.nodes.filter(n => n.shape !== 'group');
+            const edgeParts = state.edges.map(renderEdge);
+
+            const gridSize = 20 * view.k;
+            const gridMarkup = state.grid ? `<rect x="0" y="0" width="100%" height="100%" fill="url(#gridp)"/>` : '';
+
+            cv.innerHTML =
+                `<defs>
+                    <pattern id="gridp" width="${gridSize}" height="${gridSize}" patternUnits="userSpaceOnUse" patternTransform="translate(${view.x % gridSize},${view.y % gridSize})">
+                        <circle cx="0.5" cy="0.5" r="1" fill="${T.grid}"/>
+                    </pattern>
+                </defs>
+                <rect x="0" y="0" width="100%" height="100%" fill="${T.bg}"/>
+                ${gridMarkup}
+                <g id="scene" transform="translate(${view.x},${view.y}) scale(${view.k})">
+                    <g id="l-groups">${groups.map(renderNode).join('')}</g>
+                    <g id="l-edges">${edgeParts.map(p => p.main).join('')}</g>
+                    <g id="l-ehit">${edgeParts.map(p => p.hit).join('')}</g>
+                    <g id="l-nodes">${nodes.map(renderNode).join('')}</g>
+                    <g id="l-ui" style="pointer-events:none">${renderUI()}</g>
+                </g>`;
+
+            $('#zoomLbl').textContent = Math.round(view.k * 100) + '%';
+            $('#bUndo').disabled = !past.length;
+            $('#bRedo').disabled = !future.length;
+            $('#hint').style.display = state.nodes.length ? 'none' : '';
+        }
+
+        /* ============================================================
+           View helpers
+           ============================================================ */
+        function toWorld(cx, cy) {
+            const r = cv.getBoundingClientRect();
+            return { x: (cx - r.left - view.x) / view.k, y: (cy - r.top - view.y) / view.k };
+        }
+        function zoomAt(cx, cy, k2) {
+            const r = cv.getBoundingClientRect();
+            const px = cx - r.left, py = cy - r.top;
+            const wx = (px - view.x) / view.k, wy = (py - view.y) / view.k;
+            view.k = clamp(k2, 0.15, 4);
+            view.x = px - wx * view.k; view.y = py - wy * view.k;
+            render();
+        }
+        function zoomBy(f) { const r = cv.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, view.k * f); }
+
+        function contentBox(pad) {
+            pad = pad == null ? 48 : pad;
+            if (!state.nodes.length) return { x: -200, y: -150, w: 400, h: 300 };
+            let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+            state.nodes.forEach(n => { x1 = Math.min(x1, n.x); y1 = Math.min(y1, n.y); x2 = Math.max(x2, n.x + n.w); y2 = Math.max(y2, n.y + n.h); });
+            return { x: x1 - pad, y: y1 - pad, w: (x2 - x1) + pad * 2, h: (y2 - y1) + pad * 2 };
+        }
+
+        function fit() {
+            const r = cv.getBoundingClientRect(), b = contentBox();
+            view.k = clamp(Math.min(r.width / b.w, r.height / b.h), 0.15, 1.6);
+            view.x = (r.width - b.w * view.k) / 2 - b.x * view.k;
+            view.y = (r.height - b.h * view.k) / 2 - b.y * view.k;
+            render();
+        }
+
+        const snapv = v => state.snap ? Math.round(v / GRID) * GRID : Math.round(v);
+
+        /* ============================================================
+           Node / edge creation
+           ============================================================ */
+        function makeNode(def, x, y) {
+            const w = def.w || (def.s === 'group' ? 340 : DEF_W);
+            const h = def.h || (def.s === 'group' ? 220 : DEF_H);
+            return {
+                id: uid('n'), x: snapv(x - w / 2), y: snapv(y - h / 2), w, h,
+                label: def.t, sub: '', icon: def.i || '', shape: def.s || 'rect', color: def.c || 'slate'
+            };
+        }
+
+        function addNode(def, x, y, silent) {
+            if (!silent) mark();
+            const n = makeNode(def, x, y);
+            state.nodes.push(n);
+            lastType = def;
+            sel.clear(); sel.add(n.id);
+            render(); inspect(); save();
+            return n;
+        }
+
+        function addEdge(from, to, fromSide, toSide) {
+            if (state.edges.some(e => e.from === from && e.to === to && e.fromSide === fromSide)) return null;
+            const e = { id: uid('e'), from, to, fromSide: fromSide || 'auto', toSide: toSide || 'auto', label: '', route: 'ortho', line: 'solid', arrows: 'end', color: null };
+            state.edges.push(e);
+            return e;
+        }
+
+        function deleteSelection() {
+            if (!sel.size) return;
+            mark();
+            const ids = new Set(sel);
+            /* deleting a group deletes only the group frame */
+            state.nodes = state.nodes.filter(n => !ids.has(n.id));
+            state.edges = state.edges.filter(e => !ids.has(e.id) && !ids.has(e.from) && !ids.has(e.to));
+            sel.clear();
+            render(); inspect(); save();
+        }
+
+        function duplicateSelection() {
+            const ns = selNodes();
+            if (!ns.length) return;
+            mark();
+            const map = {};
+            const copies = ns.map(n => { const c = clone(n); c.id = uid('n'); c.x += 24; c.y += 24; map[n.id] = c.id; return c; });
+            state.nodes.push(...copies);
+            state.edges.filter(e => map[e.from] && map[e.to]).forEach(e => {
+                const c = clone(e); c.id = uid('e'); c.from = map[e.from]; c.to = map[e.to]; state.edges.push(c);
+            });
+            sel = new Set(copies.map(c => c.id));
+            render(); inspect(); save();
+        }
+
+        function groupSelection() {
+            const ns = selNodes().filter(n => n.shape !== 'group');
+            if (!ns.length) return;
+            mark();
+            const pad = 34;
+            let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+            ns.forEach(n => { x1 = Math.min(x1, n.x); y1 = Math.min(y1, n.y); x2 = Math.max(x2, n.x + n.w); y2 = Math.max(y2, n.y + n.h); });
+            const g = {
+                id: uid('n'), x: x1 - pad, y: y1 - pad - 14, w: (x2 - x1) + pad * 2, h: (y2 - y1) + pad * 2 + 14,
+                label: 'Zone', sub: '', icon: '', shape: 'group', color: 'slate'
+            };
+            state.nodes.unshift(g);
+            sel = new Set([g.id]);
+            render(); inspect(); save();
+        }
+
+        function childrenOf(g) {
+            return state.nodes.filter(n => n !== g && n.shape !== 'group' &&
+                n.x + n.w / 2 > g.x && n.x + n.w / 2 < g.x + g.w &&
+                n.y + n.h / 2 > g.y && n.y + n.h / 2 < g.y + g.h);
+        }
+
+        /* ============================================================
+           Interaction
+           ============================================================ */
+        function nodeAt(w) {
+            for (let i = state.nodes.length - 1; i >= 0; i--) {
+                const n = state.nodes[i];
+                if (n.shape === 'group') continue;
+                if (w.x >= n.x && w.x <= n.x + n.w && w.y >= n.y && w.y <= n.y + n.h) return n;
+            }
+            for (let i = state.nodes.length - 1; i >= 0; i--) {
+                const n = state.nodes[i];
+                if (n.shape === 'group' && w.x >= n.x && w.x <= n.x + n.w && w.y >= n.y && w.y <= n.y + n.h) return n;
+            }
+            return null;
+        }
+
+        cv.addEventListener('pointerdown', ev => {
+            if (ev.button === 2) return;
+            hideEditor();
+            try { cv.setPointerCapture(ev.pointerId); } catch (err) { }
+            const w = toWorld(ev.clientX, ev.clientY);
+            const t = ev.target;
+
+            /* pan */
+            if (ev.button === 1 || spaceDown || tool === 'pan') {
+                drag = { mode: 'pan', sx: ev.clientX, sy: ev.clientY, vx: view.x, vy: view.y };
+                cv.classList.add('panning');
+                return;
+            }
+
+            /* resize handle */
+            const rh = t.closest && t.closest('[data-resize]');
+            if (rh) {
+                const n = nodeById(rh.getAttribute('data-rnode'));
+                mark();
+                drag = { mode: 'resize', node: n.id, k: rh.getAttribute('data-resize'), o: { x: n.x, y: n.y, w: n.w, h: n.h }, start: w, moved: false };
+                return;
+            }
+
+            /* port → link */
+            const ph = t.closest && t.closest('[data-port]');
+            if (ph) {
+                drag = { mode: 'link', node: ph.getAttribute('data-pnode'), side: ph.getAttribute('data-port'), cur: w, over: null };
+                render();
+                return;
+            }
+
+            /* node */
+            const nEl = t.closest && t.closest('[data-node]');
+            if (nEl) {
+                const id = nEl.getAttribute('data-node');
+                if (ev.shiftKey) { sel.has(id) ? sel.delete(id) : sel.add(id); }
+                else if (!sel.has(id)) { sel.clear(); sel.add(id); }
+                const moving = selNodes();
+                const extra = [];
+                moving.filter(n => n.shape === 'group').forEach(g => childrenOf(g).forEach(c => { if (!sel.has(c.id) && !extra.includes(c)) extra.push(c); }));
+                const all = [...moving, ...extra];
+                drag = { mode: 'move', start: w, moved: false, items: all.map(n => ({ n, x: n.x, y: n.y })) };
+                inspect(); render();
+                return;
+            }
+
+            /* edge */
+            const eEl = t.closest && t.closest('[data-edge]');
+            if (eEl) {
+                const id = eEl.getAttribute('data-edge');
+                if (ev.shiftKey) { sel.has(id) ? sel.delete(id) : sel.add(id); } else { sel.clear(); sel.add(id); }
+                drag = { mode: 'none' };
+                inspect(); render();
+                return;
+            }
+
+            /* empty → marquee */
+            if (!ev.shiftKey) sel.clear();
+            drag = { mode: 'marquee', start: w, cur: w, add: new Set(sel) };
+            inspect(); render();
+        });
+
+        cv.addEventListener('pointermove', ev => {
+            const w = toWorld(ev.clientX, ev.clientY);
+            if (!drag) {
+                const n = nodeAt(w);
+                const id = n ? n.id : null;
+                if (id !== hoverId) { hoverId = id; render(); }
+                return;
+            }
+            if (drag.mode === 'pan') {
+                view.x = drag.vx + (ev.clientX - drag.sx);
+                view.y = drag.vy + (ev.clientY - drag.sy);
+                render();
+            } else if (drag.mode === 'move') {
+                const dx = w.x - drag.start.x, dy = w.y - drag.start.y;
+                if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                    if (!drag.moved) { drag.moved = true; mark(); }
+                    drag.items.forEach(it => { it.n.x = snapv(it.x + dx); it.n.y = snapv(it.y + dy); });
+                    render();
+                }
+            } else if (drag.mode === 'resize') {
+                const n = nodeById(drag.node), o = drag.o;
+                const dx = w.x - drag.start.x, dy = w.y - drag.start.y;
+                let x = o.x, y = o.y, ww = o.w, hh = o.h;
+                if (drag.k.includes('e')) ww = o.w + dx;
+                if (drag.k.includes('s')) hh = o.h + dy;
+                if (drag.k.includes('w')) { x = o.x + dx; ww = o.w - dx; }
+                if (drag.k.includes('n')) { y = o.y + dy; hh = o.h - dy; }
+                if (ww < 40) { if (drag.k.includes('w')) x = o.x + o.w - 40; ww = 40; }
+                if (hh < 34) { if (drag.k.includes('n')) y = o.y + o.h - 34; hh = 34; }
+                n.x = snapv(x); n.y = snapv(y); n.w = snapv(ww); n.h = snapv(hh);
+                render();
+            } else if (drag.mode === 'link') {
+                drag.cur = w;
+                const t = nodeAt(w);
+                drag.over = t && t.id !== drag.node ? t.id : null;
+                render();
+            } else if (drag.mode === 'marquee') {
+                drag.cur = w;
+                const x1 = Math.min(drag.start.x, w.x), x2 = Math.max(drag.start.x, w.x);
+                const y1 = Math.min(drag.start.y, w.y), y2 = Math.max(drag.start.y, w.y);
+                sel = new Set(drag.add);
+                state.nodes.forEach(n => {
+                    if (n.x + n.w > x1 && n.x < x2 && n.y + n.h > y1 && n.y < y2) sel.add(n.id);
+                });
+                render();
+            }
+        });
+
+        function endDrag(ev) {
+            if (!drag) return;
+            const w = ev ? toWorld(ev.clientX, ev.clientY) : null;
+            if (drag.mode === 'link' && w) {
+                const t = nodeAt(w);
+                if (t && t.id !== drag.node) {
+                    mark();
+                    addEdge(drag.node, t.id, drag.side, 'auto');
+                    save();
+                } else if (!t) {
+                    mark();
+                    const n = addNode(lastType, w.x, w.y, true);
+                    addEdge(drag.node, n.id, drag.side, 'auto');
+                    save();
+                }
+            }
+            if (drag.mode === 'move' && drag.moved) save();
+            if (drag.mode === 'resize') save();
+            cv.classList.remove('panning');
+            drag = null;
+            render(); inspect();
+        }
+        cv.addEventListener('pointerup', endDrag);
+        cv.addEventListener('pointercancel', () => { drag = null; cv.classList.remove('panning'); render(); });
+        cv.addEventListener('contextmenu', e => e.preventDefault());
+
+        cv.addEventListener('wheel', ev => {
+            ev.preventDefault();
+            if (ev.ctrlKey || ev.metaKey) {
+                zoomAt(ev.clientX, ev.clientY, view.k * (ev.deltaY < 0 ? 1.1 : 1 / 1.1));
+            } else {
+                view.x -= ev.deltaX; view.y -= ev.deltaY; render();
+            }
+        }, { passive: false });
+
+        cv.addEventListener('dblclick', ev => {
+            const w = toWorld(ev.clientX, ev.clientY);
+            const eEl = ev.target.closest && ev.target.closest('[data-edge]');
+            const n = nodeAt(w);
+            if (n) { sel.clear(); sel.add(n.id); render(); inspect(); showEditor(n); }
+            else if (eEl) { sel.clear(); sel.add(eEl.getAttribute('data-edge')); render(); inspect(); $('#f-elabel') && $('#f-elabel').focus(); }
+            else { addNode(lastType, w.x, w.y); showEditor(nodeById([...sel][0])); }
+        });
+
+        /* inline label editor */
+        const editor = $('#editor');
+        let editing = null;
+        function showEditor(n) {
+            if (!n) return;
+            editing = n.id;
+            editor.value = n.label || '';
+            editor.style.display = 'block';
+            editor.style.left = (view.x + n.x * view.k) + 'px';
+            editor.style.top = (view.y + (n.shape === 'group' ? n.y + 4 : n.y + n.h / 2 - 13) * view.k) + 'px';
+            editor.style.width = (n.w * view.k) + 'px';
+            editor.style.fontSize = (13 * clamp(view.k, .6, 2)) + 'px';
+            editor.focus(); editor.select();
+        }
+        function hideEditor(commit) {
+            if (!editing) return;
+            const n = nodeById(editing);
+            if (n && commit !== false && editor.value !== n.label) { mark(); n.label = editor.value; save(); }
+            editing = null;
+            editor.style.display = 'none';
+            render(); inspect();
+        }
+        editor.addEventListener('keydown', e => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); hideEditor(true); }
+            if (e.key === 'Escape') { hideEditor(false); }
+        });
+        editor.addEventListener('blur', () => hideEditor(true));
+
+        /* ============================================================
+           Keyboard
+           ============================================================ */
+        document.addEventListener('keydown', e => {
+            const tag = (e.target.tagName || '').toLowerCase();
+            const typing = tag === 'input' || tag === 'textarea' || tag === 'select';
+            const meta = e.metaKey || e.ctrlKey;
+
+            if (e.code === 'Space' && !typing) { spaceDown = true; cv.classList.add('panmode'); e.preventDefault(); }
+            if (typing) {
+                if (e.key === 'Escape') e.target.blur();
+                return;
+            }
+            if (meta && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+            if (meta && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+            if (meta && e.key.toLowerCase() === 'a') { e.preventDefault(); sel = new Set(state.nodes.map(n => n.id)); render(); inspect(); return; }
+            if (meta && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelection(); return; }
+            if (meta && e.key.toLowerCase() === 's') { e.preventDefault(); exportJSON(); return; }
+            if (meta && e.key.toLowerCase() === 'g') { e.preventDefault(); groupSelection(); return; }
+            if (meta) return;
+
+            switch (e.key) {
+                case 'Backspace': case 'Delete': e.preventDefault(); deleteSelection(); break;
+                case 'Escape': sel.clear(); render(); inspect(); break;
+                case 'v': case 'V': setTool('select'); break;
+                case 'h': case 'H': setTool('pan'); break;
+                case 'f': case 'F': fit(); break;
+                case '+': case '=': zoomBy(1.2); break;
+                case '-': case '_': zoomBy(1 / 1.2); break;
+                case '0': view = { x: 0, y: 0, k: 1 }; fit(); break;
+                case '?': openHelp(); break;
+                case 'Enter': { const n = selNodes()[0]; if (n) showEditor(n); break; }
+                case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': {
+                    const ns = selNodes(); if (!ns.length) return;
+                    e.preventDefault();
+                    const d = e.shiftKey ? GRID * 5 : GRID;
+                    const dx = e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0;
+                    const dy = e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0;
+                    mark(); ns.forEach(n => { n.x += dx; n.y += dy; }); render(); save();
+                    break;
+                }
+            }
+        });
+        document.addEventListener('keyup', e => {
+            if (e.code === 'Space') { spaceDown = false; cv.classList.remove('panmode'); }
+        });
+
+        function setTool(t) {
+            tool = t;
+            $('#bSelect').classList.toggle('on', t === 'select');
+            $('#bPan').classList.toggle('on', t === 'pan');
+            cv.classList.toggle('panmode', t === 'pan');
+        }
+
+        /* ============================================================
+           Palette
+           ============================================================ */
+        function buildPalette(filter) {
+            const q = (filter || '').trim().toLowerCase();
+            let html = '';
+            PALETTE.forEach((cat, ci) => {
+                const items = cat.items.filter(it => !q || it.t.toLowerCase().includes(q) || cat.cat.toLowerCase().includes(q));
+                if (!items.length) return;
+                html += `<div class="cat">${esc(cat.cat)}</div>`;
+                items.forEach(it => {
+                    const idx = cat.items.indexOf(it);
+                    const col = C[it.c] || C.slate;
+                    html += `<div class="pitem" data-cat="${ci}" data-idx="${idx}" title="${esc(it.t)}">` +
+                        `<span style="color:${col};display:flex">${it.i ? icon(it.i, 15) : `<svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><rect x="1.5" y="4" width="13" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`}</span>` +
+                        `<span>${esc(it.t)}</span></div>`;
+                });
+            });
+            $('#palette').innerHTML = html || `<div class="cat">no match</div>`;
+        }
+
+        $('#palSearch').addEventListener('input', e => buildPalette(e.target.value));
+
+        const ghost = $('#ghost');
+        let palDrag = null;
+
+        $('#palette').addEventListener('pointerdown', ev => {
+            const it = ev.target.closest('.pitem');
+            if (!it) return;
+            ev.preventDefault();
+            const def = PALETTE[+it.dataset.cat].items[+it.dataset.idx];
+            palDrag = { def, sx: ev.clientX, sy: ev.clientY, active: false };
+            const col = C[def.c] || C.slate;
+            ghost.innerHTML = `<span style="color:${col};display:flex">${def.i ? icon(def.i, 15) : ''}</span>${esc(def.t)}`;
+            document.addEventListener('pointermove', palMove);
+            document.addEventListener('pointerup', palUp);
+        });
+
+        function palMove(ev) {
+            if (!palDrag) return;
+            if (!palDrag.active && Math.hypot(ev.clientX - palDrag.sx, ev.clientY - palDrag.sy) > 4) {
+                palDrag.active = true; ghost.style.display = 'flex';
+            }
+            if (palDrag.active) { ghost.style.left = (ev.clientX + 12) + 'px'; ghost.style.top = (ev.clientY + 10) + 'px'; }
+        }
+
+        function palUp(ev) {
+            document.removeEventListener('pointermove', palMove);
+            document.removeEventListener('pointerup', palUp);
+            ghost.style.display = 'none';
+            if (!palDrag) return;
+            const r = cv.getBoundingClientRect();
+            const inside = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+            if (palDrag.active && inside) {
+                const w = toWorld(ev.clientX, ev.clientY);
+                addNode(palDrag.def, w.x, w.y);
+            } else if (!palDrag.active) {
+                const c = toWorld(r.left + r.width / 2, r.top + r.height / 2);
+                addNode(palDrag.def, c.x, c.y);
+            }
+            palDrag = null;
+        }
+
+        /* ============================================================
+           Inspector
+           ============================================================ */
+        function seg(id, val, opts) {
+            return `<div class="seg" id="${id}">` + opts.map(o =>
+                `<button data-v="${o[0]}" class="${val === o[0] ? 'on' : ''}" title="${esc(o[2] || o[1])}">${o[1]}</button>`).join('') + `</div>`;
+        }
+
+        function swatches(cur) {
+            return `<div class="swatches">` + COLORS.map(c =>
+                `<button class="sw ${cur === c.k ? 'on' : ''}" data-c="${c.k}" style="background:${c.v}" title="${c.k}"></button>`).join('') + `</div>`;
+        }
+
+        function inspect() {
+            const insp = $('#inspector'), ttl = $('#inspTitle');
+            const ns = selNodes(), es = selEdges();
+
+            if (ns.length === 1 && es.length === 0) {
+                const n = ns[0];
+                ttl.textContent = n.shape === 'group' ? 'Zone' : 'Node';
+                insp.innerHTML = `
+                    <div class="sec">
+                        <label class="fld"><span class="lbl">Label</span><input class="txt" id="f-label" value="${esc(n.label)}"></label>
+                        <label class="fld"><span class="lbl">Subtitle</span><input class="txt" id="f-sub" value="${esc(n.sub || '')}" placeholder="tech, protocol, note…"></label>
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Colour</span>${swatches(n.color)}
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Shape</span>
+                        <select class="txt" id="f-shape">${SHAPES.map(s => `<option value="${s[0]}" ${n.shape === s[0] ? 'selected' : ''}>${s[1]}</option>`).join('')}</select>
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Icon</span>
+                        <input class="txt" id="f-iconsearch" placeholder="filter icons…" style="margin-bottom:6px">
+                        <div id="iconGrid"></div>
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Size</span>
+                        <div class="row">
+                            <input class="txt" id="f-w" type="number" step="10" value="${Math.round(n.w)}">
+                            <input class="txt" id="f-h" type="number" step="10" value="${Math.round(n.h)}">
+                        </div>
+                        <div class="row" style="margin-top:9px">
+                            <button class="btn primary" id="b-front" style="flex:1">Bring front</button>
+                            <button class="btn primary" id="b-back" style="flex:1">Send back</button>
+                        </div>
+                        <div class="row" style="margin-top:9px">
+                            <button class="btn primary" id="b-dup" style="flex:1">Duplicate</button>
+                            <button class="btn primary" id="b-del" style="flex:1">Delete</button>
+                        </div>
+                    </div>`;
+                bindNodeFields([n]);
+                buildIconGrid(n);
+            } else if (ns.length === 0 && es.length === 1) {
+                const e = es[0];
+                ttl.textContent = 'Connection';
+                const A = nodeById(e.from), B = nodeById(e.to);
+                insp.innerHTML = `
+                    <div class="sec">
+                        <div class="stat">${esc((A && A.label) || '?')} → ${esc((B && B.label) || '?')}</div>
+                    </div>
+                    <div class="sec">
+                        <label class="fld"><span class="lbl">Label</span><input class="txt" id="f-elabel" value="${esc(e.label || '')}" placeholder="HTTP POST /orders"></label>
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Route</span>
+                        ${seg('s-route', e.route, [['ortho', 'Orthogonal'], ['curve', 'Curved'], ['straight', 'Straight']])}
+                        <div style="height:9px"></div>
+                        <span class="lbl">Line</span>
+                        ${seg('s-line', e.line, [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']])}
+                        <div style="height:9px"></div>
+                        <span class="lbl">Arrows</span>
+                        ${seg('s-arrows', e.arrows, [['end', 'End'], ['both', 'Both'], ['none', 'None']])}
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">From side</span>
+                        ${seg('s-fs', e.fromSide || 'auto', [['auto', 'Auto'], ['n', '↑'], ['e', '→'], ['s', '↓'], ['w', '←']])}
+                        <div style="height:9px"></div>
+                        <span class="lbl">To side</span>
+                        ${seg('s-ts', e.toSide || 'auto', [['auto', 'Auto'], ['n', '↑'], ['e', '→'], ['s', '↓'], ['w', '←']])}
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Colour</span>
+                        <div class="swatches">
+                            <button class="sw ${!e.color ? 'on' : ''}" data-c="" style="background:${theme().edge}" title="default"></button>
+                            ${COLORS.map(c => `<button class="sw ${e.color === c.k ? 'on' : ''}" data-c="${c.k}" style="background:${c.v}"></button>`).join('')}
+                        </div>
+                        <div class="row" style="margin-top:11px">
+                            <button class="btn primary" id="b-flip" style="flex:1">Reverse</button>
+                            <button class="btn primary" id="b-del" style="flex:1">Delete</button>
+                        </div>
+                    </div>`;
+                bindEdgeFields(e);
+            } else if (ns.length + es.length > 1) {
+                ttl.textContent = 'Selection';
+                insp.innerHTML = `
+                    <div class="sec"><div class="stat">${ns.length} node${ns.length === 1 ? '' : 's'} · ${es.length} connection${es.length === 1 ? '' : 's'}</div></div>
+                    ${ns.length > 1 ? `<div class="sec">
+                        <span class="lbl">Align</span>
+                        <div class="row"><button class="btn primary al" data-a="l" style="flex:1">Left</button><button class="btn primary al" data-a="cx" style="flex:1">Center</button><button class="btn primary al" data-a="r" style="flex:1">Right</button></div>
+                        <div class="row"><button class="btn primary al" data-a="t" style="flex:1">Top</button><button class="btn primary al" data-a="cy" style="flex:1">Middle</button><button class="btn primary al" data-a="b" style="flex:1">Bottom</button></div>
+                        <div style="height:9px"></div>
+                        <span class="lbl">Distribute</span>
+                        <div class="row"><button class="btn primary al" data-a="dh" style="flex:1">Horizontally</button><button class="btn primary al" data-a="dv" style="flex:1">Vertically</button></div>
+                        <div style="height:9px"></div>
+                        <span class="lbl">Match size</span>
+                        <div class="row"><button class="btn primary al" data-a="sw" style="flex:1">Width</button><button class="btn primary al" data-a="sh" style="flex:1">Height</button></div>
+                    </div>` : ''}
+                    ${ns.length ? `<div class="sec"><span class="lbl">Colour</span>${swatches(null)}</div>` : ''}
+                    <div class="sec">
+                        <div class="row">
+                            <button class="btn primary" id="b-group" style="flex:1">Wrap in zone</button>
+                            <button class="btn primary" id="b-dup" style="flex:1">Duplicate</button>
+                        </div>
+                        <div class="row" style="margin-top:9px"><button class="btn primary" id="b-del" style="flex:1">Delete selection</button></div>
+                    </div>`;
+                insp.querySelectorAll('.al').forEach(b => b.onclick = () => alignSel(b.dataset.a));
+                insp.querySelectorAll('.sw').forEach(b => b.onclick = () => { mark(); selNodes().forEach(n => n.color = b.dataset.c); render(); save(); });
+                const g = $('#b-group'); if (g) g.onclick = groupSelection;
+                const d = $('#b-dup'); if (d) d.onclick = duplicateSelection;
+                const x = $('#b-del'); if (x) x.onclick = deleteSelection;
+            } else {
+                ttl.textContent = 'Diagram';
+                insp.innerHTML = `
+                    <div class="sec">
+                        <div class="stat">${state.nodes.filter(n => n.shape !== 'group').length} nodes · ${state.nodes.filter(n => n.shape === 'group').length} zones · ${state.edges.length} connections</div>
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Export</span>
+                        <div class="row"><button class="btn primary" id="x-svg" style="flex:1">SVG</button><button class="btn primary" id="x-png" style="flex:1">PNG</button><button class="btn primary" id="x-json" style="flex:1">JSON</button></div>
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Getting started</span>
+                        <div class="empty">
+                            Drag a node from the palette onto the canvas.<br>
+                            Hover a node and drag one of its <b>blue dots</b> to another node to connect them — drop on empty canvas to create the next node instantly.<br>
+                            Double-click anything to rename.
+                        </div>
+                    </div>
+                    <div class="sec">
+                        <span class="lbl">Shortcuts</span>
+                        <div class="kbdlist">
+                            <div><kbd>V</kbd> / <kbd>H</kbd></div><div>select / pan</div>
+                            <div><kbd>Space</kbd>-drag</div><div>pan canvas</div>
+                            <div><kbd>⌘</kbd>-scroll</div><div>zoom</div>
+                            <div><kbd>F</kbd></div><div>fit to content</div>
+                            <div><kbd>⌘G</kbd></div><div>wrap in zone</div>
+                            <div><kbd>⌘D</kbd></div><div>duplicate</div>
+                            <div><kbd>⌫</kbd></div><div>delete</div>
+                        </div>
+                    </div>`;
+                $('#x-svg').onclick = exportSVG;
+                $('#x-png').onclick = exportPNG;
+                $('#x-json').onclick = exportJSON;
+            }
+        }
+
+        function bindNodeFields(ns) {
+            const n = ns[0];
+            const live = (id, key) => {
+                const el = $(id); if (!el) return;
+                let started = false;
+                el.addEventListener('focus', () => { started = false; });
+                el.addEventListener('input', () => {
+                    if (!started) { mark(); started = true; }
+                    n[key] = el.value; render(); save();
+                });
+            };
+            live('#f-label', 'label'); live('#f-sub', 'sub');
+            $('#f-shape').onchange = e => { mark(); n.shape = e.target.value; render(); save(); inspect(); };
+            ['#f-w', '#f-h'].forEach((id, i) => {
+                $(id).onchange = e => { mark(); n[i ? 'h' : 'w'] = Math.max(30, +e.target.value || 30); render(); save(); };
+            });
+            $('#inspector').querySelectorAll('.sw').forEach(b => b.onclick = () => { mark(); n.color = b.dataset.c; render(); save(); inspect(); });
+            $('#b-front').onclick = () => { mark(); state.nodes = state.nodes.filter(x => x !== n).concat([n]); render(); save(); };
+            $('#b-back').onclick = () => { mark(); state.nodes = [n].concat(state.nodes.filter(x => x !== n)); render(); save(); };
+            $('#b-dup').onclick = duplicateSelection;
+            $('#b-del').onclick = deleteSelection;
+        }
+
+        function buildIconGrid(n, filter) {
+            const q = (filter || '').trim().toLowerCase();
+            const names = ICON_NAMES.filter(x => !q || x.includes(q));
+            $('#iconGrid').innerHTML =
+                `<button data-i="" class="${!n.icon ? 'on' : ''}" title="no icon">—</button>` +
+                names.map(x => `<button data-i="${x}" class="${n.icon === x ? 'on' : ''}" title="${x}">${icon(x, 15)}</button>`).join('');
+            $('#iconGrid').querySelectorAll('button').forEach(b => b.onclick = () => {
+                mark(); n.icon = b.dataset.i; render(); save();
+                $('#iconGrid').querySelectorAll('button').forEach(o => o.classList.toggle('on', o === b));
+            });
+            const s = $('#f-iconsearch');
+            if (s && !s._bound) { s._bound = 1; s.addEventListener('input', () => buildIconGrid(n, s.value)); }
+        }
+
+        function bindEdgeFields(e) {
+            const el = $('#f-elabel');
+            let started = false;
+            el.addEventListener('input', () => { if (!started) { mark(); started = true; } e.label = el.value; render(); save(); });
+            const bindSeg = (id, key) => {
+                const box = $(id); if (!box) return;
+                box.querySelectorAll('button').forEach(b => b.onclick = () => {
+                    mark(); e[key] = b.dataset.v; render(); save();
+                    box.querySelectorAll('button').forEach(o => o.classList.toggle('on', o === b));
+                });
+            };
+            bindSeg('#s-route', 'route'); bindSeg('#s-line', 'line'); bindSeg('#s-arrows', 'arrows');
+            bindSeg('#s-fs', 'fromSide'); bindSeg('#s-ts', 'toSide');
+            $('#inspector').querySelectorAll('.sw').forEach(b => b.onclick = () => {
+                mark(); e.color = b.dataset.c || null; render(); save(); inspect();
+            });
+            $('#b-flip').onclick = () => {
+                mark();
+                const f = e.from, fs = e.fromSide; e.from = e.to; e.fromSide = e.toSide; e.to = f; e.toSide = fs;
+                render(); save(); inspect();
+            };
+            $('#b-del').onclick = deleteSelection;
+        }
+
+        function alignSel(a) {
+            const ns = selNodes(); if (ns.length < 2) return;
+            mark();
+            const xs = ns.map(n => n.x), ys = ns.map(n => n.y);
+            const x1 = Math.min(...xs), x2 = Math.max(...ns.map(n => n.x + n.w));
+            const y1 = Math.min(...ys), y2 = Math.max(...ns.map(n => n.y + n.h));
+            switch (a) {
+                case 'l': ns.forEach(n => n.x = x1); break;
+                case 'r': ns.forEach(n => n.x = x2 - n.w); break;
+                case 'cx': { const c = (x1 + x2) / 2; ns.forEach(n => n.x = snapv(c - n.w / 2)); break; }
+                case 't': ns.forEach(n => n.y = y1); break;
+                case 'b': ns.forEach(n => n.y = y2 - n.h); break;
+                case 'cy': { const c = (y1 + y2) / 2; ns.forEach(n => n.y = snapv(c - n.h / 2)); break; }
+                case 'dh': {
+                    const s = [...ns].sort((p, q) => p.x - q.x);
+                    const total = x2 - x1, used = s.reduce((t, n) => t + n.w, 0);
+                    const gap = (total - used) / (s.length - 1);
+                    let cur = x1; s.forEach(n => { n.x = snapv(cur); cur += n.w + gap; });
+                    break;
+                }
+                case 'dv': {
+                    const s = [...ns].sort((p, q) => p.y - q.y);
+                    const total = y2 - y1, used = s.reduce((t, n) => t + n.h, 0);
+                    const gap = (total - used) / (s.length - 1);
+                    let cur = y1; s.forEach(n => { n.y = snapv(cur); cur += n.h + gap; });
+                    break;
+                }
+                case 'sw': { const w = Math.max(...ns.map(n => n.w)); ns.forEach(n => n.w = w); break; }
+                case 'sh': { const h = Math.max(...ns.map(n => n.h)); ns.forEach(n => n.h = h); break; }
+            }
+            render(); save();
+        }
+
+        /* ============================================================
+           Export
+           ============================================================ */
+        function download(name, blob) {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name;
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+        }
+        const slug = () => (state.title || 'diagram').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'diagram';
+
+        function buildSVG(transparent) {
+            const T = theme(), b = contentBox(30);
+            const savedSel = sel; sel = new Set();
+            const groups = state.nodes.filter(n => n.shape === 'group').map(renderNode).join('');
+            const nodes = state.nodes.filter(n => n.shape !== 'group').map(renderNode).join('');
+            const edges = state.edges.map(e => renderEdge(e).main).join('');
+            sel = savedSel;
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(b.w)}" height="${Math.round(b.h)}" viewBox="${b.x} ${b.y} ${b.w} ${b.h}">` +
+                `<style>text{font-family:${SANS}}</style>` +
+                (transparent ? '' : `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${T.bg}"/>`) +
+                groups + edges + nodes + `</svg>`;
+        }
+
+        function exportSVG() {
+            download(slug() + '.svg', new Blob([buildSVG(false)], { type: 'image/svg+xml' }));
+        }
+
+        function exportPNG(scale) {
+            scale = scale || 2;
+            const svg = buildSVG(false);
+            const b = contentBox(30);
+            const img = new Image();
+            img.onload = () => {
+                const c = document.createElement('canvas');
+                c.width = Math.round(b.w * scale); c.height = Math.round(b.h * scale);
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = theme().bg; ctx.fillRect(0, 0, c.width, c.height);
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                c.toBlob(bl => download(slug() + '.png', bl), 'image/png');
+            };
+            img.onerror = () => alert('PNG export failed — use SVG export instead.');
+            img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+        }
+
+        function exportJSON() {
+            download(slug() + '.json', new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
+        }
+
+        /* ============================================================
+           Toolbar wiring
+           ============================================================ */
+        $('#bUndo').onclick = undo;
+        $('#bRedo').onclick = redo;
+        $('#bSelect').onclick = () => setTool('select');
+        $('#bPan').onclick = () => setTool('pan');
+        $('#bZoomIn').onclick = () => zoomBy(1.2);
+        $('#bZoomOut').onclick = () => zoomBy(1 / 1.2);
+        $('#bFit').onclick = fit;
+        $('#bSnap').onclick = () => { state.snap = !state.snap; $('#bSnap').classList.toggle('on', state.snap); save(); };
+        $('#bGrid').onclick = () => { state.grid = !state.grid; $('#bGrid').classList.toggle('on', state.grid); render(); save(); };
+        $('#bTheme').onclick = () => {
+            state.theme = state.theme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', state.theme);
+            render(); inspect(); save();
+        };
+        $('#docTitle').addEventListener('input', e => { state.title = e.target.value; save(); });
+
+        $('#bNew').onclick = () => {
+            if (state.nodes.length && !confirm('Discard the current diagram and start over?')) return;
+            mark();
+            state.nodes = []; state.edges = []; state.title = 'Untitled diagram';
+            $('#docTitle').value = state.title;
+            sel.clear(); view = { x: 0, y: 0, k: 1 };
+            render(); inspect(); save();
+        };
+
+        $('#bOpen').onclick = () => $('#fileIn').click();
+        $('#fileIn').addEventListener('change', e => {
+            const f = e.target.files[0]; if (!f) return;
+            const r = new FileReader();
+            r.onload = () => {
+                try {
+                    const d = JSON.parse(r.result);
+                    if (!Array.isArray(d.nodes)) throw 0;
+                    mark();
+                    state.nodes = d.nodes; state.edges = d.edges || []; state.title = d.title || 'Untitled diagram';
+                    if (d.theme) { state.theme = d.theme; document.documentElement.setAttribute('data-theme', state.theme); }
+                    $('#docTitle').value = state.title;
+                    sel.clear(); fit(); inspect(); save();
+                } catch (err) { alert('That file is not a diagram JSON export.'); }
+            };
+            r.readAsText(f);
+            e.target.value = '';
+        });
+
+        $('#bExport').onclick = () => {
+            openModal(`<h2>Export</h2>
+                <p>Everything renders locally — no network, no fonts, no tracking.</p>
+                <div class="row" style="margin-top:14px">
+                    <button class="btn primary" id="m-svg" style="flex:1;justify-content:center;padding:10px">SVG (vector)</button>
+                    <button class="btn primary" id="m-png" style="flex:1;justify-content:center;padding:10px">PNG @2×</button>
+                    <button class="btn primary" id="m-png4" style="flex:1;justify-content:center;padding:10px">PNG @4×</button>
+                    <button class="btn primary" id="m-json" style="flex:1;justify-content:center;padding:10px">JSON (editable)</button>
+                </div>`);
+            $('#m-svg').onclick = () => { exportSVG(); closeModal(); };
+            $('#m-png').onclick = () => { exportPNG(2); closeModal(); };
+            $('#m-png4').onclick = () => { exportPNG(4); closeModal(); };
+            $('#m-json').onclick = () => { exportJSON(); closeModal(); };
+        };
+
+        function openModal(html) { $('#sheet').innerHTML = html; $('#modal').classList.add('open'); }
+        function closeModal() { $('#modal').classList.remove('open'); }
+        $('#modal').addEventListener('pointerdown', e => { if (e.target.id === 'modal') closeModal(); });
+
+        function openHelp() {
+            openModal(`<h2>Architecture Diagram Tool</h2>
+                <p>A single HTML file. Fully offline — no CDN, no fonts, no network calls. Your diagram autosaves to this browser's local storage.</p>
+                <h3>Building</h3>
+                <p>Drag from the palette onto the canvas, or click a palette item to drop it in the centre. Double-click empty canvas to repeat the last node type.</p>
+                <p>Hover a node to reveal its four connection dots. Drag a dot onto another node to connect them. Drag a dot onto empty canvas to create the next node <em>and</em> the connection in one gesture.</p>
+                <p>Double-click a node or connection to rename it inline. Everything else — icon, colour, shape, routing, arrowheads, line style — lives in the right panel.</p>
+                <h3>Zones</h3>
+                <p>Select several nodes and press <kbd>⌘G</kbd> to wrap them in a labelled zone (VPC, cluster, bounded context…). Moving a zone moves everything inside it.</p>
+                <h3>Shortcuts</h3>
+                <div class="kbdlist">
+                    <div><kbd>V</kbd> / <kbd>H</kbd></div><div>select tool / pan tool</div>
+                    <div><kbd>Space</kbd> + drag</div><div>pan the canvas</div>
+                    <div><kbd>⌘</kbd> + scroll</div><div>zoom (plain scroll pans)</div>
+                    <div><kbd>F</kbd></div><div>fit diagram to window</div>
+                    <div><kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></div><div>zoom in / out / reset</div>
+                    <div><kbd>Enter</kbd></div><div>rename selected node</div>
+                    <div><kbd>⌘A</kbd></div><div>select all</div>
+                    <div><kbd>⌘D</kbd></div><div>duplicate selection</div>
+                    <div><kbd>⌘G</kbd></div><div>wrap selection in a zone</div>
+                    <div><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></div><div>undo / redo</div>
+                    <div><kbd>⌘S</kbd></div><div>download JSON</div>
+                    <div><kbd>⌫</kbd></div><div>delete selection</div>
+                    <div>arrows</div><div>nudge (<kbd>⇧</kbd> = ×5)</div>
+                    <div><kbd>Esc</kbd></div><div>deselect</div>
+                </div>
+                <h3>Icons</h3>
+                <p>${ICON_NAMES.length} Bootstrap Icons (MIT licensed) are embedded directly in this file and searchable from the node inspector.</p>`);
+        }
+        $('#bHelp').onclick = openHelp;
+
+        /* ============================================================
+           Sample diagram
+           ============================================================ */
+        function sample() {
+            const N = (id, x, y, label, sub, i, c, s, w, h) => ({ id, x, y, w: w || DEF_W, h: h || DEF_H, label, sub: sub || '', icon: i || '', shape: s || 'rect', color: c || 'slate' });
+            const nodes = [
+                { id: 'z1', x: 300, y: 60, w: 620, h: 430, label: 'Order platform', sub: 'production VPC', icon: '', shape: 'group', color: 'slate' },
+                N('u1', 60, 190, 'Customer', 'web + mobile', 'person', 'slate', 'circle', 100, 100),
+                N('gw', 340, 110, 'API Gateway', 'REST · TLS', 'door-open', 'blue'),
+                N('svc', 340, 240, 'Order Service', 'Java · Spring', 'box-seam', 'blue'),
+                N('auth', 340, 370, 'Auth Service', 'OAuth2 / OIDC', 'shield-lock', 'red'),
+                N('q', 600, 240, 'order.created', 'Kafka topic', 'broadcast-pin', 'amber', 'queue', 200),
+                N('db', 600, 110, 'Order DB', 'PostgreSQL', 'database', 'green', 'cyl', 168, 70),
+                N('bill', 740, 370, 'Billing Adapter', 'SAP · IDoc', 'plug', 'purple'),
+                N('cron', 60, 400, 'Nightly Reconcile', 'cron 0 2 * * *', 'clock-history', 'teal'),
+                N('file', 60, 520, 'SFTP Export', 'orders_*.csv', 'filetype-csv', 'green'),
+                N('dlq', 600, 520, 'Dead Letter Queue', 'retry ×3', 'exclamation-triangle', 'red', 'queue', 200)
+            ];
+            const E = (from, to, label, o) => Object.assign({ id: uid('e'), from, to, fromSide: 'auto', toSide: 'auto', label: label || '', route: 'ortho', line: 'solid', arrows: 'end', color: null }, o || {});
+            const edges = [
+                E('u1', 'gw', 'HTTPS', { fromSide: 'e', toSide: 'w' }),
+                E('gw', 'svc', 'POST /orders', { fromSide: 's', toSide: 'n' }),
+                E('svc', 'auth', 'validate token', { fromSide: 's', toSide: 'n', line: 'dashed' }),
+                E('svc', 'db', 'write', { fromSide: 'e', toSide: 's' }),
+                E('svc', 'q', 'publish', { fromSide: 'e', toSide: 'w' }),
+                E('q', 'bill', 'consume', { fromSide: 's', toSide: 'n', line: 'dashed' }),
+                E('q', 'dlq', 'on failure', { fromSide: 's', toSide: 'n', line: 'dotted', color: 'red' }),
+                E('cron', 'svc', 'trigger', { fromSide: 'e', toSide: 'w', line: 'dashed', color: 'teal' }),
+                E('cron', 'file', 'writes', { fromSide: 's', toSide: 'n', color: 'teal' })
+            ];
+            return { title: 'Order processing — reference architecture', nodes, edges, theme: 'light', snap: true, grid: true };
+        }
+
+        /* ============================================================
+           Boot
+           ============================================================ */
+        (function boot() {
+            let loaded = null;
+            try { const raw = localStorage.getItem(STORE); if (raw) loaded = JSON.parse(raw); } catch (e) { }
+            state = (loaded && Array.isArray(loaded.nodes)) ? Object.assign(blank(), loaded) : sample();
+
+            document.documentElement.setAttribute('data-theme', state.theme === 'dark' ? 'dark' : 'light');
+            $('#docTitle').value = state.title;
+            $('#bSnap').classList.toggle('on', !!state.snap);
+            $('#bGrid').classList.toggle('on', !!state.grid);
+            setTool('select');
+            buildPalette('');
+            render();
+            fit();
+            inspect();
+            window.addEventListener('resize', () => render());
+        })();
+    </script>
+</body>
+
+</html>
