@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://baugraph.local/schema/v1.0/baugraph.schema.json",
+  "title": "Baugraph diagram",
+  "description": "Baugraph diagram document, format version 1.0.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "baugraph": {
+      "default": "1.0",
+      "type": "string"
+    },
+    "meta": {
+      "default": {
+        "title": "Untitled diagram"
+      },
+      "type": "object",
+      "properties": {
+        "title": {
+          "default": "Untitled diagram",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "canvas": {
+      "default": {
+        "theme": "light",
+        "grid": true,
+        "snap": true,
+        "snapSize": 10
+      },
+      "type": "object",
+      "properties": {
+        "theme": {
+          "default": "light",
+          "type": "string",
+          "enum": [
+            "light",
+            "dark"
+          ]
+        },
+        "grid": {
+          "default": true,
+          "type": "boolean"
+        },
+        "snap": {
+          "default": true,
+          "type": "boolean"
+        },
+        "snapSize": {
+          "default": 10,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      }
+    },
+    "nodes": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          },
+          "kind": {
+            "default": "shape",
+            "type": "string",
+            "enum": [
+              "shape",
+              "zone"
+            ]
+          },
+          "label": {
+            "default": "",
+            "type": "string"
+          },
+          "sublabel": {
+            "default": "",
+            "type": "string"
+          },
+          "shape": {
+            "default": "rect",
+            "type": "string",
+            "enum": [
+              "rect",
+              "round",
+              "pill",
+              "cylinder",
+              "queue",
+              "hexagon",
+              "diamond",
+              "circle",
+              "note"
+            ]
+          },
+          "color": {
+            "default": "slate",
+            "type": "string",
+            "enum": [
+              "slate",
+              "blue",
+              "teal",
+              "green",
+              "amber",
+              "red",
+              "purple",
+              "pink"
+            ]
+          },
+          "icon": {
+            "default": "",
+            "type": "string"
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "number",
+                "minimum": 16
+              },
+              "height": {
+                "type": "number",
+                "minimum": 16
+              }
+            },
+            "required": [
+              "width",
+              "height"
+            ]
+          },
+          "parent": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "size"
+        ]
+      }
+    },
+    "edges": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          },
+          "sourceSide": {
+            "default": "auto",
+            "type": "string",
+            "enum": [
+              "auto",
+              "top",
+              "right",
+              "bottom",
+              "left"
+            ]
+          },
+          "targetSide": {
+            "default": "auto",
+            "type": "string",
+            "enum": [
+              "auto",
+              "top",
+              "right",
+              "bottom",
+              "left"
+            ]
+          },
+          "label": {
+            "default": "",
+            "type": "string"
+          },
+          "route": {
+            "default": "orthogonal",
+            "type": "string",
+            "enum": [
+              "orthogonal",
+              "curved",
+              "straight"
+            ]
+          },
+          "line": {
+            "default": "solid",
+            "type": "string",
+            "enum": [
+              "solid",
+              "dashed",
+              "dotted"
+            ]
+          },
+          "arrows": {
+            "default": "target",
+            "type": "string",
+            "enum": [
+              "target",
+              "both",
+              "none"
+            ]
+          },
+          "color": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "slate",
+                  "blue",
+                  "teal",
+                  "green",
+                  "amber",
+                  "red",
+                  "purple",
+                  "pink"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "target"
+        ]
+      }
+    }
+  }
+}

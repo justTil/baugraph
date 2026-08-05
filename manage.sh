@@ -20,7 +20,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-APP_NAME="luma-middleware-hub"
+APP_NAME="baugraph"
 
 # Port the instance listens on. Give each instance behind the load balancer
 # its own port, e.g. ./manage.sh start 8081 / 8082 / 8083

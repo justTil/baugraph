@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Boxes } from '@lucide/vue'
+import { Waypoints } from '@lucide/vue'
 import {
   Sidebar,
   SidebarContent,
@@ -13,10 +13,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarSeparator,
 } from '@/components/ui/sidebar'
 import { useNavigation } from '@/composables/useNavigation'
+import PalettePanel from '@/features/diagram/components/PalettePanel.vue'
 
-const { groups, isActive, setActiveItem } = useNavigation()
+const { groups, isActive, setActiveItem, activeItemId } = useNavigation()
 </script>
 
 <template>
@@ -25,12 +27,14 @@ const { groups, isActive, setActiveItem } = useNavigation()
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" class="cursor-default hover:bg-transparent">
-            <div class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-              <Boxes class="size-4" />
+            <div
+              class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg"
+            >
+              <Waypoints class="size-4" />
             </div>
             <div class="grid flex-1 text-left leading-tight">
-              <span class="truncate font-semibold">Luma</span>
-              <span class="text-muted-foreground truncate text-xs">Middleware Hub</span>
+              <span class="truncate font-semibold">Baugraph</span>
+              <span class="text-muted-foreground truncate text-xs">Architecture diagrams</span>
             </div>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -61,11 +65,17 @@ const { groups, isActive, setActiveItem } = useNavigation()
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
+
+      <!-- The palette is only meaningful while the editor is on screen. -->
+      <template v-if="activeItemId === 'editor'">
+        <SidebarSeparator />
+        <PalettePanel />
+      </template>
     </SidebarContent>
 
     <SidebarFooter>
       <div class="text-muted-foreground px-2 py-1 text-xs group-data-[collapsible=icon]:hidden">
-        Verbunden mit Staging
+        Drag a node onto the canvas, or click it to drop it in the centre.
       </div>
     </SidebarFooter>
 

@@ -10,13 +10,10 @@ const { activeItem } = useNavigation()
 <template>
   <SidebarProvider>
     <AppSidebar />
-    <SidebarInset>
-      <AppHeader :title="activeItem?.label">
-        <template #actions>
-          <slot name="header-actions" />
-        </template>
-      </AppHeader>
-      <main class="flex flex-1 flex-col gap-4 p-4">
+    <SidebarInset class="h-svh overflow-hidden">
+      <AppHeader :title="activeItem?.label" />
+      <!-- Views own their padding; the editor needs the full bleed. -->
+      <main class="flex min-h-0 flex-1 flex-col">
         <slot />
       </main>
     </SidebarInset>

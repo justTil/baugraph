@@ -11,7 +11,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-APP_NAME="luma-middleware-hub"
+APP_NAME="baugraph"
 DIST_DIR="dist"
 
 FAST=0

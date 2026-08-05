@@ -1,0 +1,348 @@
+<script setup lang="ts">
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import '@vue-flow/minimap/dist/style.css'
+import '@vue-flow/node-resizer/dist/style.css'
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { Connection, NodeMouseEvent } from '@vue-flow/core'
+import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
+import { MiniMap } from '@vue-flow/minimap'
+import type { Side } from '@/model'
+import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useCanvas, CANVAS_ID } from '@/features/diagram/composables/useCanvas'
+import { usePlacement } from '@/features/diagram/composables/usePlacement'
+import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
+import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
+import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
+import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
+import { DEFAULT_PALETTE_ITEM, type PaletteItem } from '@/features/diagram/data/palette'
+import { diagramTheme } from '@/features/diagram/lib/theme'
+
+const {
+  nodes,
+  edges,
+  canvas,
+  selectedNodes,
+  commit,
+  endCoalesce,
+  undo,
+  redo,
+  addEdge,
+  removeSelection,
+  duplicateSelection,
+  groupSelection,
+  updateNodeData,
+  nudgeSelection,
+  fitRequest,
+} = useDiagram()
+
+const { fitView, screenToFlowCoordinate, findNode } = useCanvas()
+const { place, placeAtScreen } = usePlacement()
+
+const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
+const edgeTypes = { diagram: markRaw(DiagramEdge) }
+
+const theme = computed(() => diagramTheme(canvas.theme))
+
+/** The last palette item used, repeated by double-click and drag-to-empty. */
+const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
+
+/* ------------------------------------------------------------ connections */
+
+const HANDLE_SIDES: Record<string, Side> = {
+  top: 'top',
+  right: 'right',
+  bottom: 'bottom',
+  left: 'left',
+}
+
+/** Set by `onConnect` so `onConnectEnd` knows the drag landed on a node. */
+let connectionMade = false
+let pendingSource: { node: string; side: Side } | null = null
+
+function onConnectStart({ nodeId, handleId }: { nodeId?: string | null; handleId?: string | null }) {
+  connectionMade = false
+  pendingSource = nodeId
+    ? { node: nodeId, side: HANDLE_SIDES[handleId ?? ''] ?? 'auto' }
+    : null
+}
+
+function onConnect(connection: Connection) {
+  connectionMade = true
+  commit()
+  endCoalesce()
+  addEdge(connection.source, connection.target, {
+    sourceSide: HANDLE_SIDES[connection.sourceHandle ?? ''] ?? 'auto',
+    targetSide: HANDLE_SIDES[connection.targetHandle ?? ''] ?? 'auto',
+  })
+}
+
+/**
+ * Dropping a connection on empty canvas creates the next node and wires it up in
+ * one gesture — the fastest way to sketch a chain of services.
+ */
+function onConnectEnd(event?: MouseEvent | TouchEvent) {
+  const source = pendingSource
+  pendingSource = null
+  if (connectionMade || !source || !event) return
+
+  const point = 'changedTouches' in event ? event.changedTouches[0] : event
+  if (!point) return
+
+  const node = placeAtScreen(lastItem.value, { x: point.clientX, y: point.clientY })
+  addEdge(source.node, node.id, { sourceSide: source.side })
+}
+
+/* ------------------------------------------------------- palette drag/drop */
+
+function onDragOver(event: DragEvent) {
+  if (!event.dataTransfer?.types.includes(PALETTE_DRAG_TYPE)) return
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'copy'
+}
+
+function onDrop(event: DragEvent) {
+  const payload = event.dataTransfer?.getData(PALETTE_DRAG_TYPE)
+  if (!payload) return
+  event.preventDefault()
+  const item = JSON.parse(payload) as PaletteItem
+  lastItem.value = item
+  placeAtScreen(item, { x: event.clientX, y: event.clientY })
+}
+
+/* --------------------------------------------------------- inline renaming */
+
+const editing = ref<{ id: string; value: string; left: number; top: number; width: number } | null>(
+  null,
+)
+const editorInput = ref<HTMLInputElement | null>(null)
+
+function openEditor(id: string) {
+  const node = findNode(id)
+  if (!node) return
+  const rect = document.querySelector<HTMLElement>(`.vue-flow__node[data-id="${id}"]`)
+  if (!rect) return
+  const box = rect.getBoundingClientRect()
+  const host = rect.closest('.vue-flow')?.getBoundingClientRect()
+  if (!host) return
+
+  editing.value = {
+    id,
+    value: node.data.label ?? '',
+    left: box.left - host.left,
+    top: box.top - host.top + (node.type === 'zone' ? 4 : box.height / 2 - 14),
+    width: box.width,
+  }
+  nextTick(() => {
+    editorInput.value?.focus()
+    editorInput.value?.select()
+  })
+}
+
+function commitEditor(save: boolean) {
+  const current = editing.value
+  editing.value = null
+  if (!current || !save) return
+  const node = findNode(current.id)
+  if (!node || node.data.label === current.value) return
+  commit()
+  endCoalesce()
+  updateNodeData(current.id, { label: current.value })
+}
+
+function onNodeDoubleClick({ node }: NodeMouseEvent) {
+  openEditor(node.id)
+}
+
+function onPaneDoubleClick(event: MouseEvent) {
+  place(lastItem.value, screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
+}
+
+/* ---------------------------------------------------------------- dragging */
+
+function onNodeDragStart() {
+  commit()
+  endCoalesce()
+}
+
+/* ---------------------------------------------------------------- keyboard */
+
+function isTyping(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  return (
+    el.isContentEditable ||
+    ['input', 'textarea', 'select'].includes(el.tagName?.toLowerCase() ?? '')
+  )
+}
+
+function onKeyDown(event: KeyboardEvent) {
+  if (isTyping(event.target)) return
+  const meta = event.metaKey || event.ctrlKey
+
+  if (meta) {
+    const key = event.key.toLowerCase()
+    if (key === 'z') {
+      event.preventDefault()
+      event.shiftKey ? redo() : undo()
+    } else if (key === 'y') {
+      event.preventDefault()
+      redo()
+    } else if (key === 'd') {
+      event.preventDefault()
+      commit()
+      endCoalesce()
+      duplicateSelection()
+    } else if (key === 'g') {
+      event.preventDefault()
+      commit()
+      endCoalesce()
+      groupSelection()
+    }
+    return
+  }
+
+  switch (event.key) {
+    case 'Backspace':
+    case 'Delete':
+      event.preventDefault()
+      commit()
+      endCoalesce()
+      removeSelection()
+      break
+    case 'f':
+    case 'F':
+      fitView({ padding: 0.2 })
+      break
+    case 'Enter': {
+      const node = selectedNodes.value[0]
+      if (node) {
+        event.preventDefault()
+        openEditor(node.id)
+      }
+      break
+    }
+    case 'ArrowUp':
+    case 'ArrowDown':
+    case 'ArrowLeft':
+    case 'ArrowRight': {
+      if (!selectedNodes.value.length) return
+      event.preventDefault()
+      const step = (event.shiftKey ? 5 : 1) * canvas.snapSize
+      const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+      const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+      commit('nudge')
+      nudgeSelection(dx, dy)
+      break
+    }
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeyDown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
+
+/** Re-fit whenever a document is loaded from disk or storage. */
+watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
+</script>
+
+<template>
+  <div
+    class="relative min-h-0 flex-1"
+    :style="{
+      '--bg-canvas': theme.bg,
+      '--bg-selection': theme.selection,
+      background: theme.bg,
+    }"
+    @dragover="onDragOver"
+    @drop="onDrop"
+  >
+    <VueFlow
+      :id="CANVAS_ID"
+      v-model:nodes="nodes"
+      v-model:edges="edges"
+      :node-types="nodeTypes"
+      :edge-types="edgeTypes"
+      :connection-mode="ConnectionMode.Loose"
+      :snap-to-grid="canvas.snap"
+      :snap-grid="[canvas.snapSize, canvas.snapSize]"
+      :min-zoom="0.15"
+      :max-zoom="4"
+      :delete-key-code="null"
+      :zoom-on-scroll="false"
+      :pan-on-scroll="true"
+      :pan-on-scroll-mode="PanOnScrollMode.Free"
+      :zoom-on-pinch="true"
+      :selection-key-code="'Shift'"
+      :connection-line-style="{ stroke: theme.selection, strokeWidth: 1.8, strokeDasharray: '5 4' }"
+      :default-edge-options="{ type: 'diagram' }"
+      @connect-start="onConnectStart"
+      @connect="onConnect"
+      @connect-end="onConnectEnd"
+      @node-drag-start="onNodeDragStart"
+      @node-double-click="onNodeDoubleClick"
+      @pane-ready="fitView({ padding: 0.2 })"
+      @dblclick.self="onPaneDoubleClick"
+    >
+      <Background v-if="canvas.grid" :gap="20" :size="1.4" :pattern-color="theme.grid" />
+      <MiniMap
+        pannable
+        zoomable
+        :mask-color="theme.dark ? 'rgba(0,0,0,.55)' : 'rgba(255,255,255,.65)'"
+        class="!bottom-3 !right-3 !rounded-md !border"
+      />
+    </VueFlow>
+
+    <!-- Inline label editor, positioned over the node being renamed. -->
+    <input
+      v-if="editing"
+      ref="editorInput"
+      v-model="editing.value"
+      class="absolute z-30 rounded border px-1.5 py-0.5 text-center text-[13px] font-semibold outline-none"
+      :style="{
+        left: `${editing.left}px`,
+        top: `${editing.top}px`,
+        width: `${editing.width}px`,
+        borderColor: theme.selection,
+        background: theme.bg,
+        color: theme.ink,
+      }"
+      spellcheck="false"
+      @keydown.enter.prevent="commitEditor(true)"
+      @keydown.esc.prevent="commitEditor(false)"
+      @keydown.stop
+      @blur="commitEditor(true)"
+    />
+
+    <p
+      v-if="!nodes.length"
+      class="text-muted-foreground pointer-events-none absolute bottom-4 left-4 font-mono text-xs"
+    >
+      drag a node from the palette · drag a node's dot to connect
+    </p>
+  </div>
+</template>
+
+<style>
+/* Vue Flow's default node chrome would double up on the shapes we draw. */
+.vue-flow__node-shape,
+.vue-flow__node-zone {
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+  width: auto;
+}
+
+.vue-flow__node-zone {
+  cursor: default;
+}
+
+.vue-flow__handle {
+  min-width: 0;
+  min-height: 0;
+}
+</style>

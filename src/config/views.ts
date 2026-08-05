@@ -6,8 +6,6 @@ import { defineAsyncComponent } from 'vue'
  * Replace with vue-router routes once more than a handful of views exist.
  */
 export const views: Record<string, Component> = {
-  dashboard: defineAsyncComponent(() => import('@/features/dashboard/views/DashboardView.vue')),
-  signal: defineAsyncComponent(() => import('@/features/channels/views/SignalView.vue')),
-  swift: defineAsyncComponent(() => import('@/features/channels/views/SwiftView.vue')),
+  editor: defineAsyncComponent(() => import('@/features/diagram/views/DiagramView.vue')),
   settings: defineAsyncComponent(() => import('@/features/settings/views/SettingsView.vue')),
 }

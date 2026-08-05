@@ -1,0 +1,165 @@
+import type { DiagramDocument, DiagramEdge, DiagramNode } from '@/model/types'
+import { FORMAT_VERSION } from '@/model/types'
+import { EDGE_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
+import { documentSchema } from '@/model/schema'
+import { migrate } from '@/model/migrate'
+
+/** Where the published JSON Schema lives, relative to the deployed app. */
+export const SCHEMA_URL = '/schema/baugraph-v1.schema.json'
+
+export class DiagramParseError extends Error {
+  constructor(
+    message: string,
+    /** `path: message` pairs, one per validation failure. */
+    readonly issues: { path: string; message: string }[] = [],
+  ) {
+    super(message)
+    this.name = 'DiagramParseError'
+  }
+}
+
+/** Drops keys whose value equals the format default. */
+function omitDefaults<T extends object>(value: T, defaults: Partial<T>): Partial<T> {
+  const out: Record<string, unknown> = {}
+  for (const [key, v] of Object.entries(value)) {
+    if (v === undefined) continue
+    if (key in defaults && Object.is((defaults as Record<string, unknown>)[key], v)) continue
+    out[key] = v
+  }
+  return out as Partial<T>
+}
+
+/** Reorders an object's keys to `order`; anything unlisted is appended. */
+function ordered<T extends object>(value: T, order: (keyof T)[]): T {
+  const out: Record<string, unknown> = {}
+  for (const key of order) {
+    if (key in value && (value as Record<string, unknown>)[key as string] !== undefined) {
+      out[key as string] = (value as Record<string, unknown>)[key as string]
+    }
+  }
+  for (const key of Object.keys(value)) {
+    if (!(key in out) && (value as Record<string, unknown>)[key] !== undefined) {
+      out[key] = (value as Record<string, unknown>)[key]
+    }
+  }
+  return out as T
+}
+
+const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
+  'id',
+  'kind',
+  'label',
+  'sublabel',
+  'shape',
+  'color',
+  'icon',
+  'position',
+  'size',
+  'parent',
+  'data',
+]
+
+const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
+  'id',
+  'source',
+  'target',
+  'sourceSide',
+  'targetSide',
+  'label',
+  'route',
+  'line',
+  'arrows',
+  'color',
+  'data',
+]
+
+/** Rounds a coordinate so float noise never shows up in a diff. */
+const round = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Produces the plain object that gets written to disk.
+ *
+ * Deterministic by construction: fixed key order, defaults omitted, coordinates
+ * rounded, and nodes/edges kept in document order (which the editor preserves).
+ * Saving an unchanged diagram twice yields byte-identical output.
+ */
+export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
+  const nodes = doc.nodes.map((node) => {
+    const trimmed = omitDefaults(
+      {
+        ...node,
+        position: { x: round(node.position.x), y: round(node.position.y) },
+        size: { width: round(node.size.width), height: round(node.size.height) },
+      },
+      NODE_DEFAULTS,
+    )
+    if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    return ordered(trimmed as DiagramNode, NODE_KEY_ORDER)
+  })
+
+  const edges = doc.edges.map((edge) => {
+    const trimmed = omitDefaults({ ...edge }, EDGE_DEFAULTS)
+    if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    return ordered(trimmed as DiagramEdge, EDGE_KEY_ORDER)
+  })
+
+  return {
+    $schema: SCHEMA_URL,
+    baugraph: doc.baugraph || FORMAT_VERSION,
+    meta: ordered({ ...doc.meta }, ['title', 'description', 'createdAt', 'updatedAt']),
+    canvas: ordered({ ...doc.canvas }, ['theme', 'grid', 'snap', 'snapSize']),
+    nodes,
+    edges,
+  }
+}
+
+/** Serialises a document to the exact text written to a `.baugraph.json` file. */
+export function stringify(doc: DiagramDocument): string {
+  return `${JSON.stringify(toFileObject(doc), null, 2)}\n`
+}
+
+/**
+ * Parses and validates file contents into a fully-populated document.
+ * Throws `DiagramParseError` with per-field issues on invalid input.
+ */
+export function parse(input: string | unknown): DiagramDocument {
+  let raw: unknown = input
+  if (typeof input === 'string') {
+    try {
+      raw = JSON.parse(input)
+    } catch (error) {
+      throw new DiagramParseError(
+        `Not valid JSON: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  const result = documentSchema.safeParse(migrate(raw))
+  if (!result.success) {
+    const issues = result.error.issues.map((issue) => ({
+      path: issue.path.join('.') || '(root)',
+      message: issue.message,
+    }))
+    throw new DiagramParseError(
+      `${issues.length} problem${issues.length === 1 ? '' : 's'} in this diagram file`,
+      issues,
+    )
+  }
+
+  const { $schema: _schema, ...doc } = result.data
+  return doc as DiagramDocument
+}
+
+/** Non-throwing variant, for UI paths that want to show the issues inline. */
+export function safeParse(
+  input: string | unknown,
+): { ok: true; document: DiagramDocument } | { ok: false; error: DiagramParseError } {
+  try {
+    return { ok: true, document: parse(input) }
+  } catch (error) {
+    if (error instanceof DiagramParseError) return { ok: false, error }
+    return { ok: false, error: new DiagramParseError((error as Error).message) }
+  }
+}
+
+export { blankDocument }
