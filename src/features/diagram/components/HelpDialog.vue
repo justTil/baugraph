@@ -15,6 +15,7 @@ const SHORTCUTS: [string, string][] = [
   ['Space / middle-drag', 'pan the canvas'],
   ['⌘ + scroll, pinch', 'zoom (plain scroll pans)'],
   ['F', 'fit diagram to window'],
+  ['⇧⌘F', 'size the selection to its own text (all of it, if nothing is selected)'],
   ['Enter', 'rename the selected node'],
   ['right-click', 'context menu for what is under the pointer'],
   ['⌘A', 'select everything'],
@@ -55,6 +56,14 @@ const SHORTCUTS: [string, string][] = [
           <p>
             Double-click a node to rename it inline. Icon, colour, shape, routing, arrowheads and
             line style live in the inspector on the right.
+          </p>
+          <p>
+            Nodes size themselves to what they carry: a new one arrives as wide and as tall as its
+            label and caption need, and a rename or a new technology grows the box rather than
+            cutting the text off. Drag any side of a selected node to set a size by hand — the whole
+            edge is the handle, not just its corners — and press
+            <kbd class="bg-muted rounded px-1 font-mono">⇧⌘F</kbd> (or <em>Fit</em> in the inspector)
+            to hand the decision back, which also wraps a zone around its contents.
           </p>
           <p>
             Every node carries its <em>type</em> — Database, API Gateway, Message Broker — and it

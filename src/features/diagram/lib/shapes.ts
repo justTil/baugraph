@@ -25,8 +25,11 @@ export function roundedRect(x: number, y: number, w: number, h: number, r: numbe
   )
 }
 
+/** How far a cylinder's cap ever bulges, whatever the box is stretched to. */
+export const CYLINDER_CAP_MAX = 15
+
 /** Vertical offset of a cylinder's cap, also used to nudge its label down. */
-export const cylinderCap = (h: number) => Math.min(15, h * 0.22)
+export const cylinderCap = (h: number) => Math.min(CYLINDER_CAP_MAX, h * 0.22)
 
 /** Width of the three tick marks on the right of a queue shape. */
 export const QUEUE_TICKS = [10, 19, 28]

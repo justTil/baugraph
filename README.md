@@ -56,6 +56,20 @@ The caption never repeats the name. A node called "PostgreSQL" reads
 `PostgreSQL` / `Database`; rename it to "Orders" and it reads
 `Orders` / `Database · PostgreSQL`. Either way the canvas says what it is.
 
+### Sizing
+
+A node is as big as what it carries. It arrives at the size its label, caption and
+icon actually measure — a cylinder taller than a box, because its caps eat the
+room a database's two lines need — and a rename or a new technology grows the box
+instead of cutting the text off. A size set by hand is never taken away again: the
+box only ever grows to fit.
+
+To set one by hand, select the node and drag a side — the whole edge is the
+handle, so width, the thing a diagram gets tidied with most, takes no aiming.
+`⇧⌘F` hands the decision back: it sizes the selection to its own text, wraps a
+selected zone around its contents, and with nothing selected does the lot, which
+is how an older diagram full of clipped captions gets fixed in one keystroke.
+
 Select several nodes and press `⌘G` to wrap them in a labelled zone — a VPC, a
 cluster, a bounded context. The nodes become children of the zone, so moving it moves
 them. Dropping a node onto a zone (from the palette, or by dragging one across the
@@ -72,7 +86,8 @@ again, and the inspector can unlock everything at once.
 | --- | --- |
 | `Shift` + drag | rubber-band select |
 | scroll / pinch | pan / zoom |
-| `F` | fit to content |
+| `F` | fit the view to the diagram |
+| `⇧⌘F` | size the selection to its text (everything, if nothing is selected) |
 | `Enter` | rename the selected node |
 | `⌘D` / `⌘G` | duplicate / wrap in a zone |
 | `⇧⌘L` | lock the selection |

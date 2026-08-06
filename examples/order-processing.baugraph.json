@@ -20,7 +20,7 @@
       "label": "Order platform",
       "sublabel": "production",
       "position": { "x": 300, "y": 60 },
-      "size": { "width": 620, "height": 430 }
+      "size": { "width": 694, "height": 430 }
     },
     {
       "id": "customer",
@@ -30,7 +30,40 @@
       "shape": "circle",
       "icon": "user",
       "position": { "x": 60, "y": 190 },
-      "size": { "width": 100, "height": 100 }
+      "size": { "width": 130, "height": 130 }
+    },
+    {
+      "id": "nightly-reconcile",
+      "type": "cron_job",
+      "label": "Nightly Reconcile",
+      "sublabel": "cron 0 2 * * *",
+      "color": "teal",
+      "icon": "rotate-ccw-clock",
+      "position": { "x": 60, "y": 400 },
+      "size": { "width": 180, "height": 70 }
+    },
+    {
+      "id": "sftp-export",
+      "type": "file_write",
+      "tech": "sftp",
+      "label": "SFTP Export",
+      "sublabel": "orders_*.csv",
+      "color": "green",
+      "icon": "sheet",
+      "position": { "x": 60, "y": 520 },
+      "size": { "width": 168, "height": 70 }
+    },
+    {
+      "id": "dead-letter-queue",
+      "type": "dead_letter_queue",
+      "tech": "apache_kafka",
+      "label": "Dead Letter Queue",
+      "sublabel": "retry ×3",
+      "shape": "queue",
+      "color": "red",
+      "icon": "triangle-alert",
+      "position": { "x": 600, "y": 540 },
+      "size": { "width": 220, "height": 70 }
     },
     {
       "id": "api-gateway",
@@ -41,7 +74,7 @@
       "color": "blue",
       "icon": "door-open",
       "position": { "x": 40, "y": 50 },
-      "size": { "width": 168, "height": 62 },
+      "size": { "width": 168, "height": 70 },
       "parent": "order-platform"
     },
     {
@@ -53,7 +86,7 @@
       "color": "blue",
       "icon": "package",
       "position": { "x": 40, "y": 180 },
-      "size": { "width": 168, "height": 62 },
+      "size": { "width": 170, "height": 70 },
       "parent": "order-platform"
     },
     {
@@ -65,7 +98,7 @@
       "color": "red",
       "icon": "shield-check",
       "position": { "x": 40, "y": 310 },
-      "size": { "width": 168, "height": 62 },
+      "size": { "width": 168, "height": 70 },
       "parent": "order-platform"
     },
     {
@@ -78,7 +111,7 @@
       "color": "green",
       "icon": "database",
       "position": { "x": 300, "y": 50 },
-      "size": { "width": 168, "height": 70 },
+      "size": { "width": 180, "height": 120 },
       "parent": "order-platform"
     },
     {
@@ -91,7 +124,7 @@
       "color": "amber",
       "icon": "radio-tower",
       "position": { "x": 300, "y": 180 },
-      "size": { "width": 200, "height": 62 },
+      "size": { "width": 200, "height": 70 },
       "parent": "order-platform"
     },
     {
@@ -103,41 +136,8 @@
       "color": "purple",
       "icon": "plug",
       "position": { "x": 440, "y": 310 },
-      "size": { "width": 168, "height": 62 },
+      "size": { "width": 220, "height": 70 },
       "parent": "order-platform"
-    },
-    {
-      "id": "nightly-reconcile",
-      "type": "cron_job",
-      "label": "Nightly Reconcile",
-      "sublabel": "cron 0 2 * * *",
-      "color": "teal",
-      "icon": "rotate-ccw-clock",
-      "position": { "x": 60, "y": 400 },
-      "size": { "width": 168, "height": 62 }
-    },
-    {
-      "id": "sftp-export",
-      "type": "file_write",
-      "tech": "sftp",
-      "label": "SFTP Export",
-      "sublabel": "orders_*.csv",
-      "color": "green",
-      "icon": "sheet",
-      "position": { "x": 60, "y": 520 },
-      "size": { "width": 168, "height": 62 }
-    },
-    {
-      "id": "dead-letter-queue",
-      "type": "dead_letter_queue",
-      "tech": "apache_kafka",
-      "label": "Dead Letter Queue",
-      "sublabel": "retry ×3",
-      "shape": "queue",
-      "color": "red",
-      "icon": "triangle-alert",
-      "position": { "x": 600, "y": 540 },
-      "size": { "width": 220, "height": 62 }
     }
   ],
   "edges": [

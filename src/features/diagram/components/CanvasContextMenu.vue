@@ -43,6 +43,7 @@ import {
   PenLine,
   Plus,
   Redo2,
+  Scaling,
   SendToBack,
   Shapes,
   Spline,
@@ -104,6 +105,8 @@ const {
   lockSelection,
   unlockAll,
   updateNodeData,
+  autoSizeNodes,
+  autoSizeSelection,
   setNodeType,
   setNodeTech,
   updateEdgeData,
@@ -393,6 +396,11 @@ function copySelectionIds() {
 
       <ContextMenuSeparator />
 
+      <ContextMenuItem @select="act(() => autoSizeNodes([node!.id]))">
+        <Scaling />
+        {{ isZone ? 'Fit around contents' : 'Fit to text' }}
+        <ContextMenuShortcut>⇧⌘F</ContextMenuShortcut>
+      </ContextMenuItem>
       <ContextMenuItem @select="act(duplicateSelection)">
         <Copy />
         Duplicate
@@ -665,6 +673,11 @@ function copySelectionIds() {
 
       <ContextMenuSeparator />
 
+      <ContextMenuItem v-if="selectedNodes.length" @select="act(autoSizeSelection)">
+        <Scaling />
+        Fit to content
+        <ContextMenuShortcut>⇧⌘F</ContextMenuShortcut>
+      </ContextMenuItem>
       <ContextMenuItem @select="act(duplicateSelection)">
         <Copy />
         Duplicate
@@ -772,8 +785,13 @@ function copySelectionIds() {
       </ContextMenuItem>
       <ContextMenuItem @select="fitView({ padding: 0.2 })">
         <Maximize />
-        Fit to content
+        Fit view to content
         <ContextMenuShortcut>F</ContextMenuShortcut>
+      </ContextMenuItem>
+      <ContextMenuItem :disabled="!nodes.length" @select="act(autoSizeSelection)">
+        <Scaling />
+        Resize every node to fit
+        <ContextMenuShortcut>⇧⌘F</ContextMenuShortcut>
       </ContextMenuItem>
 
       <ContextMenuSeparator />

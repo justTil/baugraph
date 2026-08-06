@@ -18,6 +18,24 @@ function measureContext(): CanvasRenderingContext2D | null {
   return context
 }
 
+/**
+ * Resolves once the sans stack's own face has loaded.
+ *
+ * Text measured before the webfont arrives is measured in the fallback, and a
+ * node sized from those numbers gets its caption clipped the moment the real
+ * font swaps in — so anything that sizes itself from text waits for this first.
+ */
+export async function fontsReady(): Promise<void> {
+  const fonts = typeof document === 'undefined' ? undefined : document.fonts
+  if (!fonts) return
+  try {
+    await Promise.all([fonts.load('400 13px Sora'), fonts.load('600 13px Sora')])
+    await fonts.ready
+  } catch {
+    // A webfont that never arrives just means the fallback metrics stand.
+  }
+}
+
 export function measureText(text: string, fontSize: number, weight = 400): number {
   const ctx = measureContext()
   if (!ctx) return text.length * fontSize * 0.55

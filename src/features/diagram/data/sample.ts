@@ -1,5 +1,48 @@
-import type { DiagramDocument } from '@/model'
+import type { DiagramDocument, DiagramNode } from '@/model'
 import { FORMAT_VERSION } from '@/model'
+import { ZONE_HEADROOM, ZONE_PADDING, fitNodeSize } from '@/features/diagram/lib/auto-size'
+
+/**
+ * Grows the hand-written sizes below to whatever the browser says the text
+ * actually needs, and grows each zone around what it holds.
+ *
+ * The numbers in the example are the layout — the columns it was drawn on — not
+ * a promise about how wide "Adapter · TIBCO BusinessWorks" renders in a given
+ * font. Measuring beats guessing, so the example is never shipped with its own
+ * captions cut off.
+ */
+function autoSized(nodes: DiagramNode[]): DiagramNode[] {
+  const grown = nodes.map((node) => {
+    if (node.kind === 'zone') return node
+    const fit = fitNodeSize(node)
+    return {
+      ...node,
+      size: {
+        width: Math.max(node.size.width, fit.width),
+        height: Math.max(node.size.height, fit.height),
+      },
+    }
+  })
+
+  return grown.map((node) => {
+    if (node.kind !== 'zone') return node
+    const children = grown.filter((child) => child.parent === node.id)
+    if (!children.length) return node
+    return {
+      ...node,
+      size: {
+        width: Math.max(
+          node.size.width,
+          ...children.map((c) => c.position.x + c.size.width + ZONE_PADDING),
+        ),
+        height: Math.max(
+          node.size.height,
+          ...children.map((c) => c.position.y + c.size.height + ZONE_PADDING - ZONE_HEADROOM),
+        ),
+      },
+    }
+  })
+}
 
 /**
  * The diagram shown on a first visit, so the canvas is never blank.
@@ -14,7 +57,7 @@ export function sampleDocument(): DiagramDocument {
       description: 'Example diagram shipped with Baugraph.',
     },
     canvas: { theme: 'light', grid: true, snap: true, snapSize: 10 },
-    nodes: [
+    nodes: autoSized([
       {
         id: 'order-platform',
         kind: 'zone',
@@ -166,7 +209,7 @@ export function sampleDocument(): DiagramDocument {
         size: { width: 220, height: 62 },
         parent: null,
       },
-    ],
+    ]),
     edges: [
       {
         id: 'customer--api-gateway',

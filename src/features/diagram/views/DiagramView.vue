@@ -10,6 +10,7 @@ import HelpDialog from '@/features/diagram/components/HelpDialog.vue'
 import OpenDialog from '@/features/diagram/components/OpenDialog.vue'
 import { sampleDocument } from '@/features/diagram/data/sample'
 import { exportJson } from '@/features/diagram/lib/export'
+import { fontsReady } from '@/features/diagram/lib/text'
 import { safeParse } from '@/model'
 
 const { nodes, loadDocument, newDocument, toDocument, restorePersisted } = useDiagram()
@@ -19,16 +20,23 @@ const helpOpen = ref(false)
 const openOpen = ref(false)
 const mounted = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
   mounted.value = true
+  window.addEventListener('keydown', onSave)
 
   // A previous session wins over the sample, but a corrupt entry must not
   // leave the user staring at an empty canvas.
   const stored = restorePersisted()
   const parsed = stored ? safeParse(stored) : null
-  loadDocument(parsed?.ok ? parsed.document : sampleDocument())
+  if (parsed?.ok) {
+    loadDocument(parsed.document)
+    return
+  }
 
-  window.addEventListener('keydown', onSave)
+  // The example sizes its nodes from their own text, so it has to be built with
+  // the font it will be drawn in.
+  await fontsReady()
+  loadDocument(sampleDocument())
 })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', onSave))

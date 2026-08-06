@@ -7,6 +7,7 @@ import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { DEFAULT_ZONE_SIZE } from '@/model'
 import { roundedRect } from '@/features/diagram/lib/shapes'
+import { fitZoneMinSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 
@@ -33,15 +34,23 @@ const frame = computed(() => roundedRect(0.75, 0.75, width.value - 1.5, height.v
 
 /** What the zone is — VPC, cluster, namespace — kept on it after a rename. */
 const caption = computed(() => nodeCaption(props.data))
+
+/** A zone is never pulled in over the header it carries. */
+const min = computed(() => fitZoneMinSize(props.data))
 </script>
 
 <template>
   <NodeResizer
     v-if="selected && !data.locked"
-    :min-width="120"
-    :min-height="90"
+    :min-width="min.width"
+    :min-height="min.height"
     :color="theme.selection"
-    :handle-style="{ width: '8px', height: '8px', borderRadius: '2px' }"
+    :handle-style="{
+      width: '11px',
+      height: '11px',
+      borderRadius: '3px',
+      borderWidth: '1.5px',
+    }"
     @resize-start="commit()"
   />
 

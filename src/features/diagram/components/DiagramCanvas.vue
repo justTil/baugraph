@@ -41,6 +41,7 @@ const {
   groupSelection,
   regroup,
   lockSelection,
+  autoSizeSelection,
   updateNodeData,
   updateEdgeData,
   nudgeSelection,
@@ -348,6 +349,13 @@ function onKeyDown(event: KeyboardEvent) {
       commit()
       endCoalesce()
       groupSelection()
+    } else if (key === 'f' && event.shiftKey) {
+      // Sizes the selection to its own text — the whole diagram if nothing is
+      // selected. ⇧ keeps it off ⌘F, which the browser claims for find.
+      event.preventDefault()
+      commit()
+      endCoalesce()
+      autoSizeSelection()
     } else if (key === 'l' && event.shiftKey) {
       // ⇧ keeps this off ⌘L, which the browser claims for the address bar.
       event.preventDefault()
@@ -397,8 +405,24 @@ function onKeyDown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onKeyDown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
-/** Re-fit whenever a document is loaded from disk or storage. */
-watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
+/**
+ * Re-fit whenever a document is loaded from disk or storage — but only once Vue
+ * Flow has measured the nodes it was just handed, because fitting around boxes
+ * of no known size lands on nothing. The timer is the way out for a document
+ * that never reports back: an empty one has no nodes to initialise.
+ */
+const fitPending = ref(false)
+
+function fitLoaded() {
+  if (!fitPending.value) return
+  fitPending.value = false
+  fitView({ padding: 0.2 })
+}
+
+watch(fitRequest, () => {
+  fitPending.value = true
+  setTimeout(fitLoaded, 300)
+})
 </script>
 
 <template>
@@ -459,6 +483,7 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
           @selection-context-menu="onSelectionContextMenu"
           @pane-context-menu="onPaneContextMenu"
           @pane-ready="fitView({ padding: 0.2 })"
+          @nodes-initialized="fitLoaded"
           @dblclick.self="onPaneDoubleClick"
         >
           <Background v-if="canvas.grid" :gap="20" :size="1.4" :pattern-color="theme.grid" />
@@ -547,5 +572,55 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
 .vue-flow__handle {
   min-width: 0;
   min-height: 0;
+}
+
+/*
+ * Resizing is the gesture a diagram gets dragged into shape with, and Vue Flow's
+ * 1px line is a poor target for it. Each side becomes a 12px strip lying just
+ * outside the node, with its hairline border on the node's own edge — so the
+ * line looks exactly as before while a side can be grabbed anywhere along its
+ * length without aiming. The strip sits outside rather than inside because the
+ * node body is painted over it and would swallow anything within the box.
+ *
+ * The extra `.vue-flow__node` wins the specificity fight with the library's own
+ * rules whichever order the stylesheets land in.
+ */
+.vue-flow__node .vue-flow__resize-control.line {
+  border-width: 0;
+}
+
+.vue-flow__node .vue-flow__resize-control.line.left,
+.vue-flow__node .vue-flow__resize-control.line.right {
+  width: 12px;
+  transform: none;
+}
+
+.vue-flow__node .vue-flow__resize-control.line.top,
+.vue-flow__node .vue-flow__resize-control.line.bottom {
+  height: 12px;
+  transform: none;
+}
+
+.vue-flow__node .vue-flow__resize-control.line.left {
+  margin-left: -12px;
+  border-right-width: 1px;
+}
+
+.vue-flow__node .vue-flow__resize-control.line.right {
+  border-left-width: 1px;
+}
+
+.vue-flow__node .vue-flow__resize-control.line.top {
+  margin-top: -12px;
+  border-bottom-width: 1px;
+}
+
+.vue-flow__node .vue-flow__resize-control.line.bottom {
+  border-top-width: 1px;
+}
+
+/* The corner handles read as knobs on the canvas, not dots on the node. */
+.vue-flow__resize-control.handle {
+  border-color: var(--bg-canvas);
 }
 </style>

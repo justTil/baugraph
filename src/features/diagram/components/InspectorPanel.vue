@@ -11,6 +11,7 @@ import {
   AlignVerticalDistributeCenter,
   Lock,
   LockOpen,
+  Scaling,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +33,7 @@ import { SHAPE_KEYS } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
 import { TECH_CATEGORIES, categoryFirst, techTerms } from '@/features/diagram/data/tech'
 import { diagramTheme } from '@/features/diagram/lib/theme'
+import { fitZoneMinSize } from '@/features/diagram/lib/auto-size'
 
 const emit = defineEmits<{
   (e: 'export'): void
@@ -48,6 +50,8 @@ const {
   endCoalesce,
   updateNodeData,
   updateNodeSize,
+  autoSizeNodes,
+  fitSizeOf,
   setNodeType,
   setNodeTech,
   updateEdgeData,
@@ -83,6 +87,12 @@ const title = computed(() => {
 })
 
 const nodeSize = computed(() => (node.value ? sizeOf(node.value) : { width: 0, height: 0 }))
+
+/** Typing a smaller number than this would clip the node's own text. */
+const sizeFloor = computed(() => {
+  if (!node.value) return { width: 40, height: 34 }
+  return node.value.type === 'zone' ? fitZoneMinSize(node.value.data) : fitSizeOf(node.value)
+})
 
 /**
  * A zone can only be a zone kind of thing (VPC, cluster) and a box can only be a
@@ -284,22 +294,67 @@ function withCommit(fn: () => void) {
         </section>
 
         <section class="space-y-3 border-b p-3">
-          <Label class="text-xs">Size</Label>
+          <div class="flex items-center justify-between">
+            <Label class="text-xs">Size</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="text-muted-foreground -my-1 h-6 px-1.5 text-xs"
+              :title="
+                node.type === 'zone'
+                  ? 'Fit the zone around its contents (⇧⌘F)'
+                  : 'Fit the box to its text (⇧⌘F)'
+              "
+              @click="withCommit(() => autoSizeNodes([node!.id]))"
+            >
+              <Scaling />
+              Fit
+            </Button>
+          </div>
+          <!--
+            Width is the dimension a diagram gets tidied with, so both are here
+            as steppers: type a number, or hold the arrow. Neither can be pulled
+            in over the node's own text — the floor is what the content needs.
+          -->
           <div class="flex gap-2">
-            <Input
-              type="number"
-              step="10"
-              class="h-8 text-sm"
-              :model-value="Math.round(nodeSize.width)"
-              @change="setSize(node.id, { width: Math.max(40, Number(($event.target as HTMLInputElement).value)) })"
-            />
-            <Input
-              type="number"
-              step="10"
-              class="h-8 text-sm"
-              :model-value="Math.round(nodeSize.height)"
-              @change="setSize(node.id, { height: Math.max(34, Number(($event.target as HTMLInputElement).value)) })"
-            />
+            <div class="relative flex-1">
+              <span
+                class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[10px] font-semibold"
+              >W</span>
+              <Input
+                type="number"
+                step="10"
+                class="h-8 pl-7 text-sm"
+                :model-value="Math.round(nodeSize.width)"
+                @change="
+                  setSize(node.id, {
+                    width: Math.max(
+                      sizeFloor.width,
+                      Number(($event.target as HTMLInputElement).value),
+                    ),
+                  })
+                "
+              />
+            </div>
+            <div class="relative flex-1">
+              <span
+                class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[10px] font-semibold"
+              >H</span>
+              <Input
+                type="number"
+                step="10"
+                class="h-8 pl-7 text-sm"
+                :model-value="Math.round(nodeSize.height)"
+                @change="
+                  setSize(node.id, {
+                    height: Math.max(
+                      sizeFloor.height,
+                      Number(($event.target as HTMLInputElement).value),
+                    ),
+                  })
+                "
+              />
+            </div>
           </div>
           <div class="flex gap-2">
             <Button
@@ -511,6 +566,15 @@ function withCommit(fn: () => void) {
               Match height
             </Button>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            class="w-full"
+            @click="withCommit(() => autoSizeNodes(selectedNodes.map((n) => n.id)))"
+          >
+            <Scaling />
+            Fit to content (⇧⌘F)
+          </Button>
         </section>
 
         <section v-if="selectedNodes.length" class="space-y-2 border-b p-3">
@@ -602,7 +666,9 @@ function withCommit(fn: () => void) {
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">Space</kbd>-drag</dt>
             <dd>pan canvas</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">F</kbd></dt>
-            <dd>fit to content</dd>
+            <dd>fit view to content</dd>
+            <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⇧⌘F</kbd></dt>
+            <dd>size nodes to their text</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘G</kbd></dt>
             <dd>wrap in zone</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⇧⌘L</kbd></dt>

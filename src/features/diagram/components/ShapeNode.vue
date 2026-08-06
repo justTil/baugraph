@@ -8,6 +8,7 @@ import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { DEFAULT_NODE_SIZE } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { STACKED_SHAPES, contentInset, shapeElements } from '@/features/diagram/lib/shapes'
+import { fitNodeSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
@@ -49,6 +50,18 @@ const textWidth = computed(() => {
   return undefined
 })
 
+/** A resize drag stops here, so a node can never be pulled in over its own text. */
+const fit = computed(() =>
+  fitNodeSize({
+    label: props.data.label,
+    type: props.data.type,
+    tech: props.data.tech,
+    sublabel: props.data.sublabel,
+    shape: props.data.shape,
+    icon: props.data.icon,
+  }),
+)
+
 const HANDLES = [
   { id: 'top', position: Position.Top },
   { id: 'right', position: Position.Right },
@@ -58,12 +71,22 @@ const HANDLES = [
 </script>
 
 <template>
+  <!--
+    Resizing is the most-repeated gesture on a diagram, so the grab zones are
+    generous: fat corner handles, and a whole side that can be dragged anywhere
+    along its length (see `.vue-flow__resize-control` in `DiagramCanvas`).
+  -->
   <NodeResizer
     v-if="selected && !data.locked"
-    :min-width="60"
-    :min-height="34"
+    :min-width="fit.width"
+    :min-height="fit.height"
     :color="theme.selection"
-    :handle-style="{ width: '8px', height: '8px', borderRadius: '2px' }"
+    :handle-style="{
+      width: '11px',
+      height: '11px',
+      borderRadius: '3px',
+      borderWidth: '1.5px',
+    }"
     @resize-start="commit()"
   />
 

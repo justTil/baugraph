@@ -28,6 +28,12 @@ import type { PaletteItem } from '@/features/diagram/data/palette'
 import { paletteItemSize } from '@/features/diagram/data/palette'
 import { nodeType } from '@/features/diagram/data/node-types'
 import { categoryOfTech } from '@/features/diagram/data/tech'
+import {
+  ZONE_HEADROOM,
+  ZONE_PADDING,
+  fitNodeSize,
+  fitZoneHeaderWidth,
+} from '@/features/diagram/lib/auto-size'
 
 /** Payload carried on every Vue Flow node; mirrors the model's presentation fields. */
 export interface NodeData {
@@ -472,8 +478,25 @@ export function regroup(ids: string[]): boolean {
 }
 
 export function addNode(item: PaletteItem, at: { x: number; y: number }): BgNode {
-  const size = paletteItemSize(item)
   const kind = item.kind ?? 'shape'
+  // The type's own size is a floor, not the answer: "Apache Kafka · Message
+  // Broker" needs more room than "Queue", and a cylinder needs more height than
+  // a box, so a new node arrives at whatever its content actually takes.
+  const declared = paletteItemSize(item)
+  const fit =
+    kind === 'zone'
+      ? declared
+      : fitNodeSize({
+          label: item.label,
+          type: item.type,
+          tech: item.tech,
+          shape: item.shape,
+          icon: item.icon,
+        })
+  const size = {
+    width: Math.max(declared.width, fit.width),
+    height: Math.max(declared.height, fit.height),
+  }
   const position = { x: snap(at.x - size.width / 2), y: snap(at.y - size.height / 2) }
   // Dropped inside a zone? Then it joins that zone, and its stored position
   // becomes relative to it — the same grouping a drag-in produces. A zone from
@@ -717,10 +740,17 @@ export function ungroupSelection() {
   }
 }
 
+/** Fields that change how much room a node's content needs. */
+const SIZED_FIELDS: (keyof NodeData)[] = ['label', 'sublabel', 'type', 'tech', 'icon', 'shape']
+
 export function updateNodeData(id: string, patch: Partial<NodeData>) {
   nodes.value = nodes.value.map((n) =>
     n.id === id ? { ...n, data: { ...(n.data as NodeData), ...patch } } : n,
   )
+  // Renaming a node, or giving it a technology, must never push its own text out
+  // of its box — so the box follows the content. It only ever grows: a width the
+  // user set by hand survives, and "Fit" is there to take it back.
+  if (SIZED_FIELDS.some((field) => field in patch)) growToFit(id)
 }
 
 /**
@@ -763,6 +793,110 @@ export function updateNodeSize(id: string, size: { width: number; height: number
       ? { ...n, style: { ...(n.style as object), width: `${size.width}px`, height: `${size.height}px` } }
       : n,
   )
+}
+
+/* ------------------------------------------------------------- auto-sizing */
+
+/**
+ * The smallest box a node can be drawn in without clipping what is on it.
+ *
+ * This is the size a node is created at, the floor a resize drag stops at, and
+ * what "Fit" snaps back to — so the invariant the canvas relies on ("what the
+ * node is, is on the node") cannot be lost to a box that is too small.
+ */
+export function fitSizeOf(node: BgNode): { width: number; height: number } {
+  const data = (node.data ?? {}) as Partial<NodeData>
+  return fitNodeSize({
+    label: data.label,
+    type: data.type,
+    tech: data.tech,
+    sublabel: data.sublabel,
+    shape: data.shape,
+    icon: data.icon,
+  })
+}
+
+/** Grows a node to fit its content, leaving a larger hand-set size alone. */
+function growToFit(id: string) {
+  const node = nodes.value.find((n) => n.id === id)
+  if (!node || node.type === 'zone') return
+  const current = sizeOf(node)
+  const fit = fitSizeOf(node)
+  const width = Math.max(current.width, fit.width)
+  const height = Math.max(current.height, fit.height)
+  if (width === current.width && height === current.height) return
+  updateNodeSize(id, { width, height })
+}
+
+/**
+ * Wraps a zone around what it holds, leaving the contents exactly where they are
+ * on screen — the frame moves, so every child's parent-relative position shifts
+ * by the same amount the other way. An empty zone only has to clear its header.
+ */
+function fitZone(zone: BgNode) {
+  const header = fitZoneHeaderWidth((zone.data ?? {}) as Partial<NodeData>)
+  const children = nodes.value.filter((n) => n.parentNode === zone.id)
+
+  if (!children.length) {
+    const size = sizeOf(zone)
+    updateNodeSize(zone.id, { ...size, width: Math.max(size.width, header) })
+    return
+  }
+
+  const boxes = children.map((child) => ({ at: child.position, size: sizeOf(child) }))
+  const x1 = Math.min(...boxes.map((b) => b.at.x)) - ZONE_PADDING
+  const y1 = Math.min(...boxes.map((b) => b.at.y)) - ZONE_PADDING - ZONE_HEADROOM
+  const x2 = Math.max(...boxes.map((b) => b.at.x + b.size.width)) + ZONE_PADDING
+  const y2 = Math.max(...boxes.map((b) => b.at.y + b.size.height)) + ZONE_PADDING
+
+  const width = Math.max(x2 - x1, header)
+  const height = y2 - y1
+  const childIds = new Set(children.map((child) => child.id))
+
+  nodes.value = nodes.value.map((n) => {
+    if (n.id === zone.id) {
+      return {
+        ...n,
+        position: { x: n.position.x + x1, y: n.position.y + y1 },
+        style: { ...(n.style as object), width: `${width}px`, height: `${height}px` },
+      }
+    }
+    if (!childIds.has(n.id)) return n
+    return { ...n, position: { x: n.position.x - x1, y: n.position.y - y1 } }
+  })
+}
+
+/**
+ * Sizes nodes to exactly what they draw: a box to its text, a zone to its
+ * contents. Unlike the growth that follows an edit, this one also shrinks.
+ */
+export function autoSizeNodes(ids: Iterable<string>) {
+  const byId = new Map(nodes.value.map((n) => [n.id, n]))
+  const targets = [...ids]
+    .map((id) => byId.get(id))
+    // A locked node is out of reach by definition, fitting included.
+    .filter((n): n is BgNode => !!n && !(n.data as NodeData | undefined)?.locked)
+
+  // Boxes first, then zones innermost-first, so every frame is wrapped around
+  // contents that have already settled at their own size.
+  targets.sort((a, b) => {
+    const zoneA = a.type === 'zone'
+    const zoneB = b.type === 'zone'
+    if (zoneA !== zoneB) return zoneA ? 1 : -1
+    if (!zoneA) return 0
+    return depthOf(b, byId) - depthOf(a, byId)
+  })
+
+  for (const node of targets) {
+    if (node.type === 'zone') fitZone(node)
+    else updateNodeSize(node.id, fitSizeOf(node))
+  }
+}
+
+/** "Fit" on whatever is selected; falls back to the whole diagram when nothing is. */
+export function autoSizeSelection() {
+  const targets = selectedNodes.value.length ? selectedNodes.value : nodes.value
+  autoSizeNodes(targets.map((n) => n.id))
 }
 
 export function updateEdgeData(id: string, patch: Partial<EdgeData>) {
@@ -969,6 +1103,9 @@ export function useDiagram() {
     unlockAll,
     updateNodeData,
     updateNodeSize,
+    autoSizeNodes,
+    autoSizeSelection,
+    fitSizeOf,
     setNodeType,
     setNodeTech,
     updateEdgeData,

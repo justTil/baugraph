@@ -7,8 +7,10 @@ import type {
 import { FORMAT_VERSION } from '@/model/types'
 
 /**
- * Default box size for a new node. Wide enough for the type/technology caption
- * — "Database · PostgreSQL" — to sit under the label without being cut off.
+ * Starting box size for a node, and the floor a new one is never smaller than —
+ * wide enough for a type/technology caption like "Database · PostgreSQL", so a
+ * row of nodes carrying short names still lines up. The editor measures the real
+ * text on top of this (see `lib/auto-size.ts`) and takes whichever is larger.
  */
 export const DEFAULT_NODE_SIZE = { width: 190, height: 62 }
 /** Default box size for a new zone. */
