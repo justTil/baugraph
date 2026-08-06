@@ -4,8 +4,14 @@ import { DEFAULT_NODE_SIZE, DEFAULT_ZONE_SIZE } from '@/model'
 /** A draggable entry in the left-hand palette. */
 export interface PaletteItem {
   label: string
-  /** Icon id from the Lucide registry. */
+  /** Icon id from the Lucide registry. Drawn inside the node itself. */
   icon?: string
+  /**
+   * Icon shown next to the palette entry only, for items whose node carries no
+   * icon of its own — a zone has no icon slot, and a note drawing a note icon
+   * inside itself is just noise. Falls back to `icon`.
+   */
+  listIcon?: string
   color: ColorKey
   shape?: ShapeKey
   kind?: 'shape' | 'zone'
@@ -20,6 +26,39 @@ export interface PaletteGroup {
 }
 
 export const PALETTE: PaletteGroup[] = [
+  {
+    id: 'flow',
+    label: 'Flow',
+    items: [
+      { label: 'Start', icon: 'play', color: 'slate', shape: 'pill', width: 120, height: 44 },
+      { label: 'End', icon: 'flag', color: 'slate', shape: 'pill', width: 120, height: 44 },
+      { label: 'Step', listIcon: 'square', color: 'slate', shape: 'rect', width: 150, height: 54 },
+      {
+        label: 'Decision',
+        icon: 'split',
+        color: 'amber',
+        shape: 'diamond',
+        width: 150,
+        height: 100,
+      },
+      {
+        label: 'Note',
+        listIcon: 'sticky-note',
+        color: 'amber',
+        shape: 'note',
+        width: 180,
+        height: 84,
+      },
+      {
+        label: 'Zone',
+        listIcon: 'frame',
+        color: 'slate',
+        kind: 'zone',
+        width: DEFAULT_ZONE_SIZE.width,
+        height: DEFAULT_ZONE_SIZE.height,
+      },
+    ],
+  },
   {
     id: 'compute',
     label: 'Services & compute',
@@ -147,24 +186,6 @@ export const PALETTE: PaletteGroup[] = [
       { label: 'Printer', icon: 'printer', color: 'slate' },
       { label: 'Payment', icon: 'credit-card', color: 'pink' },
       { label: 'Location', icon: 'map-pin', color: 'pink' },
-    ],
-  },
-  {
-    id: 'flow',
-    label: 'Flow',
-    items: [
-      { label: 'Start', color: 'slate', shape: 'pill', width: 120, height: 44 },
-      { label: 'End', color: 'slate', shape: 'pill', width: 120, height: 44 },
-      { label: 'Step', color: 'slate', shape: 'rect', width: 150, height: 54 },
-      { label: 'Decision', color: 'amber', shape: 'diamond', width: 150, height: 100 },
-      { label: 'Note', color: 'amber', shape: 'note', width: 180, height: 84 },
-      {
-        label: 'Zone',
-        color: 'slate',
-        kind: 'zone',
-        width: DEFAULT_ZONE_SIZE.width,
-        height: DEFAULT_ZONE_SIZE.height,
-      },
     ],
   },
 ]

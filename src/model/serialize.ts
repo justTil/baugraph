@@ -56,6 +56,7 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'position',
   'size',
   'parent',
+  'locked',
   'data',
 ]
 

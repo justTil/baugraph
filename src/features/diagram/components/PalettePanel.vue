@@ -74,7 +74,7 @@ function onDragStart(event: DragEvent, item: PaletteItem) {
             @click="place(item)"
           >
             <component
-              :is="iconComponent(item.icon) ?? 'span'"
+              :is="iconComponent(item.icon || item.listIcon) ?? 'span'"
               class="size-4 shrink-0"
               :style="{ color: COLOR_HEX[item.color] }"
             />

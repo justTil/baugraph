@@ -36,7 +36,15 @@ connection in one gesture. Double-click a node to rename it inline; everything e
 
 Select several nodes and press `⌘G` to wrap them in a labelled zone — a VPC, a
 cluster, a bounded context. The nodes become children of the zone, so moving it moves
-them.
+them. Dropping a node onto a zone (from the palette, or by dragging one across the
+canvas) groups it there too, and dragging it clear releases it again; either way the
+grouping is written to the file as `parent`. Zones nest, so a cluster can live inside
+a region.
+
+Lock a node or zone with `⇧⌘L` and it drops out of reach — not selectable, not
+draggable, not connectable — which is what makes rearranging the contents of a zone
+bearable. A locked node carries a small lock badge; clicking it unlocks that node
+again, and the inspector can unlock everything at once.
 
 | Shortcut | |
 | --- | --- |
@@ -45,6 +53,7 @@ them.
 | `F` | fit to content |
 | `Enter` | rename the selected node |
 | `⌘D` / `⌘G` | duplicate / wrap in a zone |
+| `⇧⌘L` | lock the selection |
 | `⌘Z` / `⇧⌘Z` | undo / redo |
 | `⌘S` | download the `.baugraph.json` |
 | `⌫` | delete selection |
@@ -108,7 +117,10 @@ Design decisions, all in service of readable diffs:
   unchanged diagram twice produces byte-identical output.
 - **`position` and `size` stay on one line**, keeping "moved a node" to a one-line diff.
 - **A child's `position` is relative to its `parent` zone**, so moving a zone touches
-  one line instead of every node inside it.
+  one line instead of every node inside it. `parent` *is* the grouping, and it chains:
+  a zone may itself have a parent.
+- **`locked` is an editing aid**, written only when true. It keeps a node out of the
+  way while you work on its neighbours and has no effect on rendering or export.
 - **`data` on any node or edge is yours** — free-form metadata, round-tripped
   untouched. Use it for ticket links, ownership, team conventions.
 

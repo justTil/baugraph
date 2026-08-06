@@ -50,6 +50,7 @@ export const nodeSchema = z.object({
   position: vec2Schema,
   size: sizeSchema,
   parent: idSchema.nullable().default(NODE_DEFAULTS.parent),
+  locked: z.boolean().default(NODE_DEFAULTS.locked),
   data: metadataSchema.optional(),
 })
 
@@ -118,6 +119,26 @@ export const documentSchema = z
           path: ['nodes', i, 'parent'],
           message: 'a node cannot be its own parent',
         })
+      }
+    })
+
+    // Zones may nest, so `parent` is a chain — and a chain can loop back on
+    // itself. Anything walking it (layout, export) would spin forever.
+    const parentOf = new Map(doc.nodes.map((node) => [node.id, node.parent ?? null]))
+    doc.nodes.forEach((node, i) => {
+      const seen = new Set<string>([node.id])
+      let current = parentOf.get(node.id) ?? null
+      while (current && parentOf.has(current)) {
+        if (seen.has(current)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['nodes', i, 'parent'],
+            message: `"${node.id}" is part of a parent cycle`,
+          })
+          break
+        }
+        seen.add(current)
+        current = parentOf.get(current) ?? null
       }
     })
 

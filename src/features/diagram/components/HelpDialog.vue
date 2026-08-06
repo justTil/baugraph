@@ -18,6 +18,7 @@ const SHORTCUTS: [string, string][] = [
   ['Enter', 'rename the selected node'],
   ['⌘D', 'duplicate selection'],
   ['⌘G', 'wrap selection in a zone'],
+  ['⇧⌘L', 'lock selection'],
   ['⌘Z / ⇧⌘Z', 'undo / redo'],
   ['⌘S', 'download the .baugraph.json'],
   ['⌫', 'delete selection'],
@@ -56,12 +57,25 @@ const SHORTCUTS: [string, string][] = [
         </section>
 
         <section class="space-y-2">
-          <h3 class="text-muted-foreground text-xs font-bold tracking-wider uppercase">Zones</h3>
+          <h3 class="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+            Zones &amp; grouping
+          </h3>
           <p>
             Select several nodes and press <kbd class="bg-muted rounded px-1 font-mono">⌘G</kbd> to
             wrap them in a labelled zone — a VPC, a cluster, a bounded context. The nodes become
             children of the zone, so moving it moves them, and their positions are stored relative
-            to it.
+            to it as <code class="bg-muted rounded px-1 font-mono text-xs">parent</code>.
+          </p>
+          <p>
+            Dropping a node onto a zone — from the palette or by dragging one already on the canvas
+            — groups it there; dragging it clear of the zone releases it again. Zones can be
+            grouped into other zones, so a cluster can sit inside a region.
+          </p>
+          <p>
+            Lock a zone (<kbd class="bg-muted rounded px-1 font-mono">⇧⌘L</kbd>) once you are happy
+            with it: it stops answering the pointer, so you can rearrange what is inside without
+            grabbing the frame by mistake. A locked node shows a small lock badge — click it to
+            unlock. Locking is stored per node and changes nothing about how the diagram exports.
           </p>
         </section>
 

@@ -9,6 +9,8 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalDistributeCenter,
+  Lock,
+  LockOpen,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +40,7 @@ const {
   canvas,
   selectedNodes,
   selectedEdges,
+  lockedCount,
   commit,
   endCoalesce,
   updateNodeData,
@@ -49,6 +52,8 @@ const {
   duplicateSelection,
   groupSelection,
   ungroupSelection,
+  lockSelection,
+  unlockAll,
   alignSelection,
   sizeOf,
 } = useDiagram()
@@ -256,14 +261,28 @@ function withCommit(fn: () => void) {
               Delete
             </Button>
           </div>
-          <Button
-            v-if="node.type === 'zone'"
-            variant="outline"
-            size="sm"
-            class="w-full"
-            @click="withCommit(ungroupSelection)"
-          >
-            Release contents
+          <div class="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              @click="withCommit(groupSelection)"
+            >
+              Wrap in zone
+            </Button>
+            <Button
+              v-if="node.type === 'zone'"
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              @click="withCommit(ungroupSelection)"
+            >
+              Release
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" class="w-full" @click="withCommit(lockSelection)">
+            <Lock />
+            Lock {{ node.type === 'zone' ? 'zone' : 'node' }} (⇧⌘L)
           </Button>
         </section>
       </template>
@@ -444,6 +463,10 @@ function withCommit(fn: () => void) {
               Duplicate
             </Button>
           </div>
+          <Button variant="outline" size="sm" class="w-full" @click="withCommit(lockSelection)">
+            <Lock />
+            Lock selection (⇧⌘L)
+          </Button>
           <Button variant="outline" size="sm" class="w-full" @click="withCommit(removeSelection)">
             Delete selection
           </Button>
@@ -456,6 +479,14 @@ function withCommit(fn: () => void) {
           <p class="text-muted-foreground font-mono text-xs">
             {{ stats.nodes }} nodes · {{ stats.zones }} zones · {{ stats.edges }} connections
           </p>
+        </section>
+
+        <section v-if="lockedCount" class="space-y-2 border-b p-3">
+          <Label class="text-xs">Locked</Label>
+          <Button variant="outline" size="sm" class="w-full" @click="withCommit(unlockAll)">
+            <LockOpen />
+            Unlock all ({{ lockedCount }})
+          </Button>
         </section>
 
         <section class="space-y-2 border-b p-3">
@@ -483,6 +514,8 @@ function withCommit(fn: () => void) {
             <dd>fit to content</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘G</kbd></dt>
             <dd>wrap in zone</dd>
+            <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⇧⌘L</kbd></dt>
+            <dd>lock selection</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘D</kbd></dt>
             <dd>duplicate</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘S</kbd></dt>

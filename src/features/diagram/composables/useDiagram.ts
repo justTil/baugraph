@@ -34,6 +34,8 @@ export interface NodeData {
   shape: ShapeKey
   color: ColorKey
   icon: string
+  /** Mirrors `DiagramNode.locked`; the Vue Flow interaction flags follow it. */
+  locked: boolean
   meta?: Metadata
 }
 
@@ -84,29 +86,39 @@ const fitRequest = ref(0)
  * Paint order inside the transform pane: zones, then edges, then nodes.
  * Vue Flow gives edges a z-index of 0 by default, so a zone sharing that level
  * would cover every connection drawn between the nodes it contains.
- * (Children inherit `max(parentZ, ownZ) + 1`, so they always clear their zone.)
+ *
+ * Vue Flow hands every child `max(parentZ, ownZ) + 1`, so a zone nested N deep
+ * lands at N. The bands are spaced far apart to leave room for that: even a
+ * deeply nested zone stays below the edges, and any node inside one still
+ * clears them.
  */
 const ZONE_Z = 0
-const EDGE_Z = 1
-const NODE_Z = 2
+const EDGE_Z = 50
+const NODE_Z = 100
 const zIndexFor = (kind: 'shape' | 'zone') => (kind === 'zone' ? ZONE_Z : NODE_Z)
 
 function toVueFlowNode(node: DiagramNode): BgNode {
+  const locked = node.locked ?? false
   return {
     id: node.id,
     type: node.kind,
     position: { ...node.position },
     style: { width: `${node.size.width}px`, height: `${node.size.height}px` },
     parentNode: node.parent ?? undefined,
-    extent: node.parent ? 'parent' : undefined,
-    expandParent: !!node.parent,
+    // Deliberately no `extent: 'parent'`: dragging a node out of its zone is how
+    // you ungroup it, and dragging one in is how you group it (see `regroup`).
     zIndex: zIndexFor(node.kind),
+    selectable: !locked,
+    draggable: !locked,
+    connectable: !locked,
+    focusable: !locked,
     data: {
       label: node.label,
       sublabel: node.sublabel ?? '',
       shape: node.shape,
       color: node.color,
       icon: node.icon ?? '',
+      locked,
       meta: node.data,
     },
   }
@@ -165,6 +177,7 @@ function toModelNode(node: BgNode): DiagramNode {
     position: { x: node.position.x, y: node.position.y },
     size: sizeOf(node),
     parent: node.parentNode ?? null,
+    locked: node.data?.locked ?? false,
     data: node.data?.meta,
   }
 }
@@ -185,13 +198,31 @@ function toModelEdge(edge: BgEdge): DiagramEdge {
   }
 }
 
+/**
+ * How many zones a node sits inside. Guards against a corrupt parent cycle so a
+ * bad file can never spin the editor.
+ */
+function depthOf(node: BgNode, byId: Map<string, BgNode>): number {
+  let depth = 0
+  let current = node.parentNode ? byId.get(node.parentNode) : undefined
+  const seen = new Set<string>([node.id])
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    depth++
+    current = current.parentNode ? byId.get(current.parentNode) : undefined
+  }
+  return depth
+}
+
 /** Snapshot of the editor as a plain, serialisable document. */
 export function toDocument(): DiagramDocument {
   // Parents must precede their children so Vue Flow can resolve `parentNode`.
+  // Sorting by nesting depth — rather than by kind — keeps that true for zones
+  // that live inside other zones. The sort is stable, so nodes at the same depth
+  // keep their paint order.
+  const byId = new Map(nodes.value.map((n) => [n.id, n]))
   const sorted: BgNode[] = [...nodes.value].sort(
-    (a, b) =>
-      zIndexFor(a.type === 'zone' ? 'zone' : 'shape') -
-      zIndexFor(b.type === 'zone' ? 'zone' : 'shape'),
+    (a, b) => depthOf(a, byId) - depthOf(b, byId),
   )
   return {
     baugraph: FORMAT_VERSION,
@@ -291,6 +322,11 @@ const selectedEdges = computed(
   () => edges.value.filter((e) => (e as Partial<GraphEdge>).selected) as ResolvedEdge[],
 )
 
+/** Drives the inspector's "unlock all" affordance. */
+const lockedCount = computed(
+  () => nodes.value.filter((n) => (n.data as NodeData | undefined)?.locked).length,
+)
+
 /* --------------------------------------------------------------- mutation */
 
 const takenNodeIds = () => new Set(nodes.value.map((n) => n.id))
@@ -302,9 +338,140 @@ export function snap(value: number): number {
   return Math.round(value / canvas.snapSize) * canvas.snapSize
 }
 
+/* ------------------------------------------------------- grouping geometry */
+
+/**
+ * A node's top-left corner in canvas coordinates. `position` is parent-relative
+ * once a node lives in a zone, and zones nest, so the whole chain is walked.
+ */
+export function absolutePosition(node: BgNode): { x: number; y: number } {
+  const byId = new Map(nodes.value.map((n) => [n.id, n]))
+  let x = node.position.x
+  let y = node.position.y
+  const seen = new Set<string>([node.id])
+  let parent = node.parentNode ? byId.get(node.parentNode) : undefined
+  while (parent && !seen.has(parent.id)) {
+    seen.add(parent.id)
+    x += parent.position.x
+    y += parent.position.y
+    parent = parent.parentNode ? byId.get(parent.parentNode) : undefined
+  }
+  return { x, y }
+}
+
+/** The node plus everything nested inside it — never a valid drop target. */
+function withDescendants(ids: Iterable<string>): Set<string> {
+  const out = new Set(ids)
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const node of nodes.value) {
+      if (node.parentNode && out.has(node.parentNode) && !out.has(node.id)) {
+        out.add(node.id)
+        grew = true
+      }
+    }
+  }
+  return out
+}
+
+/** Zone depth, used to pick the innermost zone under a point. */
+function nestingDepth(node: BgNode): number {
+  const byId = new Map(nodes.value.map((n) => [n.id, n]))
+  return depthOf(node, byId)
+}
+
+/**
+ * The innermost zone containing `point`, ignoring `exclude`. Ties between zones
+ * at the same depth go to the one painted last, matching what the user sees.
+ */
+export function zoneAt(
+  point: { x: number; y: number },
+  exclude: Set<string> = new Set(),
+): BgNode | null {
+  let best: BgNode | null = null
+  let bestDepth = -1
+  nodes.value.forEach((node) => {
+    if (node.type !== 'zone' || exclude.has(node.id)) return
+    const origin = absolutePosition(node)
+    const size = sizeOf(node)
+    const inside =
+      point.x >= origin.x &&
+      point.x <= origin.x + size.width &&
+      point.y >= origin.y &&
+      point.y <= origin.y + size.height
+    if (!inside) return
+    const depth = nestingDepth(node)
+    if (depth >= bestDepth) {
+      best = node
+      bestDepth = depth
+    }
+  })
+  return best
+}
+
+/**
+ * Moves nodes into (or out of) a zone while leaving them exactly where they are
+ * on screen — `position` is rewritten into the new parent's coordinate space.
+ */
+function reparent(ids: Set<string>, parentId: string | null): void {
+  if (!ids.size) return
+  const origins = new Map<string, { x: number; y: number }>()
+  nodes.value.forEach((node) => {
+    if (ids.has(node.id)) origins.set(node.id, absolutePosition(node))
+  })
+  const parent = parentId ? nodes.value.find((n) => n.id === parentId) : null
+  const parentOrigin = parent ? absolutePosition(parent) : { x: 0, y: 0 }
+
+  nodes.value = nodes.value.map((node) => {
+    const origin = origins.get(node.id)
+    if (!origin) return node
+    return {
+      ...node,
+      parentNode: parentId ?? undefined,
+      // Clears the clamping an older session may have attached to this node.
+      extent: undefined,
+      expandParent: false,
+      position: { x: origin.x - parentOrigin.x, y: origin.y - parentOrigin.y },
+    }
+  })
+}
+
+/**
+ * Re-evaluates which zone the given nodes belong to, from where they now sit.
+ * Dropping a node onto a zone groups it; dragging it off the zone releases it.
+ */
+export function regroup(ids: string[]): boolean {
+  const dragged = new Set(ids)
+  let changed = false
+  for (const id of ids) {
+    const node = nodes.value.find((n) => n.id === id)
+    if (!node) continue
+    // A node dragged along with its zone keeps whatever parent it had.
+    if (node.parentNode && dragged.has(node.parentNode)) continue
+    const origin = absolutePosition(node)
+    const size = sizeOf(node)
+    const centre = { x: origin.x + size.width / 2, y: origin.y + size.height / 2 }
+    const target = zoneAt(centre, withDescendants([node.id]))
+    const nextParent = target?.id ?? null
+    if ((node.parentNode ?? null) === nextParent) continue
+    reparent(new Set([id]), nextParent)
+    changed = true
+  }
+  return changed
+}
+
 export function addNode(item: PaletteItem, at: { x: number; y: number }): BgNode {
   const size = paletteItemSize(item)
   const kind = item.kind ?? 'shape'
+  const position = { x: snap(at.x - size.width / 2), y: snap(at.y - size.height / 2) }
+  // Dropped inside a zone? Then it joins that zone, and its stored position
+  // becomes relative to it — the same grouping a drag-in produces. A zone from
+  // the palette always lands at the top level; nest it by dragging it in, so
+  // click-to-place can never bury a new container inside an existing one.
+  const host = kind === 'zone' ? null : zoneAt(at)
+  const origin = host ? absolutePosition(host) : { x: 0, y: 0 }
+
   const node = toVueFlowNode({
     id: makeNodeId(item.label, takenNodeIds()),
     kind,
@@ -313,9 +480,9 @@ export function addNode(item: PaletteItem, at: { x: number; y: number }): BgNode
     shape: item.shape ?? 'rect',
     color: item.color,
     icon: item.icon ?? '',
-    position: { x: snap(at.x - size.width / 2), y: snap(at.y - size.height / 2) },
+    position: { x: position.x - origin.x, y: position.y - origin.y },
     size,
-    parent: null,
+    parent: host?.id ?? null,
   })
   nodes.value = [...nodes.value, node]
   return node
@@ -348,26 +515,70 @@ export function removeSelection() {
   const nodeIds = new Set(selectedNodes.value.map((n) => n.id))
   const edgeIds = new Set(selectedEdges.value.map((e) => e.id))
   if (!nodeIds.size && !edgeIds.size) return
-  // Children of a deleted zone are kept; only the frame goes away.
-  nodes.value = nodes.value
-    .filter((n) => !nodeIds.has(n.id))
-    .map((n) => (n.parentNode && nodeIds.has(n.parentNode) ? detach(n) : n))
+
+  // Children of a deleted zone are kept; only the frame goes away. They move up
+  // to the nearest zone that survives, so a nested group stays intact.
+  const byId = new Map(nodes.value.map((n) => [n.id, n]))
+  const survivor = (node: BgNode): string | null => {
+    const seen = new Set<string>([node.id])
+    let parent = node.parentNode ? byId.get(node.parentNode) : undefined
+    while (parent && !seen.has(parent.id)) {
+      if (!nodeIds.has(parent.id)) return parent.id
+      seen.add(parent.id)
+      parent = parent.parentNode ? byId.get(parent.parentNode) : undefined
+    }
+    return null
+  }
+
+  const orphans = new Map<string | null, Set<string>>()
+  nodes.value.forEach((node) => {
+    if (nodeIds.has(node.id)) return
+    if (!node.parentNode || !nodeIds.has(node.parentNode)) return
+    const target = survivor(node)
+    const bucket = orphans.get(target) ?? new Set<string>()
+    bucket.add(node.id)
+    orphans.set(target, bucket)
+  })
+  orphans.forEach((ids, target) => reparent(ids, target))
+
+  nodes.value = nodes.value.filter((n) => !nodeIds.has(n.id))
   edges.value = edges.value.filter(
     (e) => !edgeIds.has(e.id) && !nodeIds.has(e.source) && !nodeIds.has(e.target),
   )
 }
 
-/** Converts a child's parent-relative position back to absolute and unlinks it. */
-function detach(node: BgNode): BgNode {
-  const parent = nodes.value.find((n) => n.id === node.parentNode)
-  const origin = parent ? parent.position : { x: 0, y: 0 }
-  return {
-    ...node,
-    position: { x: node.position.x + origin.x, y: node.position.y + origin.y },
-    parentNode: undefined,
-    extent: undefined,
-    expandParent: false,
-  }
+/** Locks or unlocks nodes by id; locked nodes drop out of the selection. */
+export function setNodesLocked(ids: Iterable<string>, locked: boolean) {
+  const target = new Set(ids)
+  if (!target.size) return
+  nodes.value = nodes.value.map((n) =>
+    target.has(n.id)
+      ? {
+          ...n,
+          selectable: !locked,
+          draggable: !locked,
+          connectable: !locked,
+          focusable: !locked,
+          selected: locked ? false : (n as Partial<GraphNode>).selected,
+          data: { ...(n.data as NodeData), locked },
+        }
+      : n,
+  )
+}
+
+export function lockSelection() {
+  setNodesLocked(
+    selectedNodes.value.map((n) => n.id),
+    true,
+  )
+}
+
+/** Escape hatch for a diagram whose lock icons are hard to hit. */
+export function unlockAll() {
+  setNodesLocked(
+    nodes.value.filter((n) => (n.data as NodeData | undefined)?.locked).map((n) => n.id),
+    false,
+  )
 }
 
 export function duplicateSelection() {
@@ -414,9 +625,30 @@ export function duplicateSelection() {
   edges.value = [...edges.value, ...copiedEdges]
 }
 
-/** Wraps the selected nodes in a new zone that becomes their parent. */
+/**
+ * Wraps the selected nodes in a new zone that becomes their parent.
+ *
+ * Zones may be grouped too, which is what nests one inside another. Members of
+ * an already-selected zone come along with it rather than being re-parented, and
+ * because a node's position is relative to its zone, everything wrapped in one
+ * go has to share the same parent — the first selected node decides which.
+ */
 export function groupSelection() {
-  const targets = selectedNodes.value.filter((n) => n.type !== 'zone' && !n.parentNode)
+  const selectedIds = new Set(selectedNodes.value.map((n) => n.id))
+  const byId = new Map(nodes.value.map((n) => [n.id, n]))
+  const outermost = selectedNodes.value.filter((node) => {
+    const seen = new Set<string>([node.id])
+    let parent = node.parentNode
+    while (parent && !seen.has(parent)) {
+      if (selectedIds.has(parent)) return false
+      seen.add(parent)
+      parent = byId.get(parent)?.parentNode
+    }
+    return true
+  })
+
+  const parentId = outermost[0]?.parentNode ?? null
+  const targets = outermost.filter((n) => (n.parentNode ?? null) === parentId)
   if (!targets.length) return
 
   const pad = 34
@@ -437,10 +669,13 @@ export function groupSelection() {
     icon: '',
     position: { x: x1, y: y1 },
     size: { width: x2 - x1, height: y2 - y1 },
-    parent: null,
+    // The new zone slots in where its members were, which may itself be a zone.
+    parent: parentId,
   })
 
   const childIds = new Set(targets.map((n) => n.id))
+  // The zone leads the array so Vue Flow can resolve `parentNode` on the nodes
+  // that follow it.
   nodes.value = [
     zone,
     ...nodes.value.map((n) =>
@@ -448,8 +683,6 @@ export function groupSelection() {
         ? {
             ...n,
             parentNode: zone.id,
-            extent: 'parent' as const,
-            expandParent: true,
             position: { x: n.position.x - x1, y: n.position.y - y1 },
             selected: false,
           }
@@ -458,10 +691,16 @@ export function groupSelection() {
   ]
 }
 
+/** Releases the selected zones' contents; the frames themselves stay put. */
 export function ungroupSelection() {
-  const zoneIds = new Set(selectedNodes.value.filter((n) => n.type === 'zone').map((n) => n.id))
-  if (!zoneIds.size) return
-  nodes.value = nodes.value.map((n) => (n.parentNode && zoneIds.has(n.parentNode) ? detach(n) : n))
+  const zones = selectedNodes.value.filter((n) => n.type === 'zone')
+  if (!zones.length) return
+  for (const zone of zones) {
+    const children = new Set(
+      nodes.value.filter((n) => n.parentNode === zone.id).map((n) => n.id),
+    )
+    reparent(children, zone.parentNode ?? null)
+  }
 }
 
 export function updateNodeData(id: string, patch: Partial<NodeData>) {
@@ -662,6 +901,7 @@ export function useDiagram() {
     selectedEdges,
     canUndo: computed(() => past.value.length > 0),
     canRedo: computed(() => future.value.length > 0),
+    lockedCount,
     fitRequest,
     // actions
     commit,
@@ -675,6 +915,10 @@ export function useDiagram() {
     duplicateSelection,
     groupSelection,
     ungroupSelection,
+    regroup,
+    setNodesLocked,
+    lockSelection,
+    unlockAll,
     updateNodeData,
     updateNodeSize,
     updateEdgeData,

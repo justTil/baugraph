@@ -4,7 +4,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { Connection, NodeMouseEvent } from '@vue-flow/core'
+import type { Connection, NodeDragEvent, NodeMouseEvent } from '@vue-flow/core'
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
@@ -32,6 +32,8 @@ const {
   removeSelection,
   duplicateSelection,
   groupSelection,
+  regroup,
+  lockSelection,
   updateNodeData,
   nudgeSelection,
   fitRequest,
@@ -175,6 +177,16 @@ function onNodeDragStart() {
   endCoalesce()
 }
 
+/**
+ * Dropping a node onto a zone puts it in that zone; dragging it clear of one
+ * takes it out again. Both are decided by where the node's centre landed, and
+ * both are written straight into the document as `parent`.
+ */
+function onNodeDragStop({ node, nodes: dragged }: NodeDragEvent) {
+  const ids = (dragged?.length ? dragged : [node]).map((n) => n.id)
+  regroup(ids)
+}
+
 /* ---------------------------------------------------------------- keyboard */
 
 function isTyping(target: EventTarget | null): boolean {
@@ -208,6 +220,12 @@ function onKeyDown(event: KeyboardEvent) {
       commit()
       endCoalesce()
       groupSelection()
+    } else if (key === 'l' && event.shiftKey) {
+      // ⇧ keeps this off ⌘L, which the browser claims for the address bar.
+      event.preventDefault()
+      commit()
+      endCoalesce()
+      lockSelection()
     }
     return
   }
@@ -266,6 +284,12 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
     @dragover="onDragOver"
     @drop="onDrop"
   >
+    <!--
+      `elevate-nodes-on-select` is off on purpose: Vue Flow would otherwise lift
+      a selected node 1000 layers up, so selecting a zone made it jump in front
+      of its own contents and drop back again on deselect. Layering is fixed by
+      the z bands in `useDiagram`.
+    -->
     <VueFlow
       :id="CANVAS_ID"
       v-model:nodes="nodes"
@@ -284,12 +308,14 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
       :zoom-on-pinch="true"
       :selection-key-code="'Shift'"
       :elevate-edges-on-select="true"
+      :elevate-nodes-on-select="false"
       :connection-line-style="{ stroke: theme.selection, strokeWidth: 1.8, strokeDasharray: '5 4' }"
       :default-edge-options="{ type: 'diagram' }"
       @connect-start="onConnectStart"
       @connect="onConnect"
       @connect-end="onConnectEnd"
       @node-drag-start="onNodeDragStart"
+      @node-drag-stop="onNodeDragStop"
       @node-double-click="onNodeDoubleClick"
       @pane-ready="fitView({ padding: 0.2 })"
       @dblclick.self="onPaneDoubleClick"

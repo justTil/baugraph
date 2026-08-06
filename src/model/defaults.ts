@@ -29,6 +29,7 @@ export const NODE_DEFAULTS = {
   sublabel: '',
   icon: '',
   parent: null,
+  locked: false,
 } as const satisfies Partial<DiagramNode>
 
 export const EDGE_DEFAULTS = {

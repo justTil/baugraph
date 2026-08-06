@@ -86,8 +86,17 @@ export interface DiagramNode {
    */
   position: Vec2
   size: Size
-  /** Id of the enclosing `zone` node, if any. */
+  /**
+   * Id of the enclosing `zone` node, if any — this is what "grouped" means in
+   * the format. A zone may itself sit inside another zone, so `parent` chains.
+   */
   parent?: string | null
+  /**
+   * Locked nodes cannot be selected, moved, resized or connected in the editor
+   * until they are unlocked again. Purely an editing aid — it changes nothing
+   * about how the node renders or exports.
+   */
+  locked?: boolean
   /** User metadata; never interpreted by the editor. */
   data?: Metadata
 }

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { NodeProps } from '@vue-flow/core'
 import { Handle, Position } from '@vue-flow/core'
 import { NodeResizer } from '@vue-flow/node-resizer'
+import { Lock } from '@lucide/vue'
 import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { DEFAULT_NODE_SIZE } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
@@ -12,7 +13,14 @@ import { useDiagram } from '@/features/diagram/composables/useDiagram'
 
 const props = defineProps<NodeProps<NodeData>>()
 
-const { canvas, commit } = useDiagram()
+const { canvas, commit, endCoalesce, setNodesLocked } = useDiagram()
+
+/** The badge is the only way back: a locked node cannot be selected. */
+function unlock() {
+  commit()
+  endCoalesce()
+  setNodesLocked([props.id], false)
+}
 
 const width = computed(() => props.dimensions.width || DEFAULT_NODE_SIZE.width)
 const height = computed(() => props.dimensions.height || DEFAULT_NODE_SIZE.height)
@@ -47,7 +55,7 @@ const HANDLES = [
 
 <template>
   <NodeResizer
-    v-if="selected"
+    v-if="selected && !data.locked"
     :min-width="60"
     :min-height="34"
     :color="theme.selection"
@@ -55,7 +63,10 @@ const HANDLES = [
     @resize-start="commit()"
   />
 
-  <div class="bg-node group" :class="{ 'bg-node--selected': selected }">
+  <div
+    class="bg-node group"
+    :class="{ 'bg-node--selected': selected, 'bg-node--locked': data.locked }"
+  >
     <svg
       class="pointer-events-none absolute inset-0"
       :width="width"
@@ -106,6 +117,18 @@ const HANDLES = [
       </div>
     </div>
 
+    <button
+      v-if="data.locked"
+      type="button"
+      class="bg-node__lock"
+      title="Unlock (click to edit again)"
+      :style="{ color: paint.muted, background: theme.bg, borderColor: paint.stroke }"
+      @pointerdown.stop
+      @click.stop="unlock()"
+    >
+      <Lock :size="11" :stroke-width="2" />
+    </button>
+
     <!--
       Each side carries a target handle beneath a source handle so a connection
       can be started from, or dropped onto, any of the four sides.
@@ -134,6 +157,34 @@ const HANDLES = [
   height: 100%;
 }
 
+/*
+  A locked node is click-through, so a rubber-band selection or a node sitting
+  underneath it stays reachable. Only its lock badge answers the pointer.
+*/
+.bg-node--locked {
+  pointer-events: none;
+}
+
+.bg-node__lock {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  border: 1px solid;
+  pointer-events: all;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 120ms ease;
+}
+
+.bg-node__lock:hover {
+  opacity: 1;
+}
+
 /* Handles stay out of the way until the node is hovered or selected. */
 .bg-node :deep(.bg-node__handle) {
   width: 10px;
@@ -148,6 +199,11 @@ const HANDLES = [
 .bg-node:hover :deep(.bg-node__handle),
 .bg-node--selected :deep(.bg-node__handle) {
   opacity: 1;
+}
+
+/* Nothing can be connected to a locked node, so its dots stay away. */
+.bg-node--locked :deep(.bg-node__handle) {
+  display: none;
 }
 
 /* The target handle is a larger invisible drop zone behind the visible dot. */
