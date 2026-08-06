@@ -4,20 +4,27 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { Connection, NodeDragEvent, NodeMouseEvent } from '@vue-flow/core'
+import type { Connection, EdgeMouseEvent, NodeDragEvent, NodeMouseEvent } from '@vue-flow/core'
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import type { ColorKey, Side } from '@/model'
+import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useCanvas, CANVAS_ID } from '@/features/diagram/composables/useCanvas'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
 import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
 import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
+import type { MenuTarget } from '@/features/diagram/components/CanvasContextMenu.vue'
+import CanvasContextMenu from '@/features/diagram/components/CanvasContextMenu.vue'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
 import { DEFAULT_PALETTE_ITEM, type PaletteItem } from '@/features/diagram/data/palette'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
+
+const emit = defineEmits<{
+  (e: 'export'): void
+}>()
 
 const {
   nodes,
@@ -35,11 +42,22 @@ const {
   regroup,
   lockSelection,
   updateNodeData,
+  updateEdgeData,
   nudgeSelection,
   fitRequest,
 } = useDiagram()
 
-const { fitView, screenToFlowCoordinate, findNode } = useCanvas()
+const {
+  fitView,
+  screenToFlowCoordinate,
+  findNode,
+  vueFlowRef,
+  addSelectedNodes,
+  addSelectedEdges,
+  removeSelectedElements,
+  getNodes,
+  getEdges,
+} = useCanvas()
 const { place, placeAtScreen } = usePlacement()
 
 const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
@@ -122,12 +140,83 @@ function onDrop(event: DragEvent) {
   placeAtScreen(item, { x: event.clientX, y: event.clientY })
 }
 
+/* ------------------------------------------------------------ context menu */
+
+/**
+ * What the pointer was over when the menu was opened. Vue Flow's own
+ * `*-context-menu` events fire while the native event bubbles up to the menu
+ * trigger, so the target is always known by the time the menu renders — the
+ * capture-phase reset below makes sure a click on chrome that Vue Flow does not
+ * report (the minimap, say) falls back to the canvas menu rather than reusing
+ * the previous target.
+ */
+const menuTarget = ref<MenuTarget | null>(null)
+const menuOpen = ref(false)
+/** Screen point of the last right-click; anchors the edge label editor. */
+const menuPoint = ref({ x: 0, y: 0 })
+
+function onContextMenuCapture(event: MouseEvent) {
+  menuTarget.value = null
+  menuPoint.value = { x: event.clientX, y: event.clientY }
+}
+
+function onNodeContextMenu({ node }: NodeMouseEvent) {
+  menuTarget.value = { kind: 'node', id: node.id }
+  // Right-clicking outside the current selection moves the selection there, so
+  // the menu always acts on what the user is pointing at.
+  if (!node.selected) {
+    removeSelectedElements()
+    addSelectedNodes([node])
+  }
+}
+
+function onEdgeContextMenu({ edge }: EdgeMouseEvent) {
+  menuTarget.value = { kind: 'edge', id: edge.id }
+  if (!edge.selected) {
+    removeSelectedElements()
+    addSelectedEdges([edge])
+  }
+}
+
+function onSelectionContextMenu() {
+  menuTarget.value = { kind: 'selection' }
+}
+
+function onPaneContextMenu(event: MouseEvent) {
+  menuTarget.value = {
+    kind: 'pane',
+    at: screenToFlowCoordinate({ x: event.clientX, y: event.clientY }),
+  }
+}
+
+function onMenuAdd({ item, at }: { item: PaletteItem; at: { x: number; y: number } }) {
+  lastItem.value = item
+  place(item, at)
+}
+
+function selectAll() {
+  addSelectedNodes(getNodes.value.filter((n) => n.selectable !== false))
+  addSelectedEdges(getEdges.value)
+}
+
 /* --------------------------------------------------------- inline renaming */
 
-const editing = ref<{ id: string; value: string; left: number; top: number; width: number } | null>(
-  null,
-)
+const editing = ref<{
+  kind: 'node' | 'edge'
+  id: string
+  value: string
+  left: number
+  top: number
+  width: number
+} | null>(null)
 const editorInput = ref<HTMLInputElement | null>(null)
+
+function focusEditor() {
+  nextTick(() => {
+    editorInput.value?.focus()
+    editorInput.value?.select()
+  })
+}
 
 function openEditor(id: string) {
   const node = findNode(id)
@@ -139,22 +228,56 @@ function openEditor(id: string) {
   if (!host) return
 
   editing.value = {
+    kind: 'node',
     id,
     value: node.data.label ?? '',
     left: box.left - host.left,
     top: box.top - host.top + (node.type === 'zone' ? 4 : box.height / 2 - 14),
     width: box.width,
   }
-  nextTick(() => {
-    editorInput.value?.focus()
-    editorInput.value?.select()
-  })
+  focusEditor()
+}
+
+/**
+ * An edge label has no box of its own to sit in, so the editor opens where the
+ * user right-clicked — which is on the connection itself.
+ */
+function openEdgeEditor(id: string) {
+  const edge = edges.value.find((e) => e.id === id)
+  const host = vueFlowRef.value?.getBoundingClientRect()
+  if (!edge || !host) return
+
+  const width = 180
+  editing.value = {
+    kind: 'edge',
+    id,
+    value: edge.data?.label ?? '',
+    left: menuPoint.value.x - host.left - width / 2,
+    top: menuPoint.value.y - host.top - 14,
+    width,
+  }
+  focusEditor()
+}
+
+function openEditorFor(target: { kind: 'node' | 'edge'; id: string }) {
+  if (target.kind === 'node') openEditor(target.id)
+  else openEdgeEditor(target.id)
 }
 
 function commitEditor(save: boolean) {
   const current = editing.value
   editing.value = null
   if (!current || !save) return
+
+  if (current.kind === 'edge') {
+    const edge = edges.value.find((e) => e.id === current.id)
+    if (!edge || edge.data?.label === current.value) return
+    commit()
+    endCoalesce()
+    updateEdgeData(current.id, { label: current.value })
+    return
+  }
+
   const node = findNode(current.id)
   if (!node || node.data.label === current.value) return
   commit()
@@ -200,12 +323,16 @@ function isTyping(target: EventTarget | null): boolean {
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  if (isTyping(event.target)) return
+  // The context menu handles its own keys; ⌫ while it is open must not delete.
+  if (menuOpen.value || isTyping(event.target)) return
   const meta = event.metaKey || event.ctrlKey
 
   if (meta) {
     const key = event.key.toLowerCase()
-    if (key === 'z') {
+    if (key === 'a') {
+      event.preventDefault()
+      selectAll()
+    } else if (key === 'z') {
       event.preventDefault()
       event.shiftKey ? redo() : undo()
     } else if (key === 'y') {
@@ -275,94 +402,114 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
 </script>
 
 <template>
-  <div
-    class="relative min-h-0 flex-1"
-    :style="{
-      '--bg-canvas': theme.bg,
-      '--bg-selection': theme.selection,
-      background: theme.bg,
-    }"
-    @dragover="onDragOver"
-    @drop="onDrop"
-  >
-    <!--
-      `elevate-nodes-on-select` is off on purpose: Vue Flow would otherwise lift
-      a selected node 1000 layers up, so selecting a zone made it jump in front
-      of its own contents and drop back again on deselect. Layering is fixed by
-      the z bands in `useDiagram`.
-    -->
-    <VueFlow
-      :id="CANVAS_ID"
-      v-model:nodes="nodes"
-      v-model:edges="edges"
-      :node-types="nodeTypes"
-      :edge-types="edgeTypes"
-      :connection-mode="ConnectionMode.Loose"
-      :snap-to-grid="canvas.snap"
-      :snap-grid="[canvas.snapSize, canvas.snapSize]"
-      :min-zoom="0.15"
-      :max-zoom="4"
-      :delete-key-code="null"
-      :zoom-on-scroll="false"
-      :pan-on-scroll="true"
-      :pan-on-scroll-mode="PanOnScrollMode.Free"
-      :zoom-on-pinch="true"
-      :selection-key-code="'Shift'"
-      :elevate-edges-on-select="true"
-      :elevate-nodes-on-select="false"
-      :connection-line-style="{ stroke: theme.selection, strokeWidth: 1.8, strokeDasharray: '5 4' }"
-      :default-edge-options="{ type: 'diagram' }"
-      @connect-start="onConnectStart"
-      @connect="onConnect"
-      @connect-end="onConnectEnd"
-      @node-drag-start="onNodeDragStart"
-      @node-drag-stop="onNodeDragStop"
-      @selection-drag-start="onNodeDragStart"
-      @selection-drag-stop="onNodeDragStop"
-      @node-double-click="onNodeDoubleClick"
-      @pane-ready="fitView({ padding: 0.2 })"
-      @dblclick.self="onPaneDoubleClick"
-    >
-      <Background v-if="canvas.grid" :gap="20" :size="1.4" :pattern-color="theme.grid" />
-      <MiniMap
-        pannable
-        zoomable
-        :node-color="minimapNodeColor"
-        :node-stroke-color="minimapNodeColor"
-        :mask-color="theme.dark ? 'rgba(0,0,0,.55)' : 'rgba(255,255,255,.6)'"
-        :style="{ backgroundColor: theme.surface, borderColor: theme.line }"
-        class="!right-3 !bottom-3 !rounded-md !border"
-      />
-    </VueFlow>
+  <ContextMenu @update:open="menuOpen = $event">
+    <ContextMenuTrigger as-child>
+      <div
+        class="relative min-h-0 flex-1"
+        :style="{
+          '--bg-canvas': theme.bg,
+          '--bg-selection': theme.selection,
+          background: theme.bg,
+        }"
+        @dragover="onDragOver"
+        @drop="onDrop"
+        @contextmenu.capture="onContextMenuCapture"
+      >
+        <!--
+          `elevate-nodes-on-select` is off on purpose: Vue Flow would otherwise lift
+          a selected node 1000 layers up, so selecting a zone made it jump in front
+          of its own contents and drop back again on deselect. Layering is fixed by
+          the z bands in `useDiagram`.
+        -->
+        <VueFlow
+          :id="CANVAS_ID"
+          v-model:nodes="nodes"
+          v-model:edges="edges"
+          :node-types="nodeTypes"
+          :edge-types="edgeTypes"
+          :connection-mode="ConnectionMode.Loose"
+          :snap-to-grid="canvas.snap"
+          :snap-grid="[canvas.snapSize, canvas.snapSize]"
+          :min-zoom="0.15"
+          :max-zoom="4"
+          :delete-key-code="null"
+          :zoom-on-scroll="false"
+          :pan-on-scroll="true"
+          :pan-on-scroll-mode="PanOnScrollMode.Free"
+          :zoom-on-pinch="true"
+          :selection-key-code="'Shift'"
+          :elevate-edges-on-select="true"
+          :elevate-nodes-on-select="false"
+          :connection-line-style="{
+            stroke: theme.selection,
+            strokeWidth: 1.8,
+            strokeDasharray: '5 4',
+          }"
+          :default-edge-options="{ type: 'diagram' }"
+          @connect-start="onConnectStart"
+          @connect="onConnect"
+          @connect-end="onConnectEnd"
+          @node-drag-start="onNodeDragStart"
+          @node-drag-stop="onNodeDragStop"
+          @selection-drag-start="onNodeDragStart"
+          @selection-drag-stop="onNodeDragStop"
+          @node-double-click="onNodeDoubleClick"
+          @node-context-menu="onNodeContextMenu"
+          @edge-context-menu="onEdgeContextMenu"
+          @selection-context-menu="onSelectionContextMenu"
+          @pane-context-menu="onPaneContextMenu"
+          @pane-ready="fitView({ padding: 0.2 })"
+          @dblclick.self="onPaneDoubleClick"
+        >
+          <Background v-if="canvas.grid" :gap="20" :size="1.4" :pattern-color="theme.grid" />
+          <MiniMap
+            pannable
+            zoomable
+            :node-color="minimapNodeColor"
+            :node-stroke-color="minimapNodeColor"
+            :mask-color="theme.dark ? 'rgba(0,0,0,.55)' : 'rgba(255,255,255,.6)'"
+            :style="{ backgroundColor: theme.surface, borderColor: theme.line }"
+            class="!right-3 !bottom-3 !rounded-md !border"
+          />
+        </VueFlow>
 
-    <!-- Inline label editor, positioned over the node being renamed. -->
-    <input
-      v-if="editing"
-      ref="editorInput"
-      v-model="editing.value"
-      class="absolute z-30 rounded border px-1.5 py-0.5 text-center text-[13px] font-semibold outline-none"
-      :style="{
-        left: `${editing.left}px`,
-        top: `${editing.top}px`,
-        width: `${editing.width}px`,
-        borderColor: theme.selection,
-        background: theme.bg,
-        color: theme.ink,
-      }"
-      spellcheck="false"
-      @keydown.enter.prevent="commitEditor(true)"
-      @keydown.esc.prevent="commitEditor(false)"
-      @keydown.stop
-      @blur="commitEditor(true)"
+        <!-- Inline label editor, positioned over the node or connection being renamed. -->
+        <input
+          v-if="editing"
+          ref="editorInput"
+          v-model="editing.value"
+          class="absolute z-30 rounded border px-1.5 py-0.5 text-center text-[13px] font-semibold outline-none"
+          :style="{
+            left: `${editing.left}px`,
+            top: `${editing.top}px`,
+            width: `${editing.width}px`,
+            borderColor: theme.selection,
+            background: theme.bg,
+            color: theme.ink,
+          }"
+          spellcheck="false"
+          @keydown.enter.prevent="commitEditor(true)"
+          @keydown.esc.prevent="commitEditor(false)"
+          @keydown.stop
+          @blur="commitEditor(true)"
+        />
+
+        <p
+          v-if="!nodes.length"
+          class="text-muted-foreground pointer-events-none absolute bottom-4 left-4 font-mono text-xs"
+        >
+          drag a node from the palette · drag a node's dot to connect · right-click for actions
+        </p>
+      </div>
+    </ContextMenuTrigger>
+
+    <CanvasContextMenu
+      :target="menuTarget"
+      @rename="openEditorFor"
+      @add="onMenuAdd"
+      @export="emit('export')"
     />
-
-    <p
-      v-if="!nodes.length"
-      class="text-muted-foreground pointer-events-none absolute bottom-4 left-4 font-mono text-xs"
-    >
-      drag a node from the palette · drag a node's dot to connect
-    </p>
-  </div>
+  </ContextMenu>
 </template>
 
 <style>

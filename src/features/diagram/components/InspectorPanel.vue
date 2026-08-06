@@ -503,6 +503,7 @@ function withCommit(fn: () => void) {
             Hover a node and drag one of its dots onto another node to connect them.
           </p>
           <p>Double-click a node to rename it inline.</p>
+          <p>Right-click a node, connection or the canvas for the actions that apply to it.</p>
         </section>
 
         <section class="space-y-2 p-3">

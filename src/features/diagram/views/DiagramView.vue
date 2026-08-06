@@ -57,7 +57,7 @@ function onNew() {
   </Teleport>
 
   <div class="flex min-h-0 flex-1">
-    <DiagramCanvas />
+    <DiagramCanvas @export="exportOpen = true" />
     <InspectorPanel @export="exportOpen = true" />
   </div>
 

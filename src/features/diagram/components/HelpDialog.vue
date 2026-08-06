@@ -16,6 +16,8 @@ const SHORTCUTS: [string, string][] = [
   ['⌘ + scroll, pinch', 'zoom (plain scroll pans)'],
   ['F', 'fit diagram to window'],
   ['Enter', 'rename the selected node'],
+  ['right-click', 'context menu for what is under the pointer'],
+  ['⌘A', 'select everything'],
   ['⌘D', 'duplicate selection'],
   ['⌘G', 'wrap selection in a zone'],
   ['⇧⌘L', 'lock selection'],
@@ -53,6 +55,12 @@ const SHORTCUTS: [string, string][] = [
           <p>
             Double-click a node to rename it inline. Icon, colour, shape, routing, arrowheads and
             line style live in the inspector on the right.
+          </p>
+          <p>
+            Right-click anything for a menu of what applies to it: rename, colour, shape, align,
+            lock, delete on a node or selection; route, line, arrows and direction on a connection;
+            add a node, select all, undo, grid and export on empty canvas. Each menu also has a
+            <em>Developer</em> submenu that copies the id or the JSON of what you clicked.
           </p>
         </section>
 
