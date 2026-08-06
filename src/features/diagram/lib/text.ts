@@ -7,7 +7,7 @@
  */
 
 export const SANS =
-  "-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif"
+  "Sora,-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif"
 
 let context: CanvasRenderingContext2D | null | undefined
 
