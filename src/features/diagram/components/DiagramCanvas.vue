@@ -183,8 +183,9 @@ function onNodeDragStart() {
  * both are written straight into the document as `parent`.
  */
 function onNodeDragStop({ node, nodes: dragged }: NodeDragEvent) {
-  const ids = (dragged?.length ? dragged : [node]).map((n) => n.id)
-  regroup(ids)
+  // A selection drag reports its members in `nodes`; a single drag in `node`.
+  const moved = dragged?.length ? dragged : node ? [node] : []
+  if (moved.length) regroup(moved.map((n) => n.id))
 }
 
 /* ---------------------------------------------------------------- keyboard */
@@ -316,6 +317,8 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
       @connect-end="onConnectEnd"
       @node-drag-start="onNodeDragStart"
       @node-drag-stop="onNodeDragStop"
+      @selection-drag-start="onNodeDragStart"
+      @selection-drag-stop="onNodeDragStop"
       @node-double-click="onNodeDoubleClick"
       @pane-ready="fitView({ padding: 0.2 })"
       @dblclick.self="onPaneDoubleClick"
@@ -376,8 +379,28 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
   width: auto;
 }
 
+/*
+ * The wrapper Vue Flow puts around a node is a full-size hit target, so an empty
+ * spot inside a zone would select and drag the zone rather than reach the canvas
+ * or whatever sits underneath. Only the header (and the resize handles, once the
+ * zone is selected) answer the pointer.
+ *
+ * `!important` is unavoidable: Vue Flow writes `pointer-events: all` as an inline
+ * style on that wrapper for as long as any node listener is registered, and this
+ * is the one place it has to be overruled.
+ */
 .vue-flow__node-zone {
   cursor: default;
+  pointer-events: none !important;
+}
+
+.vue-flow__node-zone .vue-flow__resize-control {
+  pointer-events: all;
+}
+
+/* Same story for a locked node — see the lock badge, which opts back in. */
+.vue-flow__node-shape:not(.selectable) {
+  pointer-events: none !important;
 }
 
 .vue-flow__handle {
