@@ -6,8 +6,11 @@ import type {
 } from '@/model/types'
 import { FORMAT_VERSION } from '@/model/types'
 
-/** Default box size for a new node. */
-export const DEFAULT_NODE_SIZE = { width: 168, height: 62 }
+/**
+ * Default box size for a new node. Wide enough for the type/technology caption
+ * — "Database · PostgreSQL" — to sit under the label without being cut off.
+ */
+export const DEFAULT_NODE_SIZE = { width: 190, height: 62 }
 /** Default box size for a new zone. */
 export const DEFAULT_ZONE_SIZE = { width: 340, height: 220 }
 
@@ -24,6 +27,8 @@ export const DEFAULT_CANVAS: CanvasSettings = {
  */
 export const NODE_DEFAULTS = {
   kind: 'shape',
+  type: '',
+  tech: '',
   shape: 'rect',
   color: 'slate',
   sublabel: '',

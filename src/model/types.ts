@@ -72,8 +72,22 @@ export interface DiagramNode {
   id: string
   /** `shape` = a regular box, `zone` = a labelled container others can sit in. */
   kind: 'shape' | 'zone'
+  /**
+   * What this node *is*, as opposed to how it is drawn (`kind`) or what it is
+   * called (`label`): `database`, `api_gateway`, `message_broker`… Ids come from
+   * the node-type catalogue (`features/diagram/data/node-types.ts`) and are
+   * rendered as a fixed caption on the node, so renaming a database to "Orders"
+   * never costs the reader the meaning of its icon. Empty = an untyped box.
+   */
+  type?: string
+  /**
+   * The concrete technology behind the node — `postgresql`, `ibm_db2`,
+   * `apache_kafka` — from `features/diagram/data/tech.ts`. Drawn next to the
+   * type, so a screenshot always states which product is meant.
+   */
+  tech?: string
   label: string
-  /** Secondary line under the label — tech, protocol, SLA… */
+  /** Secondary line under the label — protocol, SLA, cardinality… */
   sublabel?: string
   shape: ShapeKey
   color: ColorKey

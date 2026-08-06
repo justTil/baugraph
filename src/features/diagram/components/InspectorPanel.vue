@@ -26,8 +26,11 @@ import type { AlignAction } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import ColorSwatches from '@/features/diagram/components/ColorSwatches.vue'
 import IconPicker from '@/features/diagram/components/IconPicker.vue'
+import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 import { SHAPE_KEYS } from '@/model'
+import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
+import { TECH_CATEGORIES, categoryFirst, techTerms } from '@/features/diagram/data/tech'
 import { diagramTheme } from '@/features/diagram/lib/theme'
 
 const emit = defineEmits<{
@@ -45,6 +48,8 @@ const {
   endCoalesce,
   updateNodeData,
   updateNodeSize,
+  setNodeType,
+  setNodeTech,
   updateEdgeData,
   reverseEdge,
   reorderNode,
@@ -78,6 +83,48 @@ const title = computed(() => {
 })
 
 const nodeSize = computed(() => (node.value ? sizeOf(node.value) : { width: 0, height: 0 }))
+
+/**
+ * A zone can only be a zone kind of thing (VPC, cluster) and a box can only be a
+ * box kind of thing, so each is offered its own half of the catalogue.
+ */
+const typeGroups = computed(() => {
+  const zone = node.value?.type === 'zone'
+  return NODE_TYPE_GROUPS.map((group) => ({
+    id: group.id,
+    label: group.label,
+    items: group.types
+      .filter((type) => (type.kind === 'zone') === zone)
+      .map((type) => ({
+        id: type.id,
+        label: type.label,
+        icon: type.icon ?? type.listIcon,
+        terms: type.aliases,
+      })),
+  })).filter((group) => group.items.length > 0)
+})
+
+/** The technology a whole selection shares; `null` when they disagree. */
+const sharedTech = computed(() => {
+  const values = new Set(selectedNodes.value.map((n) => n.data.tech))
+  return values.size === 1 ? [...values][0] : null
+})
+
+/** The technology catalogue, with the category this node's type suggests first. */
+const techGroups = computed(() =>
+  categoryFirst(
+    TECH_CATEGORIES.map((category) => ({
+      id: category.id,
+      label: category.label,
+      items: category.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        terms: techTerms(item),
+      })),
+    })),
+    nodeType(node.value?.data.type)?.tech,
+  ),
+)
 
 const SHAPE_LABELS: Record<string, string> = {
   rect: 'Rectangle',
@@ -167,9 +214,38 @@ function withCommit(fn: () => void) {
             <Input
               :model-value="node.data.sublabel"
               class="h-8 text-sm"
-              placeholder="tech, protocol, note…"
+              placeholder="protocol, SLA, note…"
               @update:model-value="editText(node.id, 'sublabel', String($event))"
               @blur="endCoalesce()"
+            />
+          </div>
+        </section>
+
+        <!--
+          Type and technology are drawn on the node itself and stay there through
+          a rename, which is what keeps an icon from having to be remembered.
+        -->
+        <section class="space-y-3 border-b p-3">
+          <div class="space-y-1.5">
+            <Label class="text-xs">Type</Label>
+            <CataloguePicker
+              :model-value="node.data.type"
+              :groups="typeGroups"
+              placeholder="No type"
+              clear-label="No type"
+              search-placeholder="Search types…"
+              @update:model-value="withCommit(() => setNodeType(node!.id, $event))"
+            />
+          </div>
+          <div class="space-y-1.5">
+            <Label class="text-xs">Technology</Label>
+            <CataloguePicker
+              :model-value="node.data.tech"
+              :groups="techGroups"
+              placeholder="Not specified"
+              clear-label="No technology"
+              search-placeholder="PostgreSQL, Kafka, IBM MQ…"
+              @update:model-value="withCommit(() => setNodeTech(node!.id, $event))"
             />
           </div>
         </section>
@@ -445,6 +521,20 @@ function withCommit(fn: () => void) {
               withCommit(() =>
                 selectedNodes.forEach((n) => updateNodeData(n.id, { color: $event! })),
               )
+            "
+          />
+        </section>
+
+        <section v-if="selectedNodes.length" class="space-y-2 border-b p-3">
+          <Label class="text-xs">Technology</Label>
+          <CataloguePicker
+            :model-value="sharedTech ?? ''"
+            :groups="techGroups"
+            :placeholder="sharedTech === null ? 'Mixed' : 'Not specified'"
+            clear-label="No technology"
+            search-placeholder="PostgreSQL, Kafka, IBM MQ…"
+            @update:model-value="
+              withCommit(() => selectedNodes.forEach((n) => setNodeTech(n.id, $event)))
             "
           />
         </section>

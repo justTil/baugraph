@@ -32,6 +32,7 @@ import {
   Grid3x3,
   Group,
   Hash,
+  Layers,
   Lock,
   LockOpen,
   Magnet,
@@ -69,6 +70,8 @@ import type { AlignAction } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { PALETTE, type PaletteItem } from '@/features/diagram/data/palette'
+import { NODE_TYPE_GROUPS } from '@/features/diagram/data/node-types'
+import { TECH_CATEGORIES } from '@/features/diagram/data/tech'
 import { COLOR_HEX, COLOR_SWATCHES, diagramTheme } from '@/features/diagram/lib/theme'
 import { exportJson } from '@/features/diagram/lib/export'
 import { ARROW_MODES, LINE_STYLES, ROUTES, SHAPE_KEYS, stringify } from '@/model'
@@ -101,6 +104,8 @@ const {
   lockSelection,
   unlockAll,
   updateNodeData,
+  setNodeType,
+  setNodeTech,
   updateEdgeData,
   reverseEdge,
   reorderNode,
@@ -137,6 +142,18 @@ const mode = computed<'node' | 'edge' | 'selection' | 'pane'>(() => {
 })
 
 const isZone = computed(() => node.value?.type === 'zone')
+
+/** A zone can only become another kind of zone, a box another kind of box. */
+const typeGroups = computed(() =>
+  NODE_TYPE_GROUPS.map((group) => ({
+    ...group,
+    types: group.types.filter((type) => (type.kind === 'zone') === isZone.value),
+  })).filter((group) => group.types.length > 0),
+)
+
+/** Palette groups split by what they add: node types, then technologies. */
+const paletteTypeGroups = computed(() => PALETTE.filter((group) => group.kind === 'types'))
+const paletteTechGroups = computed(() => PALETTE.filter((group) => group.kind === 'tech'))
 
 /* ----------------------------------------------------------------- actions */
 
@@ -198,6 +215,11 @@ function paintNodes(color: string) {
     const targets = mode.value === 'node' && node.value ? [node.value] : selectedNodes.value
     targets.forEach((n) => updateNodeData(n.id, { color: color as never }))
   })
+}
+
+/** Stamps one technology across a whole selection — "these five are Java". */
+function applyTech(tech: string) {
+  selectedNodes.value.forEach((n) => setNodeTech(n.id, tech))
 }
 
 /**
@@ -272,6 +294,60 @@ function copySelectionIds() {
         Rename
         <ContextMenuShortcut>⏎</ContextMenuShortcut>
       </ContextMenuItem>
+
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Shapes />
+          Type
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent class="max-h-80">
+          <ContextMenuItem @select="act(() => setNodeType(node!.id, ''))">No type</ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuSub v-for="group in typeGroups" :key="group.id">
+            <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-80">
+              <ContextMenuRadioGroup :model-value="node.data?.type">
+                <ContextMenuRadioItem
+                  v-for="type in group.types"
+                  :key="type.id"
+                  :value="type.id"
+                  @select="act(() => setNodeType(node!.id, type.id))"
+                >
+                  {{ type.label }}
+                </ContextMenuRadioItem>
+              </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Layers />
+          Technology
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent class="max-h-80">
+          <ContextMenuItem @select="act(() => setNodeTech(node!.id, ''))">
+            No technology
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuSub v-for="category in TECH_CATEGORIES" :key="category.id">
+            <ContextMenuSubTrigger>{{ category.label }}</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-80">
+              <ContextMenuRadioGroup :model-value="node.data?.tech">
+                <ContextMenuRadioItem
+                  v-for="item in category.items"
+                  :key="item.id"
+                  :value="item.id"
+                  @select="act(() => setNodeTech(node!.id, item.id))"
+                >
+                  {{ item.label }}
+                </ContextMenuRadioItem>
+              </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
 
       <ContextMenuSub>
         <ContextMenuSubTrigger>
@@ -547,6 +623,29 @@ function copySelectionIds() {
         </ContextMenuSubContent>
       </ContextMenuSub>
 
+      <ContextMenuSub v-if="selectedNodes.length">
+        <ContextMenuSubTrigger>
+          <Layers />
+          Technology
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent class="max-h-80">
+          <ContextMenuItem @select="act(() => applyTech(''))">No technology</ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuSub v-for="category in TECH_CATEGORIES" :key="category.id">
+            <ContextMenuSubTrigger>{{ category.label }}</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-80">
+              <ContextMenuItem
+                v-for="item in category.items"
+                :key="item.id"
+                @select="act(() => applyTech(item.id))"
+              >
+                {{ item.label }}
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+
       <ContextMenuSub v-if="selectedNodes.length > 1">
         <ContextMenuSubTrigger>
           <AlignCenterVertical />
@@ -622,12 +721,37 @@ function copySelectionIds() {
           Add node here
         </ContextMenuSubTrigger>
         <ContextMenuSubContent class="max-h-80">
-          <ContextMenuSub v-for="group in PALETTE" :key="group.id">
+          <ContextMenuSub v-for="group in paletteTypeGroups" :key="group.id">
             <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
             <ContextMenuSubContent class="max-h-80">
               <ContextMenuItem
                 v-for="item in group.items"
-                :key="item.label"
+                :key="item.type"
+                @select="addHere(item)"
+              >
+                <span
+                  class="size-3 rounded-full border border-black/20 dark:border-white/20"
+                  :style="{ background: COLOR_HEX[item.color] }"
+                />
+                {{ item.label }}
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Layers />
+          Add technology here
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent class="max-h-80">
+          <ContextMenuSub v-for="group in paletteTechGroups" :key="group.id">
+            <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-80">
+              <ContextMenuItem
+                v-for="item in group.items"
+                :key="item.tech"
                 @select="addHere(item)"
               >
                 <span

@@ -57,6 +57,13 @@ const SHORTCUTS: [string, string][] = [
             line style live in the inspector on the right.
           </p>
           <p>
+            Every node carries its <em>type</em> — Database, API Gateway, Message Broker — and it
+            stays on the node through a rename, so an icon never has to be remembered. Pick the
+            <em>technology</em> next to it (PostgreSQL, IBM DB2, Apache Kafka, TIBCO EMS) and it is
+            drawn right under the label, where a screenshot will carry it. The palette's technology
+            groups skip both steps: drag Apache Kafka on and the node is already a Kafka topic.
+          </p>
+          <p>
             Right-click anything for a menu of what applies to it: rename, colour, shape, align,
             lock, delete on a node or selection; route, line, arrows and direction on a connection;
             add a node, select all, undo, grid and export on empty canvas. Each menu also has a

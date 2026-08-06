@@ -26,10 +26,16 @@ import {
 } from '@/model'
 import type { PaletteItem } from '@/features/diagram/data/palette'
 import { paletteItemSize } from '@/features/diagram/data/palette'
+import { nodeType } from '@/features/diagram/data/node-types'
+import { categoryOfTech } from '@/features/diagram/data/tech'
 
 /** Payload carried on every Vue Flow node; mirrors the model's presentation fields. */
 export interface NodeData {
   label: string
+  /** Node type id — what the node is. Drawn as a fixed caption. */
+  type: string
+  /** Technology id — what it runs on. Drawn next to the type. */
+  tech: string
   sublabel: string
   shape: ShapeKey
   color: ColorKey
@@ -114,6 +120,8 @@ function toVueFlowNode(node: DiagramNode): BgNode {
     focusable: !locked,
     data: {
       label: node.label,
+      type: node.type ?? '',
+      tech: node.tech ?? '',
       sublabel: node.sublabel ?? '',
       shape: node.shape,
       color: node.color,
@@ -169,6 +177,8 @@ function toModelNode(node: BgNode): DiagramNode {
   return {
     id: node.id,
     kind: node.type === 'zone' ? 'zone' : 'shape',
+    type: node.data?.type ?? '',
+    tech: node.data?.tech ?? '',
     label: node.data?.label ?? '',
     sublabel: node.data?.sublabel ?? '',
     shape: node.data?.shape ?? 'rect',
@@ -475,6 +485,8 @@ export function addNode(item: PaletteItem, at: { x: number; y: number }): BgNode
   const node = toVueFlowNode({
     id: makeNodeId(item.label, takenNodeIds()),
     kind,
+    type: item.type,
+    tech: item.tech ?? '',
     label: item.label,
     sublabel: '',
     shape: item.shape ?? 'rect',
@@ -662,6 +674,8 @@ export function groupSelection() {
   const zone = toVueFlowNode({
     id: makeNodeId('zone', takenNodeIds()),
     kind: 'zone',
+    type: 'zone',
+    tech: '',
     label: 'Zone',
     sublabel: '',
     shape: 'rect',
@@ -707,6 +721,40 @@ export function updateNodeData(id: string, patch: Partial<NodeData>) {
   nodes.value = nodes.value.map((n) =>
     n.id === id ? { ...n, data: { ...(n.data as NodeData), ...patch } } : n,
   )
+}
+
+/**
+ * Retypes a node — a box that turns out to be a queue, a service that is really
+ * a gateway. Styling the user has not touched follows the new type, so the icon
+ * and shape keep matching the caption; anything they picked by hand is left
+ * exactly as it is.
+ */
+export function setNodeType(id: string, type: string) {
+  const node = nodes.value.find((n) => n.id === id)
+  if (!node) return
+  const data = node.data as NodeData
+  const patch: Partial<NodeData> = { type }
+
+  const next = nodeType(type)
+  if (next) {
+    const previous = nodeType(data.type)
+    if (!data.icon || data.icon === (previous?.icon ?? '')) patch.icon = next.icon ?? ''
+    if (data.shape === (previous?.shape ?? 'rect')) patch.shape = next.shape ?? 'rect'
+    if (data.color === (previous?.color ?? 'slate')) patch.color = next.color
+  }
+
+  updateNodeData(id, patch)
+}
+
+/** Sets the technology. An untyped node picks up the kind of thing it implies. */
+export function setNodeTech(id: string, tech: string) {
+  const node = nodes.value.find((n) => n.id === id)
+  if (!node) return
+  if (tech && !(node.data as NodeData).type) {
+    const category = categoryOfTech(tech)
+    if (category) setNodeType(id, category.nodeType)
+  }
+  updateNodeData(id, { tech })
 }
 
 export function updateNodeSize(id: string, size: { width: number; height: number }) {
@@ -921,6 +969,8 @@ export function useDiagram() {
     unlockAll,
     updateNodeData,
     updateNodeSize,
+    setNodeType,
+    setNodeTech,
     updateEdgeData,
     reverseEdge,
     reorderNode,

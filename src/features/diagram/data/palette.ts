@@ -1,194 +1,120 @@
 import type { ColorKey, ShapeKey } from '@/model'
 import { DEFAULT_NODE_SIZE, DEFAULT_ZONE_SIZE } from '@/model'
+import type { NodeType } from '@/features/diagram/data/node-types'
+import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
+import type { TechCategory, TechItem } from '@/features/diagram/data/tech'
+import { TECH_CATEGORIES, techTerms } from '@/features/diagram/data/tech'
 
-/** A draggable entry in the left-hand palette. */
+/**
+ * The left-hand palette.
+ *
+ * Two kinds of group, both producing the same thing — a node:
+ *   - `types` mirror the node-type catalogue: Database, Queue, API Gateway…
+ *   - `tech` mirror the technology catalogue: PostgreSQL, IBM DB2, Apache
+ *     Kafka… Dropping one lands a node of the matching type with that
+ *     technology already selected, which is the fastest way to draw a stack
+ *     that is already decided.
+ */
+
+/** A draggable entry in the palette. Also the payload of a palette drag. */
 export interface PaletteItem {
+  /** Node type id, written to the file as `type`. */
+  type: string
+  /** Technology id, written to the file as `tech`. Empty for a plain type. */
+  tech?: string
+  /** Label the new node starts with. */
   label: string
   /** Icon id from the Lucide registry. Drawn inside the node itself. */
   icon?: string
-  /**
-   * Icon shown next to the palette entry only, for items whose node carries no
-   * icon of its own — a zone has no icon slot, and a note drawing a note icon
-   * inside itself is just noise. Falls back to `icon`.
-   */
+  /** Icon shown next to the palette entry only. Falls back to `icon`. */
   listIcon?: string
   color: ColorKey
   shape?: ShapeKey
   kind?: 'shape' | 'zone'
   width?: number
   height?: number
+  /** Extra search terms — aliases, abbreviations, former product names. */
+  keywords?: string[]
 }
 
 export interface PaletteGroup {
   id: string
   label: string
+  /** Technology groups start collapsed; there are a lot of them. */
+  kind: 'types' | 'tech'
   items: PaletteItem[]
 }
 
+function itemFromType(type: NodeType): PaletteItem {
+  return {
+    type: type.id,
+    label: type.label,
+    icon: type.icon,
+    listIcon: type.listIcon,
+    color: type.color,
+    shape: type.shape,
+    kind: type.kind,
+    width: type.width,
+    height: type.height,
+    keywords: type.aliases,
+  }
+}
+
+/**
+ * A technology entry borrows its looks from the node type its category maps to,
+ * so "Apache Kafka" arrives as an amber queue and "IBM DB2" as a green cylinder.
+ */
+function itemFromTech(tech: TechItem, category: TechCategory): PaletteItem {
+  const type = nodeType(category.nodeType)
+  return {
+    type: category.nodeType,
+    tech: tech.id,
+    label: tech.label,
+    icon: type?.icon,
+    listIcon: type?.listIcon,
+    color: type?.color ?? 'slate',
+    shape: type?.shape,
+    kind: type?.kind,
+    width: type?.width,
+    height: type?.height,
+    keywords: techTerms(tech),
+  }
+}
+
 export const PALETTE: PaletteGroup[] = [
-  {
-    id: 'flow',
-    label: 'Flow',
-    items: [
-      { label: 'Start', icon: 'play', color: 'slate', shape: 'pill', width: 120, height: 44 },
-      { label: 'End', icon: 'flag', color: 'slate', shape: 'pill', width: 120, height: 44 },
-      { label: 'Step', listIcon: 'square', color: 'slate', shape: 'rect', width: 150, height: 54 },
-      {
-        label: 'Decision',
-        icon: 'split',
-        color: 'amber',
-        shape: 'diamond',
-        width: 150,
-        height: 100,
-      },
-      {
-        label: 'Note',
-        listIcon: 'sticky-note',
-        color: 'amber',
-        shape: 'note',
-        width: 180,
-        height: 84,
-      },
-      {
-        label: 'Zone',
-        listIcon: 'frame',
-        color: 'slate',
-        kind: 'zone',
-        width: DEFAULT_ZONE_SIZE.width,
-        height: DEFAULT_ZONE_SIZE.height,
-      },
-    ],
-  },
-  {
-    id: 'compute',
-    label: 'Services & compute',
-    items: [
-      { label: 'Service', icon: 'package', color: 'blue' },
-      { label: 'Microservice', icon: 'boxes', color: 'blue' },
-      { label: 'API', icon: 'code', color: 'blue', shape: 'round' },
-      { label: 'API Gateway', icon: 'door-open', color: 'blue' },
-      { label: 'Function', icon: 'zap', color: 'blue' },
-      { label: 'Container', icon: 'container', color: 'slate' },
-      { label: 'Server', icon: 'server', color: 'slate' },
-      { label: 'Worker', icon: 'cog', color: 'slate' },
-      { label: 'Batch Job', icon: 'hourglass', color: 'slate' },
-      { label: 'Web App', icon: 'app-window', color: 'blue' },
-      { label: 'Mobile App', icon: 'smartphone', color: 'blue' },
-      { label: 'Desktop App', icon: 'monitor', color: 'blue' },
-    ],
-  },
-  {
-    id: 'data',
-    label: 'Data & storage',
-    items: [
-      { label: 'Database', icon: 'database', color: 'green', shape: 'cylinder' },
-      { label: 'SQL Database', icon: 'database', color: 'green', shape: 'cylinder' },
-      { label: 'NoSQL Store', icon: 'hard-drive', color: 'green', shape: 'cylinder' },
-      { label: 'Cache', icon: 'zap', color: 'green', shape: 'cylinder' },
-      { label: 'Data Warehouse', icon: 'warehouse', color: 'green', shape: 'cylinder' },
-      { label: 'Search Index', icon: 'search', color: 'green', shape: 'cylinder' },
-      { label: 'Object Storage', icon: 'archive', color: 'green' },
-      { label: 'File Share', icon: 'folder', color: 'green' },
-      { label: 'File Write', icon: 'file-up', color: 'green' },
-      { label: 'CSV Export', icon: 'sheet', color: 'green' },
-      { label: 'JSON Payload', icon: 'braces', color: 'green' },
-      { label: 'XML Payload', icon: 'file-code', color: 'green' },
-      { label: 'Table', icon: 'table', color: 'green' },
-      { label: 'Disk', icon: 'hard-drive', color: 'slate' },
-    ],
-  },
-  {
-    id: 'messaging',
-    label: 'Messaging & events',
-    items: [
-      { label: 'Queue', icon: 'layers-2', color: 'amber', shape: 'queue' },
-      { label: 'Topic', icon: 'radio-tower', color: 'amber', shape: 'queue' },
-      { label: 'Event Bus', icon: 'radio', color: 'amber' },
-      { label: 'Stream', icon: 'activity', color: 'amber', shape: 'queue' },
-      { label: 'Message Broker', icon: 'shuffle', color: 'amber' },
-      { label: 'Dead Letter Queue', icon: 'triangle-alert', color: 'red', shape: 'queue' },
-      { label: 'Webhook', icon: 'webhook', color: 'amber' },
-      { label: 'Notification', icon: 'bell', color: 'amber' },
-      { label: 'Email', icon: 'mail', color: 'amber' },
-      { label: 'Inbox', icon: 'inbox', color: 'amber' },
-      { label: 'Publisher', icon: 'megaphone', color: 'amber' },
-      { label: 'Feed', icon: 'rss', color: 'amber' },
-    ],
-  },
-  {
-    id: 'integration',
-    label: 'Integration & routing',
-    items: [
-      { label: 'Middleware', icon: 'settings', color: 'purple' },
-      { label: 'ESB', icon: 'network', color: 'purple' },
-      { label: 'Adapter', icon: 'plug', color: 'purple' },
-      { label: 'Transformer', icon: 'arrow-left-right', color: 'purple' },
-      { label: 'Router', icon: 'split', color: 'purple' },
-      { label: 'Load Balancer', icon: 'scale', color: 'purple' },
-      { label: 'Proxy', icon: 'router', color: 'purple' },
-      { label: 'Filter', icon: 'funnel', color: 'purple' },
-      { label: 'ETL Pipeline', icon: 'spline', color: 'purple' },
-      { label: 'Sync', icon: 'refresh-cw', color: 'purple' },
-      { label: 'Ingress', icon: 'log-in', color: 'purple' },
-      { label: 'Egress', icon: 'log-out', color: 'purple' },
-    ],
-  },
-  {
-    id: 'scheduling',
-    label: 'Scheduling',
-    items: [
-      { label: 'Cron Job', icon: 'rotate-ccw-clock', color: 'teal' },
-      { label: 'Scheduler', icon: 'calendar-check', color: 'teal' },
-      { label: 'Timer', icon: 'alarm-clock', color: 'teal' },
-      { label: 'Retry', icon: 'rotate-cw', color: 'teal' },
-      { label: 'Backlog', icon: 'kanban', color: 'teal' },
-    ],
-  },
-  {
-    id: 'security',
-    label: 'Security',
-    items: [
-      { label: 'Auth Service', icon: 'shield-check', color: 'red' },
-      { label: 'Identity Provider', icon: 'fingerprint-pattern', color: 'red' },
-      { label: 'Firewall', icon: 'shield', color: 'red' },
-      { label: 'Secret Vault', icon: 'vault', color: 'red' },
-      { label: 'Certificate', icon: 'key-round', color: 'red' },
-      { label: 'Access Control', icon: 'lock', color: 'red' },
-    ],
-  },
-  {
-    id: 'operations',
-    label: 'Operations',
-    items: [
-      { label: 'Monitoring', icon: 'gauge', color: 'slate' },
-      { label: 'Metrics', icon: 'trending-up', color: 'slate' },
-      { label: 'Logging', icon: 'scroll-text', color: 'slate' },
-      { label: 'Alerting', icon: 'bell-ring', color: 'red' },
-      { label: 'CI/CD', icon: 'git-branch', color: 'slate' },
-      { label: 'Config', icon: 'sliders-horizontal', color: 'slate' },
-      { label: 'Health Check', icon: 'circle-check', color: 'green' },
-      { label: 'Incident', icon: 'bug', color: 'red' },
-      { label: 'Terminal', icon: 'terminal', color: 'slate' },
-    ],
-  },
-  {
-    id: 'actors',
-    label: 'Actors & context',
-    items: [
-      { label: 'User', icon: 'user', color: 'slate', shape: 'circle', width: 100, height: 100 },
-      { label: 'Team', icon: 'users', color: 'slate' },
-      { label: 'External System', icon: 'building-2', color: 'slate' },
-      { label: 'Third Party', icon: 'briefcase', color: 'slate' },
-      { label: 'Internet', icon: 'globe', color: 'slate' },
-      { label: 'Cloud', icon: 'cloud', color: 'slate' },
-      { label: 'Network', icon: 'network', color: 'slate' },
-      { label: 'Device', icon: 'cpu', color: 'slate' },
-      { label: 'Printer', icon: 'printer', color: 'slate' },
-      { label: 'Payment', icon: 'credit-card', color: 'pink' },
-      { label: 'Location', icon: 'map-pin', color: 'pink' },
-    ],
-  },
+  ...NODE_TYPE_GROUPS.map((group) => ({
+    id: group.id,
+    label: group.label,
+    kind: 'types' as const,
+    items: group.types.map(itemFromType),
+  })),
+  ...TECH_CATEGORIES.map((category) => ({
+    id: `tech:${category.id}`,
+    label: category.label,
+    kind: 'tech' as const,
+    items: category.items.map((tech) => itemFromTech(tech, category)),
+  })),
 ]
+
+export function matchesPaletteItem(item: PaletteItem, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return [item.label, item.type, item.tech ?? '', ...(item.keywords ?? [])].some((term) =>
+    term.toLowerCase().includes(q),
+  )
+}
+
+/** Groups filtered by the palette's search box, empty ones dropped. */
+export function searchPalette(query: string): PaletteGroup[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return PALETTE
+  return PALETTE.map((group) => ({
+    ...group,
+    items: group.label.toLowerCase().includes(q)
+      ? group.items
+      : group.items.filter((item) => matchesPaletteItem(item, q)),
+  })).filter((group) => group.items.length > 0)
+}
 
 export function paletteItemSize(item: PaletteItem) {
   const fallback = item.kind === 'zone' ? DEFAULT_ZONE_SIZE : DEFAULT_NODE_SIZE
@@ -199,4 +125,4 @@ export function paletteItemSize(item: PaletteItem) {
 }
 
 /** Node type used when repeating the last one (double-click, drop on empty canvas). */
-export const DEFAULT_PALETTE_ITEM: PaletteItem = { label: 'Service', icon: 'package', color: 'blue' }
+export const DEFAULT_PALETTE_ITEM: PaletteItem = itemFromType(nodeType('service')!)

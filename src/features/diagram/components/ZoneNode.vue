@@ -7,6 +7,7 @@ import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { DEFAULT_ZONE_SIZE } from '@/model'
 import { roundedRect } from '@/features/diagram/lib/shapes'
+import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 
 const props = defineProps<NodeProps<NodeData>>()
@@ -29,6 +30,9 @@ const height = computed(() => props.dimensions.height || DEFAULT_ZONE_SIZE.heigh
 const theme = computed(() => diagramTheme(canvas.theme))
 const paint = computed(() => nodePaint({ color: props.data.color, kind: 'zone' }, theme.value))
 const frame = computed(() => roundedRect(0.75, 0.75, width.value - 1.5, height.value - 1.5, 12))
+
+/** What the zone is — VPC, cluster, namespace — kept on it after a rename. */
+const caption = computed(() => nodeCaption(props.data))
 </script>
 
 <template>
@@ -81,6 +85,15 @@ const frame = computed(() => roundedRect(0.75, 0.75, width.value - 1.5, height.v
         >
           {{ data.label }}
         </div>
+      </div>
+      <div v-if="caption" class="truncate text-[10px] leading-tight">
+        <span v-if="caption.type" :style="{ color: paint.muted }">{{ caption.type }}</span>
+        <span v-if="caption.type && caption.tech" :style="{ color: paint.muted }"> · </span>
+        <span
+          v-if="caption.tech"
+          class="font-semibold"
+          :style="{ color: paint.accent }"
+        >{{ caption.tech }}</span>
       </div>
       <div
         v-if="data.sublabel"

@@ -18,8 +18,10 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'order-platform',
         kind: 'zone',
+        type: 'vpc',
+        tech: 'aws',
         label: 'Order platform',
-        sublabel: 'production VPC',
+        sublabel: 'production',
         shape: 'rect',
         color: 'slate',
         position: { x: 300, y: 60 },
@@ -29,6 +31,7 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'customer',
         kind: 'shape',
+        type: 'user',
         label: 'Customer',
         sublabel: 'web + mobile',
         shape: 'circle',
@@ -41,6 +44,8 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'api-gateway',
         kind: 'shape',
+        type: 'api_gateway',
+        tech: 'kong',
         label: 'API Gateway',
         sublabel: 'REST · TLS',
         shape: 'rect',
@@ -53,8 +58,10 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'order-service',
         kind: 'shape',
+        type: 'service',
+        tech: 'spring_boot',
         label: 'Order Service',
-        sublabel: 'Java · Spring',
+        sublabel: 'Java 21',
         shape: 'rect',
         color: 'blue',
         icon: 'package',
@@ -65,6 +72,8 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'auth-service',
         kind: 'shape',
+        type: 'auth_service',
+        tech: 'keycloak',
         label: 'Auth Service',
         sublabel: 'OAuth2 / OIDC',
         shape: 'rect',
@@ -77,8 +86,10 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'order-db',
         kind: 'shape',
+        type: 'database',
+        tech: 'postgresql',
         label: 'Order DB',
-        sublabel: 'PostgreSQL',
+        sublabel: 'primary',
         shape: 'cylinder',
         color: 'green',
         icon: 'database',
@@ -89,8 +100,10 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'order-created',
         kind: 'shape',
+        type: 'topic',
+        tech: 'apache_kafka',
         label: 'order.created',
-        sublabel: 'Kafka topic',
+        sublabel: '3 partitions',
         shape: 'queue',
         color: 'amber',
         icon: 'radio-tower',
@@ -101,6 +114,8 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'billing-adapter',
         kind: 'shape',
+        type: 'adapter',
+        tech: 'tibco_businessworks',
         label: 'Billing Adapter',
         sublabel: 'SAP · IDoc',
         shape: 'rect',
@@ -113,6 +128,7 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'nightly-reconcile',
         kind: 'shape',
+        type: 'cron_job',
         label: 'Nightly Reconcile',
         sublabel: 'cron 0 2 * * *',
         shape: 'rect',
@@ -125,6 +141,8 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'sftp-export',
         kind: 'shape',
+        type: 'file_write',
+        tech: 'sftp',
         label: 'SFTP Export',
         sublabel: 'orders_*.csv',
         shape: 'rect',
@@ -137,6 +155,8 @@ export function sampleDocument(): DiagramDocument {
       {
         id: 'dead-letter-queue',
         kind: 'shape',
+        type: 'dead_letter_queue',
+        tech: 'apache_kafka',
         label: 'Dead Letter Queue',
         sublabel: 'retry ×3',
         shape: 'queue',

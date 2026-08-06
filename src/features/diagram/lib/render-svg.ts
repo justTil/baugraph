@@ -3,6 +3,7 @@ import type { DiagramDocument, DiagramNode } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { STACKED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
+import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, edgeColor, mix, nodePaint } from '@/features/diagram/lib/theme'
 import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
 
@@ -98,20 +99,125 @@ export function contentBounds(doc: DiagramDocument, padding = EXPORT_PADDING): B
   return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 }
 }
 
+/* ------------------------------------------------------------------- text */
+
+/** A stretch of text within one line; a caption mixes two of them. */
+interface TextRun {
+  text: string
+  fill: string
+  weight: number
+}
+
+interface TextLine {
+  role: 'label' | 'caption' | 'sublabel'
+  size: number
+  runs: TextRun[]
+}
+
+/** Leading added to a line's font size, matching the canvas's `leading-tight`. */
+const lineHeight = (line: TextLine) => line.size + 4
+
+const blockHeight = (lines: TextLine[]) => lines.reduce((total, l) => total + lineHeight(l), 0)
+
+/**
+ * The three lines a node can carry: its name, the fixed type/technology caption,
+ * and the free sublabel. Mirrors `ShapeNode.vue`, so an export says exactly what
+ * the canvas says.
+ */
+function nodeTextLines(node: DiagramNode, paint: ReturnType<typeof nodePaint>): TextLine[] {
+  const lines: TextLine[] = []
+  if (node.label) {
+    lines.push({ role: 'label', size: 13, runs: [{ text: node.label, fill: paint.ink, weight: 600 }] })
+  }
+
+  const caption = nodeCaption(node)
+  if (caption) {
+    const runs: TextRun[] = []
+    if (caption.type) runs.push({ text: caption.type, fill: paint.muted, weight: 400 })
+    if (caption.type && caption.tech) {
+      runs.push({ text: ' · ', fill: paint.muted, weight: 400 })
+    }
+    if (caption.tech) runs.push({ text: caption.tech, fill: paint.accent, weight: 600 })
+    // A size below the sublabel's: the caption is a caption, and one point
+    // narrower is what fits "Database · PostgreSQL" in a default-width box.
+    lines.push({ role: 'caption', size: 10, runs })
+  }
+
+  if (node.sublabel) {
+    lines.push({
+      role: 'sublabel',
+      size: 11,
+      runs: [{ text: node.sublabel, fill: paint.muted, weight: 400 }],
+    })
+  }
+  return lines
+}
+
+/**
+ * One line of text. A caption that fits keeps its two colours as `tspan`s; one
+ * that has to be cut falls back to a single muted run, because an ellipsis
+ * landing mid-`tspan` is not worth the arithmetic.
+ */
+function renderLine(line: TextLine, x: number, baseline: number, available: number, anchor: 'start' | 'middle'): string {
+  const first = line.runs[0]
+  if (!first) return ''
+
+  const plain = line.runs.map((run) => run.text).join('')
+  const fitted = fitText(plain, available, line.size, first.weight)
+  const open =
+    `<text x="${round2(x)}" y="${round2(baseline)}" font-size="${line.size}"` +
+    (anchor === 'middle' ? ' text-anchor="middle"' : '')
+
+  if (line.runs.length === 1 || fitted !== plain) {
+    return `${open} font-weight="${first.weight}" fill="${first.fill}">${escapeXml(fitted)}</text>`
+  }
+
+  const body = line.runs
+    .map(
+      (run) =>
+        `<tspan fill="${run.fill}" font-weight="${run.weight}">${escapeXml(run.text)}</tspan>`,
+    )
+    .join('')
+  return `${open}>${body}</text>`
+}
+
+/** Stacks lines downward from `top`, the top edge of the block. */
+function renderTextBlock(
+  lines: TextLine[],
+  x: number,
+  top: number,
+  available: number,
+  anchor: 'start' | 'middle',
+): string {
+  let cursor = top
+  return lines
+    .map((line) => {
+      // The baseline sits one font size below the top of its line box, which is
+      // what puts a single 13px line on the box's centre line.
+      const out = renderLine(line, x, cursor + line.size, available, anchor)
+      cursor += lineHeight(line)
+      return out
+    })
+    .join('')
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+
 function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
   const frame = roundedRect(box.x, box.y, box.width, box.height, 12)
   let out =
     `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
     `stroke-width="1.5" stroke-dasharray="7 5"/>`
-  const label = fitText((node.label || '').toUpperCase(), box.width - 26, 12, 700)
+
+  const available = box.width - 26
+  const label = fitText((node.label || '').toUpperCase(), available, 12, 700)
   out +=
     `<text x="${box.x + 13}" y="${box.y + 20}" font-size="12" font-weight="700" ` +
     `letter-spacing=".04em" fill="${paint.accent}">${escapeXml(label)}</text>`
-  if (node.sublabel) {
-    out +=
-      `<text x="${box.x + 13}" y="${box.y + 36}" font-size="11" fill="${paint.muted}">` +
-      `${escapeXml(fitText(node.sublabel, box.width - 26, 11))}</text>`
-  }
+
+  // The zone's own name is drawn above, so only the caption and sublabel stack.
+  const lines = nodeTextLines(node, paint).filter((line) => line.role !== 'label')
+  out += renderTextBlock(lines, box.x + 13, box.y + 26, available, 'start')
   return out
 }
 
@@ -141,47 +247,23 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2 + inset.top / 2
 
+  const lines = nodeTextLines(node, paint)
+  const text = blockHeight(lines)
+
   if (stacked) {
-    let baseline = cy
-    if (hasIcon) {
-      parts.push(
-        iconGroup(
-          node.icon!,
-          cx - ICON_SIZE / 2,
-          baseline - (node.sublabel ? 30 : 24),
-          paint.accent,
-        ),
-      )
-      baseline += 8
-    }
+    // Icon above the text, the pair centred together.
+    const gap = hasIcon ? 6 : 0
+    const iconBlock = hasIcon ? ICON_SIZE + gap : 0
+    const top = cy - (iconBlock + text) / 2
+    if (hasIcon) parts.push(iconGroup(node.icon!, cx - ICON_SIZE / 2, top, paint.accent))
     const available =
       node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right
-    parts.push(
-      `<text x="${cx}" y="${baseline + (node.sublabel ? -1 : 5)}" text-anchor="middle" ` +
-        `font-size="13" font-weight="600" fill="${paint.ink}">` +
-        `${escapeXml(fitText(node.label, available, 13, 600))}</text>`,
-    )
-    if (node.sublabel) {
-      parts.push(
-        `<text x="${cx}" y="${baseline + 15}" text-anchor="middle" font-size="11" ` +
-          `fill="${paint.muted}">${escapeXml(fitText(node.sublabel, available, 11))}</text>`,
-      )
-    }
+    parts.push(renderTextBlock(lines, cx, top + iconBlock, available, 'middle'))
   } else {
     parts.push(iconGroup(node.icon!, box.x + 12, cy - ICON_SIZE / 2, paint.accent))
     const textX = box.x + 12 + ICON_SIZE + 12
     const available = box.x + box.width - inset.right - 12 - textX
-    parts.push(
-      `<text x="${textX}" y="${cy + (node.sublabel ? -1 : 5)}" font-size="13" ` +
-        `font-weight="600" fill="${paint.ink}">` +
-        `${escapeXml(fitText(node.label, available, 13, 600))}</text>`,
-    )
-    if (node.sublabel) {
-      parts.push(
-        `<text x="${textX}" y="${cy + 15}" font-size="11" fill="${paint.muted}">` +
-          `${escapeXml(fitText(node.sublabel, available, 11))}</text>`,
-      )
-    }
+    parts.push(renderTextBlock(lines, textX, cy - text / 2, available, 'start'))
   }
 
   return parts.join('')

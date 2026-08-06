@@ -48,6 +48,8 @@ function ordered<T extends object>(value: T, order: (keyof T)[]): T {
 const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'id',
   'kind',
+  'type',
+  'tech',
   'label',
   'sublabel',
   'shape',

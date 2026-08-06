@@ -15,13 +15,16 @@
     {
       "id": "order-platform",
       "kind": "zone",
+      "type": "vpc",
+      "tech": "aws",
       "label": "Order platform",
-      "sublabel": "production VPC",
+      "sublabel": "production",
       "position": { "x": 300, "y": 60 },
       "size": { "width": 620, "height": 430 }
     },
     {
       "id": "customer",
+      "type": "user",
       "label": "Customer",
       "sublabel": "web + mobile",
       "shape": "circle",
@@ -31,6 +34,8 @@
     },
     {
       "id": "api-gateway",
+      "type": "api_gateway",
+      "tech": "kong",
       "label": "API Gateway",
       "sublabel": "REST · TLS",
       "color": "blue",
@@ -41,8 +46,10 @@
     },
     {
       "id": "order-service",
+      "type": "service",
+      "tech": "spring_boot",
       "label": "Order Service",
-      "sublabel": "Java · Spring",
+      "sublabel": "Java 21",
       "color": "blue",
       "icon": "package",
       "position": { "x": 40, "y": 180 },
@@ -51,6 +58,8 @@
     },
     {
       "id": "auth-service",
+      "type": "auth_service",
+      "tech": "keycloak",
       "label": "Auth Service",
       "sublabel": "OAuth2 / OIDC",
       "color": "red",
@@ -61,8 +70,10 @@
     },
     {
       "id": "order-db",
+      "type": "database",
+      "tech": "postgresql",
       "label": "Order DB",
-      "sublabel": "PostgreSQL",
+      "sublabel": "primary",
       "shape": "cylinder",
       "color": "green",
       "icon": "database",
@@ -72,8 +83,10 @@
     },
     {
       "id": "order-created",
+      "type": "topic",
+      "tech": "apache_kafka",
       "label": "order.created",
-      "sublabel": "Kafka topic",
+      "sublabel": "3 partitions",
       "shape": "queue",
       "color": "amber",
       "icon": "radio-tower",
@@ -83,6 +96,8 @@
     },
     {
       "id": "billing-adapter",
+      "type": "adapter",
+      "tech": "tibco_businessworks",
       "label": "Billing Adapter",
       "sublabel": "SAP · IDoc",
       "color": "purple",
@@ -93,6 +108,7 @@
     },
     {
       "id": "nightly-reconcile",
+      "type": "cron_job",
       "label": "Nightly Reconcile",
       "sublabel": "cron 0 2 * * *",
       "color": "teal",
@@ -102,6 +118,8 @@
     },
     {
       "id": "sftp-export",
+      "type": "file_write",
+      "tech": "sftp",
       "label": "SFTP Export",
       "sublabel": "orders_*.csv",
       "color": "green",
@@ -111,6 +129,8 @@
     },
     {
       "id": "dead-letter-queue",
+      "type": "dead_letter_queue",
+      "tech": "apache_kafka",
       "label": "Dead Letter Queue",
       "sublabel": "retry ×3",
       "shape": "queue",

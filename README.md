@@ -34,6 +34,28 @@ another node to connect them, or onto empty canvas to create the next node *and*
 connection in one gesture. Double-click a node to rename it inline; everything else
 (icon, colour, shape, routing, arrowheads, line style) lives in the inspector.
 
+### What a node is, and what it runs on
+
+Every node carries two things beyond its name, and both are drawn on it:
+
+- its **type** — `Database`, `API Gateway`, `Message Broker` — which stays put
+  through a rename. Call a database "Orders" and the node still says `Database`
+  underneath, so nobody has to remember what a cylinder or an icon meant.
+- its **technology** — `PostgreSQL`, `IBM DB2`, `Apache Kafka`, `TIBCO EMS` —
+  shown right after the type, in the node's own colour. It is the line a
+  screenshot has to carry, so it is on the node rather than buried in a panel.
+
+Both are picked in the inspector (or from a node's right-click menu) out of
+searchable catalogues: ~90 node types and ~250 technologies grouped by what they
+are — databases, message brokers, integration and ESB, caches, clouds, CI/CD,
+identity, observability. The palette's own technology groups are the shortcut:
+drag `Apache Kafka` straight onto the canvas and you get an amber queue that is
+already a topic running Kafka.
+
+The caption never repeats the name. A node called "PostgreSQL" reads
+`PostgreSQL` / `Database`; rename it to "Orders" and it reads
+`Orders` / `Database · PostgreSQL`. Either way the canvas says what it is.
+
 Select several nodes and press `⌘G` to wrap them in a labelled zone — a VPC, a
 cluster, a bounded context. The nodes become children of the zone, so moving it moves
 them. Dropping a node onto a zone (from the palette, or by dragging one across the
@@ -78,19 +100,24 @@ for a complete one:
     {
       "id": "order-platform",
       "kind": "zone",
+      "type": "vpc",
+      "tech": "aws",
       "label": "Order platform",
-      "sublabel": "production VPC",
+      "sublabel": "production",
       "position": { "x": 300, "y": 60 },
       "size": { "width": 620, "height": 430 }
     },
     {
-      "id": "api-gateway",
-      "label": "API Gateway",
-      "sublabel": "REST · TLS",
-      "color": "blue",
-      "icon": "door-open",
-      "position": { "x": 40, "y": 50 },
-      "size": { "width": 168, "height": 62 },
+      "id": "order-db",
+      "type": "database",
+      "tech": "postgresql",
+      "label": "Order DB",
+      "sublabel": "primary",
+      "shape": "cylinder",
+      "color": "green",
+      "icon": "database",
+      "position": { "x": 300, "y": 50 },
+      "size": { "width": 168, "height": 70 },
       "parent": "order-platform"
     }
   ],
@@ -109,6 +136,12 @@ for a complete one:
 
 Design decisions, all in service of readable diffs:
 
+- **`type` and `tech` are catalogue ids**, not display text: `ibm_db2` in the
+  file, "IBM DB2" on screen. Renaming an entry in the catalogue changes every
+  diagram's labels without touching a single file, and a `grep` for
+  `"tech": "tibco_ems"` finds every diagram that depends on it. Ids the app does
+  not know are shown as written rather than dropped, so a file may name a
+  technology this build has never heard of.
 - **Ids are derived from labels** (`api-gateway`, `api-gateway-2`) and never
   regenerated. Renaming a node does not rewrite every edge that references it.
 - **Defaults are omitted on write** and filled back in on read. A file only ever
@@ -167,7 +200,8 @@ src/
     components/            canvas, custom nodes and edges, palette, inspector
     composables/           editor state, undo/redo, autosave, placement
     lib/                   shape geometry, edge routing, theme, SVG export
-    data/                  node palette, curated Lucide icon registry, sample
+    data/                  node-type and technology catalogues, the palette
+                           built from both, curated Lucide icons, sample
   components/
     ui/                    shadcn-vue primitives
     layout/                app shell, header, sidebar
@@ -175,6 +209,22 @@ scripts/                   code generators (JSON Schema, icon registry)
 public/schema/             the published JSON Schema
 examples/                  an example diagram
 ```
+
+### Node types and technologies
+
+Both catalogues are plain data, no generator involved:
+
+| File | Holds |
+| --- | --- |
+| `src/features/diagram/data/node-types.ts` | what a node *is* — id, label, icon, colour, shape, default size, and the technology category it suggests |
+| `src/features/diagram/data/tech.ts` | what it *runs on* — id, label, search aliases, grouped into categories that each map to a node type |
+
+To add one, append an entry with a snake_case `id` and the label as it should be
+spelled on screen (`{ id: 'ibm_db2', label: 'IBM DB2', aliases: ['db2'] }`). The
+palette, both context menus and the inspector pick it up; nothing else needs
+touching. Ids are what diagrams store, so treat them as permanent — change a
+`label` freely, change an `id` and existing files stop resolving it (they fall
+back to showing the id, humanised).
 
 ### Icons
 

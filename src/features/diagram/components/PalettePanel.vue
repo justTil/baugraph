@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { Search } from '@lucide/vue'
+import { computed, reactive, ref } from 'vue'
+import { ChevronRight, Search } from '@lucide/vue'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -10,8 +10,8 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { Input } from '@/components/ui/input'
-import type { PaletteItem } from '@/features/diagram/data/palette'
-import { PALETTE } from '@/features/diagram/data/palette'
+import type { PaletteGroup, PaletteItem } from '@/features/diagram/data/palette'
+import { PALETTE, searchPalette } from '@/features/diagram/data/palette'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { COLOR_HEX } from '@/features/diagram/lib/theme'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
@@ -20,18 +20,23 @@ import { usePlacement } from '@/features/diagram/composables/usePlacement'
 const { place } = usePlacement()
 
 const query = ref('')
+const searching = computed(() => query.value.trim().length > 0)
+const groups = computed(() => searchPalette(query.value))
 
-const groups = computed(() => {
-  const q = query.value.trim().toLowerCase()
-  if (!q) return PALETTE
-  return PALETTE.map((group) => ({
-    ...group,
-    items: group.items.filter(
-      (item) =>
-        item.label.toLowerCase().includes(q) || group.label.toLowerCase().includes(q),
-    ),
-  })).filter((group) => group.items.length > 0)
-})
+/**
+ * Node types are open, technologies are folded away — there are a few hundred of
+ * them, and the palette is a place to reach for a shape, not to browse vendors.
+ * A search opens everything that matched.
+ */
+const expanded = reactive(
+  Object.fromEntries(PALETTE.map((group) => [group.id, group.kind !== 'tech'])),
+)
+
+const isOpen = (group: PaletteGroup) => searching.value || expanded[group.id]
+
+function toggle(group: PaletteGroup, open: boolean) {
+  if (!searching.value) expanded[group.id] = open
+}
 
 function onDragStart(event: DragEvent, item: PaletteItem) {
   if (!event.dataTransfer) return
@@ -50,7 +55,7 @@ function onDragStart(event: DragEvent, item: PaletteItem) {
         />
         <Input
           v-model="query"
-          placeholder="Search nodes…"
+          placeholder="Search nodes & tech…"
           spellcheck="false"
           class="h-8 pl-8 text-xs"
         />
@@ -59,30 +64,44 @@ function onDragStart(event: DragEvent, item: PaletteItem) {
   </SidebarGroup>
 
   <SidebarGroup v-for="group in groups" :key="group.id" class="py-0">
-    <SidebarGroupLabel class="text-[10px] tracking-wider uppercase">
-      {{ group.label }}
-    </SidebarGroupLabel>
-    <SidebarGroupContent>
-      <SidebarMenu>
-        <SidebarMenuItem v-for="item in group.items" :key="item.label">
-          <SidebarMenuButton
-            size="sm"
-            :tooltip="item.label"
-            class="cursor-grab active:cursor-grabbing"
-            draggable="true"
-            @dragstart="onDragStart($event, item)"
-            @click="place(item)"
-          >
-            <component
-              :is="iconComponent(item.icon || item.listIcon) ?? 'span'"
-              class="size-4 shrink-0"
-              :style="{ color: COLOR_HEX[item.color] }"
-            />
-            <span class="truncate">{{ item.label }}</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    </SidebarGroupContent>
+    <details
+      class="group/palette"
+      :open="isOpen(group)"
+      @toggle="toggle(group, ($event.target as HTMLDetailsElement).open)"
+    >
+      <SidebarGroupLabel
+        as="summary"
+        class="cursor-pointer list-none gap-1 text-[10px] tracking-wider uppercase [&::-webkit-details-marker]:hidden"
+      >
+        <ChevronRight
+          class="size-3 transition-transform group-open/palette:rotate-90"
+        />
+        {{ group.label }}
+        <span class="text-sidebar-foreground/40 ml-auto normal-case">{{ group.items.length }}</span>
+      </SidebarGroupLabel>
+
+      <SidebarGroupContent>
+        <SidebarMenu>
+          <SidebarMenuItem v-for="item in group.items" :key="`${item.type}:${item.tech ?? ''}`">
+            <SidebarMenuButton
+              size="sm"
+              :tooltip="item.label"
+              class="cursor-grab active:cursor-grabbing"
+              draggable="true"
+              @dragstart="onDragStart($event, item)"
+              @click="place(item)"
+            >
+              <component
+                :is="iconComponent(item.listIcon || item.icon) ?? 'span'"
+                class="size-4 shrink-0"
+                :style="{ color: COLOR_HEX[item.color] }"
+              />
+              <span class="truncate">{{ item.label }}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </details>
   </SidebarGroup>
 
   <p

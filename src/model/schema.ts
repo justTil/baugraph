@@ -39,9 +39,23 @@ const sizeSchema = z.object({
 
 const metadataSchema = z.record(z.string(), z.unknown())
 
+/**
+ * Node type and technology ids. Deliberately not an enum: the catalogues live in
+ * the app and grow with it, and a diagram naming something they have never heard
+ * of is shown as written rather than rejected. The pattern only rules out
+ * spellings that could never be a catalogue id, so `"Apache Kafka"` is caught
+ * where `apache_kafka` was meant.
+ */
+const catalogueIdSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z0-9_]*$/, 'catalogue ids are lower-case, digits and _')
+
 export const nodeSchema = z.object({
   id: idSchema,
   kind: z.enum(['shape', 'zone']).default(NODE_DEFAULTS.kind),
+  type: catalogueIdSchema.default(NODE_DEFAULTS.type),
+  tech: catalogueIdSchema.default(NODE_DEFAULTS.tech),
   label: z.string().default(''),
   sublabel: z.string().default(NODE_DEFAULTS.sublabel),
   shape: z.enum(SHAPE_KEYS).default(NODE_DEFAULTS.shape),

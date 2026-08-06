@@ -8,6 +8,7 @@ import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { DEFAULT_NODE_SIZE } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { STACKED_SHAPES, contentInset, shapeElements } from '@/features/diagram/lib/shapes'
+import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 
@@ -31,6 +32,9 @@ const elements = computed(() => shapeElements(props.data.shape, width.value, hei
 
 const icon = computed(() => iconComponent(props.data.icon))
 const inset = computed(() => contentInset(props.data.shape, height.value))
+
+/** What the node is, kept on it whatever the user renames it to. */
+const caption = computed(() => nodeCaption(props.data))
 
 /** Diamonds and circles have little usable width at the edges, so text stacks. */
 const stacked = computed(() => STACKED_SHAPES.has(props.data.shape) || !icon.value)
@@ -106,6 +110,15 @@ const HANDLES = [
           :style="{ color: paint.ink }"
         >
           {{ data.label }}
+        </div>
+        <div v-if="caption" class="truncate text-[10px] leading-tight">
+          <span v-if="caption.type" :style="{ color: paint.muted }">{{ caption.type }}</span>
+          <span v-if="caption.type && caption.tech" :style="{ color: paint.muted }"> · </span>
+          <span
+            v-if="caption.tech"
+            class="font-semibold"
+            :style="{ color: paint.accent }"
+          >{{ caption.tech }}</span>
         </div>
         <div
           v-if="data.sublabel"
