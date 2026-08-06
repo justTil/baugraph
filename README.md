@@ -1,42 +1,186 @@
-# luma-middleware-hub
+# Baugraph
 
-This template should help get you started developing with Vue 3 in Vite.
+Architecture diagrams — flows, queues, integrations — that live in your repository.
 
-## Recommended IDE Setup
+Baugraph is a browser-based diagram editor built on [Vue Flow](https://vueflow.dev)
+(the Vue port of React Flow). Diagrams are stored as plain `.baugraph.json` files
+designed to be committed next to the code they describe: node ids are derived from
+labels, defaults are omitted, and keys are written in a fixed order, so a diff shows
+exactly what changed and nothing else.
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## Getting started
 
 ```sh
 npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
 npm run dev
 ```
 
-### Type-Check, Compile and Minify for Production
+Then open http://localhost:5173.
+
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Vite dev server with HMR |
+| `npm run build` | Type-check, then build to `dist/` |
+| `npm run type-check` | `vue-tsc` only |
+| `npm run generate` | Regenerate the JSON Schema and the icon registry |
+| `./build.sh` | Clean install + type-check + production build |
+| `./manage.sh start [PORT]` | Serve `dist/` behind a load balancer |
+
+## Using the editor
+
+Drag a node from the palette in the sidebar onto the canvas, or click one to drop it
+in the centre. Hover a node to reveal its four connection dots — drag a dot onto
+another node to connect them, or onto empty canvas to create the next node *and* the
+connection in one gesture. Double-click a node to rename it inline; everything else
+(icon, colour, shape, routing, arrowheads, line style) lives in the inspector.
+
+Select several nodes and press `⌘G` to wrap them in a labelled zone — a VPC, a
+cluster, a bounded context. The nodes become children of the zone, so moving it moves
+them.
+
+| Shortcut | |
+| --- | --- |
+| `Shift` + drag | rubber-band select |
+| scroll / pinch | pan / zoom |
+| `F` | fit to content |
+| `Enter` | rename the selected node |
+| `⌘D` / `⌘G` | duplicate / wrap in a zone |
+| `⌘Z` / `⇧⌘Z` | undo / redo |
+| `⌘S` | download the `.baugraph.json` |
+| `⌫` | delete selection |
+| arrows | nudge (`⇧` = ×5) |
+
+The current diagram autosaves to `localStorage`, so a reload never loses work. That
+copy is a convenience, not the source of truth — export the JSON and commit it.
+
+## The file format
+
+A diagram is one JSON document. See
+[`examples/order-processing.baugraph.json`](examples/order-processing.baugraph.json)
+for a complete one:
+
+```json
+{
+  "$schema": "/schema/baugraph-v1.schema.json",
+  "baugraph": "1.0",
+  "meta": { "title": "Order processing" },
+  "canvas": { "theme": "light", "grid": true, "snap": true, "snapSize": 10 },
+  "nodes": [
+    {
+      "id": "order-platform",
+      "kind": "zone",
+      "label": "Order platform",
+      "sublabel": "production VPC",
+      "position": { "x": 300, "y": 60 },
+      "size": { "width": 620, "height": 430 }
+    },
+    {
+      "id": "api-gateway",
+      "label": "API Gateway",
+      "sublabel": "REST · TLS",
+      "color": "blue",
+      "icon": "door-open",
+      "position": { "x": 40, "y": 50 },
+      "size": { "width": 168, "height": 62 },
+      "parent": "order-platform"
+    }
+  ],
+  "edges": [
+    {
+      "id": "api-gateway--order-service",
+      "source": "api-gateway",
+      "target": "order-service",
+      "sourceSide": "bottom",
+      "targetSide": "top",
+      "label": "POST /orders"
+    }
+  ]
+}
+```
+
+Design decisions, all in service of readable diffs:
+
+- **Ids are derived from labels** (`api-gateway`, `api-gateway-2`) and never
+  regenerated. Renaming a node does not rewrite every edge that references it.
+- **Defaults are omitted on write** and filled back in on read. A file only ever
+  spells out what differs from the default, so `"line": "dashed"` stands out.
+- **Keys are written in a fixed order** and coordinates are rounded, so saving an
+  unchanged diagram twice produces byte-identical output.
+- **`position` and `size` stay on one line**, keeping "moved a node" to a one-line diff.
+- **A child's `position` is relative to its `parent` zone**, so moving a zone touches
+  one line instead of every node inside it.
+- **`data` on any node or edge is yours** — free-form metadata, round-tripped
+  untouched. Use it for ticket links, ownership, team conventions.
+
+### Validating a diagram
+
+Every export validates against the bundled JSON Schema at
+[`public/schema/baugraph-v1.schema.json`](public/schema/baugraph-v1.schema.json).
+Point your editor at it via the `$schema` key for completion and inline errors while
+hand-editing. Opening a file in the app reports every problem it finds — dangling
+edge endpoints, duplicate ids, unknown parents — with the path to each one.
+
+The schema is generated from the same zod schema the app parses with
+(`src/model/schema.ts`), so the two cannot drift:
 
 ```sh
-npm run build
+npm run schema:generate
 ```
+
+### Migration
+
+Exports from the original single-file `diagram-tool.html` are recognised by their
+shape and converted on open — shapes, sides, routes and Bootstrap icon names are all
+mapped across. See `src/model/migrate.ts`.
+
+## Exports
+
+| Format | Use |
+| --- | --- |
+| `.baugraph.json` | The editable source — this is the one to commit |
+| SVG | Vector, opaque or transparent background |
+| PNG | Raster at 2× or 4× |
+
+SVG and PNG are rendered by a standalone renderer (`src/features/diagram/lib/render-svg.ts`)
+that reuses the same shape, routing and colour code as the canvas, so an export matches
+what is on screen. Everything happens in the browser; nothing is uploaded.
+
+## Project layout
+
+```
+src/
+  model/                   the .baugraph.json format — types, zod schema,
+                           (de)serialisation, migration, id generation
+  features/diagram/
+    components/            canvas, custom nodes and edges, palette, inspector
+    composables/           editor state, undo/redo, autosave, placement
+    lib/                   shape geometry, edge routing, theme, SVG export
+    data/                  node palette, curated Lucide icon registry, sample
+  components/
+    ui/                    shadcn-vue primitives
+    layout/                app shell, header, sidebar
+scripts/                   code generators (JSON Schema, icon registry)
+public/schema/             the published JSON Schema
+examples/                  an example diagram
+```
+
+### Icons
+
+Icons come from [Lucide](https://lucide.dev) (ISC). A curated subset of ~240 is
+bundled — importing all ~3500 would dominate the bundle and make the picker
+unusable. To add one, put its PascalCase name in `CURATED` in
+`scripts/generate-icons.ts` and run:
+
+```sh
+npm run icons:generate
+```
+
+The generator fails loudly on an unknown name, so a typo cannot reach the app as a
+silently missing icon.
+
+## Recommended IDE setup
+
+[VS Code](https://code.visualstudio.com/) with
+[Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar).
+TypeScript cannot type `.vue` imports on its own, which is why `type-check` runs
+`vue-tsc` instead of `tsc`.

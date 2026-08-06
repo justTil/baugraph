@@ -177,4 +177,5 @@ export function paletteItemSize(item: PaletteItem) {
   }
 }
 
-export const DEFAULT_PALETTE_ITEM = PALETTE[0].items[0]
+/** Node type used when repeating the last one (double-click, drop on empty canvas). */
+export const DEFAULT_PALETTE_ITEM: PaletteItem = { label: 'Service', icon: 'package', color: 'blue' }

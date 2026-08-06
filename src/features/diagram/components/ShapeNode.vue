@@ -27,11 +27,14 @@ const inset = computed(() => contentInset(props.data.shape, height.value))
 /** Diamonds and circles have little usable width at the edges, so text stacks. */
 const stacked = computed(() => STACKED_SHAPES.has(props.data.shape) || !icon.value)
 
-/** Keeps long labels from spilling out of narrow silhouettes. */
+/**
+ * Diamonds and circles taper, so their text has to be held well inside the box.
+ * Every other shape lets flexbox do the clamping — see `min-w-0` below.
+ */
 const textWidth = computed(() => {
-  if (props.data.shape === 'diamond') return width.value * 0.62
-  if (props.data.shape === 'circle') return width.value * 0.72
-  return width.value - (stacked.value ? 24 : 60) - inset.value.right
+  if (props.data.shape === 'diamond') return `${width.value * 0.62}px`
+  if (props.data.shape === 'circle') return `${width.value * 0.72}px`
+  return undefined
 })
 
 const HANDLES = [
@@ -71,7 +74,7 @@ const HANDLES = [
     </svg>
 
     <div
-      class="relative flex h-full items-center gap-3 px-3"
+      class="relative flex h-full items-center gap-2.5 px-3"
       :class="stacked ? 'flex-col justify-center gap-1.5 text-center' : ''"
       :style="{
         paddingTop: `${inset.top}px`,
@@ -86,7 +89,7 @@ const HANDLES = [
         class="shrink-0"
         :style="{ color: paint.accent }"
       />
-      <div class="min-w-0" :style="{ maxWidth: `${textWidth}px` }">
+      <div class="min-w-0 flex-1" :style="{ maxWidth: textWidth }">
         <div
           class="truncate text-[13px] leading-tight font-semibold"
           :style="{ color: paint.ink }"

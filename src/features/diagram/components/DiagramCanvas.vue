@@ -8,7 +8,7 @@ import type { Connection, NodeMouseEvent } from '@vue-flow/core'
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import type { Side } from '@/model'
+import type { ColorKey, Side } from '@/model'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useCanvas, CANVAS_ID } from '@/features/diagram/composables/useCanvas'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
@@ -17,7 +17,7 @@ import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
 import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
 import { DEFAULT_PALETTE_ITEM, type PaletteItem } from '@/features/diagram/data/palette'
-import { diagramTheme } from '@/features/diagram/lib/theme'
+import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 
 const {
   nodes,
@@ -47,6 +47,15 @@ const theme = computed(() => diagramTheme(canvas.theme))
 
 /** The last palette item used, repeated by double-click and drag-to-empty. */
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
+
+/** Minimap swatches echo each node's own colour instead of a flat grey. */
+function minimapNodeColor(node: { data?: { color?: ColorKey }; type?: string }) {
+  const paint = nodePaint(
+    { color: node.data?.color ?? 'slate', kind: node.type === 'zone' ? 'zone' : 'shape' },
+    theme.value,
+  )
+  return node.type === 'zone' ? paint.stroke : paint.accent
+}
 
 /* ------------------------------------------------------------ connections */
 
@@ -274,6 +283,7 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
       :pan-on-scroll-mode="PanOnScrollMode.Free"
       :zoom-on-pinch="true"
       :selection-key-code="'Shift'"
+      :elevate-edges-on-select="true"
       :connection-line-style="{ stroke: theme.selection, strokeWidth: 1.8, strokeDasharray: '5 4' }"
       :default-edge-options="{ type: 'diagram' }"
       @connect-start="onConnectStart"
@@ -288,8 +298,11 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
       <MiniMap
         pannable
         zoomable
-        :mask-color="theme.dark ? 'rgba(0,0,0,.55)' : 'rgba(255,255,255,.65)'"
-        class="!bottom-3 !right-3 !rounded-md !border"
+        :node-color="minimapNodeColor"
+        :node-stroke-color="minimapNodeColor"
+        :mask-color="theme.dark ? 'rgba(0,0,0,.55)' : 'rgba(255,255,255,.6)'"
+        :style="{ backgroundColor: theme.surface, borderColor: theme.line }"
+        class="!right-3 !bottom-3 !rounded-md !border"
       />
     </VueFlow>
 

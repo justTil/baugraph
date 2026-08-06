@@ -1,4 +1,5 @@
-import type { Edge, GraphNode, Node } from '@vue-flow/core'
+import type { Edge, GraphEdge, GraphNode, Node } from '@vue-flow/core'
+import type { Ref } from 'vue'
 import { computed, reactive, ref, watch } from 'vue'
 import type {
   ArrowMode,
@@ -48,16 +49,26 @@ export interface EdgeData {
   meta?: Metadata
 }
 
-export type BgNode = Node<NodeData, object, 'shape' | 'zone'>
+// `any` for the custom-events slot mirrors Vue Flow's own default; narrowing it
+// makes the node type incompatible with the library's internal `GraphNode`.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type BgNode = Node<NodeData, any, 'shape' | 'zone'>
 export type BgEdge = Edge<EdgeData>
+
+/** A node as it exists in the store: `data` and `type` are always populated. */
+export type ResolvedNode = BgNode & { type: 'shape' | 'zone'; data: NodeData }
+/** An edge as it exists in the store: `data` is always populated. */
+export type ResolvedEdge = BgEdge & { data: EdgeData }
 
 const STORAGE_KEY = 'baugraph:document:v1'
 const HISTORY_LIMIT = 100
 
 /* ------------------------------------------------------------------ state */
 
-const nodes = ref<BgNode[]>([])
-const edges = ref<BgEdge[]>([])
+// Cast rather than `ref<BgNode[]>`: Vue's deep `UnwrapRef` over Vue Flow's node
+// type blows past the compiler's instantiation depth limit.
+const nodes = ref([]) as Ref<BgNode[]>
+const edges = ref([]) as Ref<BgEdge[]>
 const meta = reactive<DiagramMeta>({ title: 'Untitled diagram' })
 const canvas = reactive<CanvasSettings>({ ...DEFAULT_CANVAS })
 
@@ -69,8 +80,16 @@ const fitRequest = ref(0)
 
 /* -------------------------------------------------------- document <-> VF */
 
-/** Zones render behind everything else; ordinary nodes sit on top. */
-const zIndexFor = (kind: 'shape' | 'zone') => (kind === 'zone' ? 0 : 1)
+/**
+ * Paint order inside the transform pane: zones, then edges, then nodes.
+ * Vue Flow gives edges a z-index of 0 by default, so a zone sharing that level
+ * would cover every connection drawn between the nodes it contains.
+ * (Children inherit `max(parentZ, ownZ) + 1`, so they always clear their zone.)
+ */
+const ZONE_Z = 0
+const EDGE_Z = 1
+const NODE_Z = 2
+const zIndexFor = (kind: 'shape' | 'zone') => (kind === 'zone' ? ZONE_Z : NODE_Z)
 
 function toVueFlowNode(node: DiagramNode): BgNode {
   return {
@@ -99,6 +118,7 @@ function toVueFlowEdge(edge: DiagramEdge): BgEdge {
     source: edge.source,
     target: edge.target,
     type: 'diagram',
+    zIndex: EDGE_Z,
     // Vue Flow needs concrete handle ids; `auto` is resolved at render time.
     sourceHandle: null,
     targetHandle: null,
@@ -120,7 +140,7 @@ function toVueFlowEdge(edge: DiagramEdge): BgEdge {
  * `dimensions`; before the first measure (or in tests) we fall back to `style`.
  */
 function sizeOf(node: BgNode): { width: number; height: number } {
-  const measured = (node as GraphNode).dimensions
+  const measured = (node as Partial<GraphNode>).dimensions
   if (measured?.width && measured?.height) {
     return { width: measured.width, height: measured.height }
   }
@@ -167,14 +187,17 @@ function toModelEdge(edge: BgEdge): DiagramEdge {
 
 /** Snapshot of the editor as a plain, serialisable document. */
 export function toDocument(): DiagramDocument {
+  // Parents must precede their children so Vue Flow can resolve `parentNode`.
+  const sorted: BgNode[] = [...nodes.value].sort(
+    (a, b) =>
+      zIndexFor(a.type === 'zone' ? 'zone' : 'shape') -
+      zIndexFor(b.type === 'zone' ? 'zone' : 'shape'),
+  )
   return {
     baugraph: FORMAT_VERSION,
     meta: { ...meta },
     canvas: { ...canvas },
-    // Parents must precede their children so Vue Flow can resolve `parentNode`.
-    nodes: [...nodes.value]
-      .sort((a, b) => zIndexFor(a.type as 'shape' | 'zone') - zIndexFor(b.type as 'shape' | 'zone'))
-      .map(toModelNode),
+    nodes: sorted.map(toModelNode),
     edges: edges.value.map(toModelEdge),
   }
 }
@@ -261,8 +284,12 @@ export function clearPersisted() {
 
 /* -------------------------------------------------------------- selection */
 
-const selectedNodes = computed(() => nodes.value.filter((n) => (n as GraphNode).selected))
-const selectedEdges = computed(() => edges.value.filter((e) => e.selected))
+const selectedNodes = computed(
+  () => nodes.value.filter((n) => (n as Partial<GraphNode>).selected) as ResolvedNode[],
+)
+const selectedEdges = computed(
+  () => edges.value.filter((e) => (e as Partial<GraphEdge>).selected) as ResolvedEdge[],
+)
 
 /* --------------------------------------------------------------- mutation */
 

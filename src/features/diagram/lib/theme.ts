@@ -65,9 +65,13 @@ function rgbToHex(rgb: number[]): string {
 
 /** Linear blend; `t = 0` returns `a`, `t = 1` returns `b`. */
 export function mix(a: string, b: string, t: number): string {
-  const A = hexToRgb(a)
-  const B = hexToRgb(b)
-  return rgbToHex([0, 1, 2].map((i) => A[i] * (1 - t) + B[i] * t))
+  const [ar, ag, ab] = hexToRgb(a)
+  const [br, bg, bb] = hexToRgb(b)
+  return rgbToHex([
+    ar * (1 - t) + br * t,
+    ag * (1 - t) + bg * t,
+    ab * (1 - t) + bb * t,
+  ])
 }
 
 export interface NodePaint {

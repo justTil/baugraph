@@ -1,0 +1,204 @@
+{
+  "$schema": "/schema/baugraph-v1.schema.json",
+  "baugraph": "1.0",
+  "meta": {
+    "title": "Order processing — reference architecture",
+    "description": "Example diagram shipped with Baugraph."
+  },
+  "canvas": {
+    "theme": "light",
+    "grid": true,
+    "snap": true,
+    "snapSize": 10
+  },
+  "nodes": [
+    {
+      "id": "order-platform",
+      "kind": "zone",
+      "label": "Order platform",
+      "sublabel": "production VPC",
+      "position": { "x": 300, "y": 60 },
+      "size": { "width": 620, "height": 430 }
+    },
+    {
+      "id": "customer",
+      "label": "Customer",
+      "sublabel": "web + mobile",
+      "shape": "circle",
+      "icon": "user",
+      "position": { "x": 60, "y": 190 },
+      "size": { "width": 100, "height": 100 }
+    },
+    {
+      "id": "api-gateway",
+      "label": "API Gateway",
+      "sublabel": "REST · TLS",
+      "color": "blue",
+      "icon": "door-open",
+      "position": { "x": 40, "y": 50 },
+      "size": { "width": 168, "height": 62 },
+      "parent": "order-platform"
+    },
+    {
+      "id": "order-service",
+      "label": "Order Service",
+      "sublabel": "Java · Spring",
+      "color": "blue",
+      "icon": "package",
+      "position": { "x": 40, "y": 180 },
+      "size": { "width": 168, "height": 62 },
+      "parent": "order-platform"
+    },
+    {
+      "id": "auth-service",
+      "label": "Auth Service",
+      "sublabel": "OAuth2 / OIDC",
+      "color": "red",
+      "icon": "shield-check",
+      "position": { "x": 40, "y": 310 },
+      "size": { "width": 168, "height": 62 },
+      "parent": "order-platform"
+    },
+    {
+      "id": "order-db",
+      "label": "Order DB",
+      "sublabel": "PostgreSQL",
+      "shape": "cylinder",
+      "color": "green",
+      "icon": "database",
+      "position": { "x": 300, "y": 50 },
+      "size": { "width": 168, "height": 70 },
+      "parent": "order-platform"
+    },
+    {
+      "id": "order-created",
+      "label": "order.created",
+      "sublabel": "Kafka topic",
+      "shape": "queue",
+      "color": "amber",
+      "icon": "radio-tower",
+      "position": { "x": 300, "y": 180 },
+      "size": { "width": 200, "height": 62 },
+      "parent": "order-platform"
+    },
+    {
+      "id": "billing-adapter",
+      "label": "Billing Adapter",
+      "sublabel": "SAP · IDoc",
+      "color": "purple",
+      "icon": "plug",
+      "position": { "x": 440, "y": 310 },
+      "size": { "width": 168, "height": 62 },
+      "parent": "order-platform"
+    },
+    {
+      "id": "nightly-reconcile",
+      "label": "Nightly Reconcile",
+      "sublabel": "cron 0 2 * * *",
+      "color": "teal",
+      "icon": "rotate-ccw-clock",
+      "position": { "x": 60, "y": 400 },
+      "size": { "width": 168, "height": 62 }
+    },
+    {
+      "id": "sftp-export",
+      "label": "SFTP Export",
+      "sublabel": "orders_*.csv",
+      "color": "green",
+      "icon": "sheet",
+      "position": { "x": 60, "y": 520 },
+      "size": { "width": 168, "height": 62 }
+    },
+    {
+      "id": "dead-letter-queue",
+      "label": "Dead Letter Queue",
+      "sublabel": "retry ×3",
+      "shape": "queue",
+      "color": "red",
+      "icon": "triangle-alert",
+      "position": { "x": 600, "y": 540 },
+      "size": { "width": 220, "height": 62 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "customer--api-gateway",
+      "source": "customer",
+      "target": "api-gateway",
+      "sourceSide": "right",
+      "targetSide": "left",
+      "label": "HTTPS"
+    },
+    {
+      "id": "api-gateway--order-service",
+      "source": "api-gateway",
+      "target": "order-service",
+      "sourceSide": "bottom",
+      "targetSide": "top",
+      "label": "POST /orders"
+    },
+    {
+      "id": "order-service--auth-service",
+      "source": "order-service",
+      "target": "auth-service",
+      "sourceSide": "bottom",
+      "targetSide": "top",
+      "label": "validate token",
+      "line": "dashed"
+    },
+    {
+      "id": "order-service--order-db",
+      "source": "order-service",
+      "target": "order-db",
+      "sourceSide": "right",
+      "targetSide": "left",
+      "label": "write"
+    },
+    {
+      "id": "order-service--order-created",
+      "source": "order-service",
+      "target": "order-created",
+      "sourceSide": "right",
+      "targetSide": "left",
+      "label": "publish"
+    },
+    {
+      "id": "order-created--billing-adapter",
+      "source": "order-created",
+      "target": "billing-adapter",
+      "sourceSide": "bottom",
+      "targetSide": "top",
+      "label": "consume",
+      "line": "dashed"
+    },
+    {
+      "id": "order-created--dead-letter-queue",
+      "source": "order-created",
+      "target": "dead-letter-queue",
+      "sourceSide": "bottom",
+      "targetSide": "top",
+      "label": "on failure",
+      "line": "dotted",
+      "color": "red"
+    },
+    {
+      "id": "nightly-reconcile--order-service",
+      "source": "nightly-reconcile",
+      "target": "order-service",
+      "sourceSide": "right",
+      "targetSide": "left",
+      "label": "trigger",
+      "line": "dashed",
+      "color": "teal"
+    },
+    {
+      "id": "nightly-reconcile--sftp-export",
+      "source": "nightly-reconcile",
+      "target": "sftp-export",
+      "sourceSide": "bottom",
+      "targetSide": "top",
+      "label": "writes",
+      "color": "teal"
+    }
+  ]
+}

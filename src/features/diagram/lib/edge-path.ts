@@ -59,12 +59,15 @@ export function autoSide(from: Box, to: Box): Exclude<Side, 'auto'> {
 
 /** Rounds the corners of a polyline. */
 function polylinePath(points: Vec[], radius: number): string {
-  if (points.length < 2) return ''
-  let d = `M${points[0].x},${points[0].y}`
+  const first = points[0]
+  const last = points.at(-1)
+  if (!first || !last || points.length < 2) return ''
+
+  let d = `M${first.x},${first.y}`
   for (let i = 1; i < points.length - 1; i++) {
-    const p = points[i]
-    const a = points[i - 1]
-    const b = points[i + 1]
+    const p = points[i]!
+    const a = points[i - 1]!
+    const b = points[i + 1]!
     const l1 = Math.hypot(p.x - a.x, p.y - a.y)
     const l2 = Math.hypot(b.x - p.x, b.y - p.y)
     const r = Math.min(radius, l1 / 2, l2 / 2)
@@ -76,30 +79,35 @@ function polylinePath(points: Vec[], radius: number): string {
     const u2 = { x: (b.x - p.x) / (l2 || 1), y: (b.y - p.y) / (l2 || 1) }
     d += `L${p.x - u1.x * r},${p.y - u1.y * r}Q${p.x},${p.y} ${p.x + u2.x * r},${p.y + u2.y * r}`
   }
-  const last = points[points.length - 1]
   return `${d}L${last.x},${last.y}`
 }
 
 function polylineMid(points: Vec[]): Vec {
+  const first = points[0]
+  if (!first) return { x: 0, y: 0 }
+
   const lengths: number[] = []
   let total = 0
   for (let i = 1; i < points.length; i++) {
-    const l = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
+    const a = points[i - 1]!
+    const b = points[i]!
+    const l = Math.hypot(b.x - a.x, b.y - a.y)
     lengths.push(l)
     total += l
   }
+
   let remaining = total / 2
   for (let i = 0; i < lengths.length; i++) {
-    if (remaining <= lengths[i] || i === lengths.length - 1) {
-      const t = lengths[i] ? remaining / lengths[i] : 0
-      return {
-        x: points[i].x + (points[i + 1].x - points[i].x) * t,
-        y: points[i].y + (points[i + 1].y - points[i].y) * t,
-      }
+    const segment = lengths[i]!
+    if (remaining <= segment || i === lengths.length - 1) {
+      const a = points[i]!
+      const b = points[i + 1]!
+      const t = segment ? remaining / segment : 0
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
     }
-    remaining -= lengths[i]
+    remaining -= segment
   }
-  return points[0]
+  return first
 }
 
 function bezierPoint(a: Vec, b: Vec, c: Vec, d: Vec, t: number): Vec {
@@ -205,14 +213,14 @@ export function edgeGeometry(
   }
   points.push(t1, t)
 
-  const cleaned = points.filter(
-    (p, i) =>
-      i === 0 || Math.abs(p.x - points[i - 1].x) > 0.5 || Math.abs(p.y - points[i - 1].y) > 0.5,
-  )
-  const last = cleaned[cleaned.length - 1]
-  const beforeLast = cleaned[cleaned.length - 2] ?? last
+  const cleaned = points.filter((p, i) => {
+    const previous = points[i - 1]
+    return !previous || Math.abs(p.x - previous.x) > 0.5 || Math.abs(p.y - previous.y) > 0.5
+  })
+  const last = cleaned.at(-1) ?? t
+  const beforeLast = cleaned.at(-2) ?? last
   const le = Math.hypot(last.x - beforeLast.x, last.y - beforeLast.y) || 1
-  const first = cleaned[0]
+  const first = cleaned[0] ?? s
   const afterFirst = cleaned[1] ?? first
   const ls = Math.hypot(afterFirst.x - first.x, afterFirst.y - first.y) || 1
 

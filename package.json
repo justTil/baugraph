@@ -8,7 +8,10 @@
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build"
+    "type-check": "vue-tsc --build",
+    "schema:generate": "vite-node scripts/generate-schema.ts",
+    "icons:generate": "vite-node scripts/generate-icons.ts",
+    "generate": "run-s schema:generate icons:generate"
   },
   "dependencies": {
     "@lucide/vue": "^1.28.0",

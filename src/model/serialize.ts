@@ -113,9 +113,38 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
   }
 }
 
+/**
+ * Coordinate pairs are printed on one line. `JSON.stringify` would spread
+ * `{ "x": 300, "y": 60 }` over four, turning "moved a node" into a four-line
+ * diff — the single most common change a diagram ever sees.
+ */
+const INLINE_KEYS = new Set(['position', 'size'])
+
+function format(value: unknown, indent: string, key?: string): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]'
+    const inner = indent + '  '
+    return `[\n${value.map((v) => inner + format(v, inner)).join(',\n')}\n${indent}]`
+  }
+
+  const entries = Object.entries(value).filter(([, v]) => v !== undefined)
+  if (!entries.length) return '{}'
+  if (key && INLINE_KEYS.has(key)) {
+    return `{ ${entries.map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(', ')} }`
+  }
+
+  const inner = indent + '  '
+  const body = entries
+    .map(([k, v]) => `${inner}${JSON.stringify(k)}: ${format(v, inner, k)}`)
+    .join(',\n')
+  return `{\n${body}\n${indent}}`
+}
+
 /** Serialises a document to the exact text written to a `.baugraph.json` file. */
 export function stringify(doc: DiagramDocument): string {
-  return `${JSON.stringify(toFileObject(doc), null, 2)}\n`
+  return `${format(toFileObject(doc), '')}\n`
 }
 
 /**
