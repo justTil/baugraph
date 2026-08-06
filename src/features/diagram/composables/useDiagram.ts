@@ -108,9 +108,6 @@ function toVueFlowNode(node: DiagramNode): BgNode {
     // Deliberately no `extent: 'parent'`: dragging a node out of its zone is how
     // you ungroup it, and dragging one in is how you group it (see `regroup`).
     zIndex: zIndexFor(node.kind),
-    // A zone is a container: it is grabbed by its header, never by its middle,
-    // which is where the nodes it holds are being worked on.
-    dragHandle: node.kind === 'zone' ? '.bg-zone__header' : undefined,
     selectable: !locked,
     draggable: !locked,
     connectable: !locked,

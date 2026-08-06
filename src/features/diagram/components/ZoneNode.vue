@@ -58,8 +58,9 @@ const frame = computed(() => roundedRect(0.75, 0.75, width.value - 1.5, height.v
     </svg>
 
     <!--
-      Only the header strip is draggable. The rest of the zone stays click-through
-      so nodes inside it can be selected and dragged normally.
+      The whole frame selects and drags the zone — hunting for the header strip
+      to move a zone gets old fast. Nodes inside it are painted above it and take
+      the click first; lock the zone when even that gets in the way.
     -->
     <div class="bg-zone__header" :class="{ 'bg-zone__header--locked': data.locked }">
       <div class="flex items-center gap-1.5">
@@ -109,7 +110,7 @@ const frame = computed(() => roundedRect(0.75, 0.75, width.value - 1.5, height.v
   cursor: move;
 }
 
-/* Locked: only the badge stays live, so the header cannot be grabbed. */
+/* Locked: only the badge stays live, so nothing here can be grabbed. */
 .bg-zone__header--locked {
   pointer-events: none;
   cursor: default;

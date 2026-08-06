@@ -379,27 +379,21 @@ watch(fitRequest, () => nextTick(() => fitView({ padding: 0.2 })))
   width: auto;
 }
 
-/*
- * The wrapper Vue Flow puts around a node is a full-size hit target, so an empty
- * spot inside a zone would select and drag the zone rather than reach the canvas
- * or whatever sits underneath. Only the header (and the resize handles, once the
- * zone is selected) answer the pointer.
- *
- * `!important` is unavoidable: Vue Flow writes `pointer-events: all` as an inline
- * style on that wrapper for as long as any node listener is registered, and this
- * is the one place it has to be overruled.
- */
 .vue-flow__node-zone {
   cursor: default;
-  pointer-events: none !important;
 }
 
-.vue-flow__node-zone .vue-flow__resize-control {
-  pointer-events: all;
-}
-
-/* Same story for a locked node — see the lock badge, which opts back in. */
-.vue-flow__node-shape:not(.selectable) {
+/*
+ * Locked nodes are the ones Vue Flow leaves without its `selectable` class, and
+ * they let the pointer straight through: a locked zone is one you are working
+ * inside, so its frame must not swallow the clicks meant for its contents or for
+ * the canvas. The lock badge opts back in, so there is always a way to unlock.
+ *
+ * `!important` is unavoidable here — Vue Flow writes `pointer-events: all` as an
+ * inline style on that wrapper for as long as any node listener is registered.
+ */
+.vue-flow__node-shape:not(.selectable),
+.vue-flow__node-zone:not(.selectable) {
   pointer-events: none !important;
 }
 
