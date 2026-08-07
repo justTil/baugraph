@@ -5,7 +5,7 @@ import { documentSchema } from '@/model/schema'
 import { migrate } from '@/model/migrate'
 
 /** Where the published JSON Schema lives, relative to the deployed app. */
-export const SCHEMA_URL = '/schema/baugraph-v1.schema.json'
+export const SCHEMA_URL = `${import.meta.env.BASE_URL}schema/baugraph-v1.schema.json`
 
 export class DiagramParseError extends Error {
   constructor(
