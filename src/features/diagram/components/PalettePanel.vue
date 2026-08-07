@@ -21,16 +21,18 @@ const { place } = usePlacement()
 
 const query = ref('')
 const searching = computed(() => query.value.trim().length > 0)
-const groups = computed(() => searchPalette(query.value))
 
 /**
- * Node types are open, technologies are folded away — there are a few hundred of
- * them, and the palette is a place to reach for a shape, not to browse vendors.
- * A search opens everything that matched.
+ * Only the building blocks. The technology catalogue — a few hundred vendors —
+ * is reached from the node inspector and the canvas context menu instead; the
+ * palette is a place to grab a shape, not to browse products.
  */
-const expanded = reactive(
-  Object.fromEntries(PALETTE.map((group) => [group.id, group.kind !== 'tech'])),
+const groups = computed(() =>
+  searchPalette(query.value).filter((group) => group.kind === 'types'),
 )
+
+/** Groups start open; a search opens everything that matched. */
+const expanded = reactive(Object.fromEntries(PALETTE.map((group) => [group.id, true])))
 
 const isOpen = (group: PaletteGroup) => searching.value || expanded[group.id]
 
@@ -55,7 +57,7 @@ function onDragStart(event: DragEvent, item: PaletteItem) {
         />
         <Input
           v-model="query"
-          placeholder="Search nodes & tech…"
+          placeholder="Search nodes…"
           spellcheck="false"
           class="h-8 pl-8 text-xs"
         />
