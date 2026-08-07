@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Waypoints } from '@lucide/vue'
 import {
   Sidebar,
   SidebarContent,
@@ -27,10 +26,11 @@ const { groups, isActive, setActiveItem, activeItemId } = useNavigation()
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" class="cursor-default hover:bg-transparent">
+            <!-- Wordmark: "BG" set in Sora, matching public/favicon.svg. -->
             <div
-              class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg"
+              class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg font-sans text-[13px] leading-none font-bold tracking-tight"
             >
-              <Waypoints class="size-4" />
+              BG
             </div>
             <div class="grid flex-1 text-left leading-tight">
               <span class="truncate font-semibold">Baugraph</span>
