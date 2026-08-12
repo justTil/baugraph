@@ -8,4 +8,5 @@ import { defineAsyncComponent } from 'vue'
 export const views: Record<string, Component> = {
   editor: defineAsyncComponent(() => import('@/features/diagram/views/DiagramView.vue')),
   settings: defineAsyncComponent(() => import('@/features/settings/views/SettingsView.vue')),
+  legal: defineAsyncComponent(() => import('@/features/legal/views/LegalView.vue')),
 }
