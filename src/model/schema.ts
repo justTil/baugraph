@@ -2,13 +2,21 @@ import { z } from 'zod'
 import {
   ARROW_MODES,
   COLOR_KEYS,
+  FLOW_MODES,
+  FLOW_MOTIONS,
+  FLOW_TOKENS,
   FORMAT_VERSION,
   LINE_STYLES,
   ROUTES,
   SHAPE_KEYS,
   SIDES,
 } from '@/model/types'
-import { DEFAULT_CANVAS, EDGE_DEFAULTS, NODE_DEFAULTS } from '@/model/defaults'
+import {
+  DEFAULT_CANVAS,
+  EDGE_DEFAULTS,
+  FLOW_DEFAULTS,
+  NODE_DEFAULTS,
+} from '@/model/defaults'
 
 /**
  * Runtime schema for `.baugraph.json`.
@@ -82,6 +90,25 @@ export const edgeSchema = z.object({
   data: metadataSchema.optional(),
 })
 
+export const flowSchema = z.object({
+  id: idSchema,
+  label: z.string().default(FLOW_DEFAULTS.label),
+  // A flow with nothing to travel has nothing to say; the editor drops one whose
+  // last connection is deleted rather than leaving it behind.
+  edges: z.array(idSchema).min(1),
+  from: idSchema.nullable().default(FLOW_DEFAULTS.from),
+  color: z.enum(COLOR_KEYS).default(FLOW_DEFAULTS.color),
+  motion: z.enum(FLOW_MOTIONS).default(FLOW_DEFAULTS.motion),
+  token: z.enum(FLOW_TOKENS).default(FLOW_DEFAULTS.token),
+  mode: z.enum(FLOW_MODES).default(FLOW_DEFAULTS.mode),
+  speed: z.number().finite().min(10).max(4000).default(FLOW_DEFAULTS.speed),
+  count: z.number().int().min(1).max(12).default(FLOW_DEFAULTS.count),
+  pause: z.number().finite().min(0).max(60).default(FLOW_DEFAULTS.pause),
+  loop: z.boolean().default(FLOW_DEFAULTS.loop),
+  enabled: z.boolean().default(FLOW_DEFAULTS.enabled),
+  data: metadataSchema.optional(),
+})
+
 export const canvasSchema = z.object({
   theme: z.enum(['light', 'dark']).default(DEFAULT_CANVAS.theme),
   grid: z.boolean().default(DEFAULT_CANVAS.grid),
@@ -105,6 +132,7 @@ export const documentSchema = z
     canvas: canvasSchema.default(DEFAULT_CANVAS),
     nodes: z.array(nodeSchema).default([]),
     edges: z.array(edgeSchema).default([]),
+    flows: z.array(flowSchema).default([]),
   })
   .superRefine((doc, ctx) => {
     const ids = new Set<string>()
@@ -174,6 +202,48 @@ export const documentSchema = z
             message: `${end} "${edge[end]}" does not reference an existing node`,
           })
         }
+      }
+    })
+
+    // A flow is a set of references and nothing else, so every one of them has
+    // to resolve — a dangling edge id would animate a connection that is not
+    // there, which is a diagram lying about itself.
+    const flowIds = new Set<string>()
+    doc.flows.forEach((flow, i) => {
+      if (flowIds.has(flow.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['flows', i, 'id'],
+          message: `duplicate flow id "${flow.id}"`,
+        })
+      }
+      flowIds.add(flow.id)
+
+      const seenEdges = new Set<string>()
+      flow.edges.forEach((edge, j) => {
+        if (!edgeIds.has(edge)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['flows', i, 'edges', j],
+            message: `"${edge}" does not reference an existing connection`,
+          })
+        }
+        if (seenEdges.has(edge)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['flows', i, 'edges', j],
+            message: `connection "${edge}" is listed twice in this flow`,
+          })
+        }
+        seenEdges.add(edge)
+      })
+
+      if (flow.from != null && !ids.has(flow.from)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['flows', i, 'from'],
+          message: `start node "${flow.from}" does not exist`,
+        })
       }
     })
   })

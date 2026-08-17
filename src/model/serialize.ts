@@ -1,6 +1,6 @@
-import type { DiagramDocument, DiagramEdge, DiagramNode } from '@/model/types'
+import type { DiagramDocument, DiagramEdge, DiagramNode, MessageFlow } from '@/model/types'
 import { FORMAT_VERSION } from '@/model/types'
-import { EDGE_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
+import { EDGE_DEFAULTS, FLOW_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
 import { documentSchema } from '@/model/schema'
 import { migrate } from '@/model/migrate'
 
@@ -76,6 +76,23 @@ const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'data',
 ]
 
+const FLOW_KEY_ORDER: (keyof MessageFlow)[] = [
+  'id',
+  'label',
+  'edges',
+  'from',
+  'color',
+  'motion',
+  'token',
+  'mode',
+  'speed',
+  'count',
+  'pause',
+  'loop',
+  'enabled',
+  'data',
+]
+
 /** Rounds a coordinate so float noise never shows up in a diff. */
 const round = (n: number) => Math.round(n * 100) / 100
 
@@ -106,6 +123,12 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
     return ordered(trimmed as DiagramEdge, EDGE_KEY_ORDER)
   })
 
+  const flows = (doc.flows ?? []).map((flow) => {
+    const trimmed = omitDefaults({ ...flow }, FLOW_DEFAULTS)
+    if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    return ordered(trimmed as MessageFlow, FLOW_KEY_ORDER)
+  })
+
   return {
     $schema: SCHEMA_URL,
     baugraph: doc.baugraph || FORMAT_VERSION,
@@ -113,6 +136,9 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
     canvas: ordered({ ...doc.canvas }, ['theme', 'grid', 'snap', 'snapSize']),
     nodes,
     edges,
+    // A diagram with no flows says nothing about them: an empty array would show
+    // up as a change in every file the moment this feature shipped.
+    ...(flows.length ? { flows } : {}),
   }
 }
 
@@ -128,6 +154,11 @@ function format(value: unknown, indent: string, key?: string): string {
 
   if (Array.isArray(value)) {
     if (!value.length) return '[]'
+    // A list of plain values — a flow's connection ids — is one thing, so it goes
+    // on one line. Only lists of objects (nodes, edges) are stacked.
+    if (value.every((v) => v === null || typeof v !== 'object')) {
+      return `[${value.map((v) => JSON.stringify(v)).join(', ')}]`
+    }
     const inner = indent + '  '
     return `[\n${value.map((v) => inner + format(v, inner)).join(',\n')}\n${indent}]`
   }

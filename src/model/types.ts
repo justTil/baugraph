@@ -130,6 +130,74 @@ export interface DiagramEdge {
   data?: Metadata
 }
 
+/**
+ * How a flow is drawn.
+ *   - `token` — discrete messages travelling the connection (GSAP-driven).
+ *   - `dash`  — a marching dash along the line, the way a link under constant
+ *               load reads. Pure CSS, so it costs nothing.
+ *   - `both`  — messages on top of the moving line.
+ */
+export const FLOW_MOTIONS = ['token', 'dash', 'both'] as const
+export type FlowMotion = (typeof FLOW_MOTIONS)[number]
+
+/** What a single message is drawn as. */
+export const FLOW_TOKENS = ['dot', 'packet', 'envelope'] as const
+export type FlowToken = (typeof FLOW_TOKENS)[number]
+
+/**
+ * What happens where a flow's connections fork.
+ *   - `broadcast` — the message takes *every* onward connection at once, so one
+ *     arriving at a topic with three subscribers leaves as three. Publish /
+ *     subscribe, and the move this feature exists for.
+ *   - `sequence` — one message walks the connections one after another, in
+ *     travel order. A routing slip, or a step-by-step walkthrough.
+ */
+export const FLOW_MODES = ['broadcast', 'sequence'] as const
+export type FlowMode = (typeof FLOW_MODES)[number]
+
+/**
+ * A message travelling the diagram.
+ *
+ * A flow names a set of connections and lets the editor work out the rest: the
+ * order the hops happen in, and where the message multiplies, are *derived* from
+ * how those connections are wired (see `features/diagram/lib/flow-graph.ts`).
+ * That is what keeps the file terse — adding a fourth subscriber to a fan-out is
+ * one more id in `edges`, not a rewritten timeline — and it is why a flow stays
+ * correct when the diagram is rerouted underneath it.
+ */
+export interface MessageFlow {
+  /** Stable identifier, derived from the label like every other id. */
+  id: string
+  /** Names the flow in the inspector. Never drawn on the canvas. */
+  label: string
+  /**
+   * Connections the message travels, by edge id. Order is not significant —
+   * the traversal order comes from the graph.
+   */
+  edges: string[]
+  /**
+   * Node the message starts at. Omitted means "work it out": the connection set
+   * has exactly one end nothing else feeds into, and that is the start.
+   */
+  from?: string | null
+  /** Semantic colour of the messages, resolved by the active theme. */
+  color: ColorKey
+  motion: FlowMotion
+  token: FlowToken
+  mode: FlowMode
+  /** Canvas units per second, so every hop moves at the same visible rate. */
+  speed: number
+  /** Messages sent per pass — one message, or a stream of them. */
+  count: number
+  /** Seconds of stillness before the flow repeats. */
+  pause: number
+  loop: boolean
+  /** Off keeps the flow in the file without animating it. */
+  enabled: boolean
+  /** User metadata; never interpreted by the editor. */
+  data?: Metadata
+}
+
 export interface CanvasSettings {
   theme: 'light' | 'dark'
   grid: boolean
@@ -153,4 +221,6 @@ export interface DiagramDocument {
   canvas: CanvasSettings
   nodes: DiagramNode[]
   edges: DiagramEdge[]
+  /** Message flows drawn over the connections above. */
+  flows: MessageFlow[]
 }

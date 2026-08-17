@@ -54,6 +54,29 @@
       "size": { "width": 168, "height": 70 }
     },
     {
+      "id": "notification-service",
+      "type": "notification",
+      "tech": "node_js",
+      "label": "Notification Service",
+      "sublabel": "email · push",
+      "color": "teal",
+      "icon": "bell",
+      "position": { "x": 1080, "y": 150 },
+      "size": { "width": 220, "height": 70 }
+    },
+    {
+      "id": "analytics-sink",
+      "type": "data_warehouse",
+      "tech": "snowflake",
+      "label": "Analytics",
+      "sublabel": "order events",
+      "shape": "cylinder",
+      "color": "green",
+      "icon": "warehouse",
+      "position": { "x": 1080, "y": 300 },
+      "size": { "width": 180, "height": 120 }
+    },
+    {
       "id": "dead-letter-queue",
       "type": "dead_letter_queue",
       "tech": "apache_kafka",
@@ -192,6 +215,24 @@
       "line": "dashed"
     },
     {
+      "id": "order-created--notification-service",
+      "source": "order-created",
+      "target": "notification-service",
+      "sourceSide": "right",
+      "targetSide": "left",
+      "label": "consume",
+      "line": "dashed"
+    },
+    {
+      "id": "order-created--analytics-sink",
+      "source": "order-created",
+      "target": "analytics-sink",
+      "sourceSide": "right",
+      "targetSide": "left",
+      "label": "stream",
+      "line": "dashed"
+    },
+    {
       "id": "order-created--dead-letter-queue",
       "source": "order-created",
       "target": "dead-letter-queue",
@@ -219,6 +260,16 @@
       "targetSide": "top",
       "label": "writes",
       "color": "teal"
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-order-placed",
+      "label": "Order placed",
+      "edges": ["api-gateway--order-service", "order-service--order-created", "order-created--billing-adapter", "order-created--notification-service", "order-created--analytics-sink"],
+      "from": "api-gateway",
+      "token": "envelope",
+      "pause": 0.9
     }
   ]
 }

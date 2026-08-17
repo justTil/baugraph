@@ -316,6 +316,126 @@
           "target"
         ]
       }
+    },
+    "flows": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          },
+          "label": {
+            "default": "",
+            "type": "string"
+          },
+          "edges": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          },
+          "from": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "color": {
+            "default": "blue",
+            "type": "string",
+            "enum": [
+              "slate",
+              "blue",
+              "teal",
+              "green",
+              "amber",
+              "red",
+              "purple",
+              "pink"
+            ]
+          },
+          "motion": {
+            "default": "token",
+            "type": "string",
+            "enum": [
+              "token",
+              "dash",
+              "both"
+            ]
+          },
+          "token": {
+            "default": "dot",
+            "type": "string",
+            "enum": [
+              "dot",
+              "packet",
+              "envelope"
+            ]
+          },
+          "mode": {
+            "default": "broadcast",
+            "type": "string",
+            "enum": [
+              "broadcast",
+              "sequence"
+            ]
+          },
+          "speed": {
+            "default": 220,
+            "type": "number",
+            "minimum": 10,
+            "maximum": 4000
+          },
+          "count": {
+            "default": 1,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "pause": {
+            "default": 0.6,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60
+          },
+          "loop": {
+            "default": true,
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "edges"
+        ]
+      }
     }
   }
 }

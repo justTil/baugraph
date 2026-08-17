@@ -29,6 +29,7 @@ import ColorSwatches from '@/features/diagram/components/ColorSwatches.vue'
 import IconPicker from '@/features/diagram/components/IconPicker.vue'
 import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
+import FlowsSection from '@/features/diagram/components/FlowsSection.vue'
 import { SHAPE_KEYS } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
 import { TECH_CATEGORIES, categoryFirst, techTerms } from '@/features/diagram/data/tech'
@@ -682,6 +683,14 @@ function withCommit(fn: () => void) {
           </dl>
         </section>
       </template>
+
+      <!--
+        Flows sit outside the selection branches on purpose: creating one starts
+        from whatever is selected, so the panel has to offer it in every context
+        — and the list of what a diagram already animates is worth keeping in
+        one predictable place rather than moving as the selection changes.
+      -->
+      <FlowsSection />
     </div>
   </aside>
 </template>

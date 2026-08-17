@@ -10,6 +10,7 @@ import type {
   DiagramMeta,
   DiagramNode,
   LineStyle,
+  MessageFlow,
   Metadata,
   Route,
   ShapeKey,
@@ -19,9 +20,11 @@ import {
   DEFAULT_CANVAS,
   DEFAULT_NODE_SIZE,
   DEFAULT_ZONE_SIZE,
+  FLOW_DEFAULTS,
   FORMAT_VERSION,
   blankDocument,
   edgeId as makeEdgeId,
+  flowId as makeFlowId,
   nodeId as makeNodeId,
 } from '@/model'
 import type { PaletteItem } from '@/features/diagram/data/palette'
@@ -83,6 +86,11 @@ const HISTORY_LIMIT = 100
 // type blows past the compiler's instantiation depth limit.
 const nodes = ref([]) as Ref<BgNode[]>
 const edges = ref([]) as Ref<BgEdge[]>
+/**
+ * Flows are held exactly as the file states them — they carry no presentation of
+ * their own, only references to connections that do.
+ */
+const flows = ref<MessageFlow[]>([])
 const meta = reactive<DiagramMeta>({ title: 'Untitled diagram' })
 const canvas = reactive<CanvasSettings>({ ...DEFAULT_CANVAS })
 
@@ -246,6 +254,7 @@ export function toDocument(): DiagramDocument {
     canvas: { ...canvas },
     nodes: sorted.map(toModelNode),
     edges: edges.value.map(toModelEdge),
+    flows: flows.value.map((flow) => ({ ...flow, edges: [...flow.edges] })),
   }
 }
 
@@ -255,6 +264,7 @@ function applyDocument(doc: DiagramDocument) {
   Object.assign(canvas, doc.canvas)
   nodes.value = doc.nodes.map(toVueFlowNode)
   edges.value = doc.edges.map(toVueFlowEdge)
+  flows.value = (doc.flows ?? []).map((flow) => ({ ...flow, edges: [...flow.edges] }))
 }
 
 /* ---------------------------------------------------------------- history */
@@ -546,6 +556,120 @@ export function addEdge(
   return edge
 }
 
+/* -------------------------------------------------------------- flows */
+
+/**
+ * New flows walk through the palette rather than all arriving blue, so a diagram
+ * that animates two paths at once can be read without opening the inspector.
+ */
+const FLOW_COLOURS: ColorKey[] = ['blue', 'purple', 'teal', 'amber', 'pink', 'green']
+
+const takenFlowIds = () => new Set(flows.value.map((f) => f.id))
+
+/**
+ * Drops connections a flow no longer has, and the flow itself once it has none
+ * left. Called after anything that deletes edges, so a flow can never outlive
+ * what it describes — the invariant the schema enforces on the way back in.
+ */
+function pruneFlows() {
+  const live = new Set(edges.value.map((e) => e.id))
+  const nodeIds = new Set(nodes.value.map((n) => n.id))
+  let changed = false
+
+  const next = flows.value
+    .map((flow) => {
+      const kept = flow.edges.filter((id) => live.has(id))
+      const from = flow.from && nodeIds.has(flow.from) ? flow.from : null
+      if (kept.length === flow.edges.length && from === (flow.from ?? null)) return flow
+      changed = true
+      return { ...flow, edges: kept, from }
+    })
+    .filter((flow) => flow.edges.length > 0)
+
+  // Only write when something actually went, so pruning never dirties the doc.
+  if (changed || next.length !== flows.value.length) flows.value = next
+}
+
+/**
+ * Creates a flow over `edgeIds`. Everything else about it — the order the hops
+ * happen in, where the message multiplies — is derived from the graph, so this
+ * only has to decide what the message is and where it starts.
+ */
+export function addFlow(edgeIds: Iterable<string>, patch: Partial<MessageFlow> = {}): MessageFlow | null {
+  const live = new Map(edges.value.map((e) => [e.id, e]))
+  const wanted = [...new Set(edgeIds)].filter((id) => live.has(id))
+  if (!wanted.length) return null
+
+  // The flow is named after where its message comes from, which is the one thing
+  // about it a reader needs before opening anything.
+  const targets = new Set(wanted.map((id) => live.get(id)!.target))
+  const start = wanted.map((id) => live.get(id)!).find((e) => !targets.has(e.source))?.source
+  const label = nodes.value.find((n) => n.id === start)?.data?.label || 'Message'
+
+  const flow: MessageFlow = {
+    ...FLOW_DEFAULTS,
+    color: FLOW_COLOURS[flows.value.length % FLOW_COLOURS.length]!,
+    id: makeFlowId(label, takenFlowIds()),
+    label,
+    edges: wanted,
+    ...patch,
+  }
+  flows.value = [...flows.value, flow]
+  return flow
+}
+
+export function updateFlow(id: string, patch: Partial<MessageFlow>) {
+  flows.value = flows.value.map((flow) => (flow.id === id ? { ...flow, ...patch } : flow))
+}
+
+export function removeFlow(id: string) {
+  flows.value = flows.value.filter((flow) => flow.id !== id)
+}
+
+/** Adds or drops one connection, and takes the flow with it if it was the last. */
+export function toggleFlowEdge(id: string, edgeId: string) {
+  const flow = flows.value.find((f) => f.id === id)
+  if (!flow) return
+  const next = flow.edges.includes(edgeId)
+    ? flow.edges.filter((e) => e !== edgeId)
+    : [...flow.edges, edgeId]
+  if (!next.length) removeFlow(id)
+  else updateFlow(id, { edges: next })
+}
+
+/** Connections with both ends inside `ids` — what "animate these nodes" means. */
+export function edgesWithin(ids: Iterable<string>): string[] {
+  const inside = new Set(ids)
+  return edges.value.filter((e) => inside.has(e.source) && inside.has(e.target)).map((e) => e.id)
+}
+
+/**
+ * Everything a message could reach from `start`, breadth-first. This is the
+ * one-click fan-out: point at the service that publishes and the whole path —
+ * broker included, and every subscriber hanging off it — comes back.
+ */
+export function edgesDownstream(start: string, maxDepth = 6): string[] {
+  const out: string[] = []
+  const seen = new Set<string>([start])
+  let frontier = [start]
+
+  for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+    const next: string[] = []
+    for (const node of frontier) {
+      for (const edge of edges.value) {
+        if (edge.source !== node || out.includes(edge.id)) continue
+        out.push(edge.id)
+        if (!seen.has(edge.target)) {
+          seen.add(edge.target)
+          next.push(edge.target)
+        }
+      }
+    }
+    frontier = next
+  }
+  return out
+}
+
 export function removeSelection() {
   const nodeIds = new Set(selectedNodes.value.map((n) => n.id))
   const edgeIds = new Set(selectedEdges.value.map((e) => e.id))
@@ -580,6 +704,7 @@ export function removeSelection() {
   edges.value = edges.value.filter(
     (e) => !edgeIds.has(e.id) && !nodeIds.has(e.source) && !nodeIds.has(e.target),
   )
+  pruneFlows()
 }
 
 /** Locks or unlocks nodes by id; locked nodes drop out of the selection. */
@@ -1069,7 +1194,7 @@ let installed = false
 function install() {
   if (installed) return
   installed = true
-  watch([nodes, edges, meta, canvas], persist, { deep: true })
+  watch([nodes, edges, flows, meta, canvas], persist, { deep: true })
 }
 
 export function useDiagram() {
@@ -1077,6 +1202,7 @@ export function useDiagram() {
   return {
     nodes,
     edges,
+    flows,
     meta,
     canvas,
     selectedNodes,
@@ -1110,6 +1236,12 @@ export function useDiagram() {
     setNodeTech,
     updateEdgeData,
     reverseEdge,
+    addFlow,
+    updateFlow,
+    removeFlow,
+    toggleFlowEdge,
+    edgesWithin,
+    edgesDownstream,
     reorderNode,
     alignSelection,
     nudgeSelection,
