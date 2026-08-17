@@ -51,16 +51,34 @@ const { paused, reduced, highlighted, editorOpen, editing, editingEdge, planOf }
 
 const current = computed(() => flows.value.find((flow) => flow.id === editing.value) ?? null)
 
+const labelOf = (id: string) => nodes.value.find((n) => n.id === id)?.data?.label || id
+
 /** The flow's connections, named by the nodes they run between. */
 const hops = computed(() => {
   const flow = current.value
   if (!flow) return []
   const byId = new Map(edges.value.map((e) => [e.id, e]))
-  const label = (id: string) => nodes.value.find((n) => n.id === id)?.data?.label || id
   return flow.edges.flatMap((id) => {
     const edge = byId.get(id)
-    return edge ? [{ id, from: label(edge.source), to: label(edge.target) }] : []
+    return edge ? [{ id, from: labelOf(edge.source), to: labelOf(edge.target) }] : []
   })
+})
+
+/**
+ * The first node this flow leaves by more than one connection, if there is one.
+ * Named so that the setting governing forks can point at the fork it governs,
+ * rather than describing a situation the reader has to check for themselves.
+ */
+const fork = computed(() => {
+  const flow = current.value
+  if (!flow) return null
+  const inFlow = new Set(flow.edges)
+  const onward = new Map<string, number>()
+  for (const edge of edges.value) {
+    if (inFlow.has(edge.id)) onward.set(edge.source, (onward.get(edge.source) ?? 0) + 1)
+  }
+  const split = [...onward.entries()].find(([, count]) => count > 1)
+  return split ? { label: labelOf(split[0]), count: split[1] } : null
 })
 
 const overrideOf = (flow: MessageFlow, edgeId: string) => flow.style?.[edgeId] ?? {}
@@ -357,23 +375,27 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
               </div>
             </div>
 
+            <!--
+              Only ever visible on a flow that forks, so it says so itself rather
+              than leaving the reader to wonder why the setting does nothing on a
+              straight line.
+            -->
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-1.5">
-                <Label class="text-xs">Where the path forks</Label>
+                <Label class="text-xs">When one node feeds several</Label>
                 <SegmentedField
                   :model-value="current.mode"
                   :options="[
                     {
                       value: 'broadcast',
-                      label: 'Multiply',
-                      title:
-                        'The message takes every onward connection at once — one in, three out',
+                      label: 'All at once',
+                      title: 'Every onward connection carries its own copy, at the same time',
                       preview: 'fork-broadcast',
                     },
                     {
                       value: 'sequence',
-                      label: 'One by one',
-                      title: 'A single message walks the connections in turn',
+                      label: 'One at a time',
+                      title: 'A single message takes the onward connections in turn',
                       preview: 'fork-sequence',
                     },
                   ]"
@@ -383,6 +405,21 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                     <FlowGlyph :kind="option.preview as never" :colour="COLOR_HEX[current!.color]" />
                   </template>
                 </SegmentedField>
+                <p class="text-muted-foreground text-[11px] leading-relaxed">
+                  <template v-if="fork">
+                    <em>{{ fork.label }}</em> leaves on {{ fork.count }} connections at once, so
+                    {{
+                      current.mode === 'broadcast'
+                        ? `a message arriving there becomes ${fork.count} — a topic delivering to every subscriber.`
+                        : 'one message takes them in turn instead — a routing slip, not a broadcast.'
+                    }}
+                  </template>
+                  <template v-else>
+                    Nothing in this flow leaves a node by more than one connection yet, so this
+                    changes nothing today. Add a second line out of the same node and it decides
+                    whether the message copies onto both or takes them in turn.
+                  </template>
+                </p>
               </div>
 
               <!--
@@ -414,6 +451,13 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                     <FlowGlyph :kind="option.preview as never" :colour="COLOR_HEX[current!.color]" />
                   </template>
                 </SegmentedField>
+                <p class="text-muted-foreground text-[11px] leading-relaxed">
+                  {{
+                    current.stream
+                      ? 'The line is never empty: as one message arrives the next has already left. This is a link under permanent load.'
+                      : 'A message goes through and the line falls quiet until the next one. This is something that happened, once.'
+                  }}
+                </p>
               </div>
             </div>
 

@@ -123,9 +123,10 @@ const SHORTCUTS: [string, string][] = [
           </p>
           <p>
             Pick how it is shown: <em>Messages</em> travelling the line, a moving <em>Line</em>
-            for a link under constant load, or both. Set <em>Where the path forks</em> to
-            <em>One by one</em> and a single message walks the connections in turn instead —
-            a routing slip, or a walkthrough of a sequence.
+            for a link under constant load, or both. Where a node leaves on several connections
+            at once, <em>When one node feeds several</em> decides what that means: <em>All at
+            once</em> copies the message onto every one of them, <em>One at a time</em> sends a
+            single message down them in turn — a routing slip, or a walkthrough of a sequence.
           </p>
           <p>
             Two paths out of the same node rarely mean the same thing, so each connection can
