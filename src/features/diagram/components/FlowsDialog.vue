@@ -487,6 +487,17 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
             -->
             <section class="space-y-2 border-t pt-4">
               <Label class="text-xs">Connections ({{ hops.length }})</Label>
+              <p class="text-muted-foreground text-[11px] leading-relaxed">
+                These are the lines this one message travels, strung together into a single
+                flow — select another connection on the canvas and press
+                <em>Add to “{{ current.label || current.id }}”</em> to bring it in too.
+              </p>
+              <p class="text-muted-foreground text-[11px] leading-relaxed">
+                Being in the same flow does not mean looking the same. Open one below to give
+                that line its own colour, message shape or speed — a failure path as a red
+                packet crawling to the dead-letter queue, while everything else stays a blue
+                envelope at full speed.
+              </p>
 
               <ul class="divide-y rounded-md border">
                 <li v-for="hop in hops" :key="hop.id">
