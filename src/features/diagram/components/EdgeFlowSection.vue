@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { Plus, Settings2, Waypoints, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import type { MessageFlow } from '@/model'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
@@ -48,65 +47,78 @@ function hover(flow: MessageFlow | null) {
 </script>
 
 <template>
-  <section class="space-y-2 border-b p-3">
-    <Label class="text-xs">Flows on this connection</Label>
-
-    <div
-      v-for="flow in on"
-      :key="flow.id"
-      class="hover:bg-accent/60 flex items-center gap-1.5 rounded-md px-1.5 py-1"
-      @mouseenter="hover(flow)"
-      @mouseleave="hover(null)"
-    >
-      <span
-        class="size-2.5 shrink-0 rounded-full border border-black/20 dark:border-white/20"
-        :style="{ background: colourOf(flow) }"
-      />
-      <span class="min-w-0 flex-1 truncate text-xs font-medium">
-        {{ flow.label || flow.id }}
-        <span v-if="tweaked(flow)" class="text-muted-foreground font-normal">· own look</span>
+  <section class="border-b">
+    <!--
+      Given its own header rather than another label in the stack: flows are the
+      one thing here that belongs to the diagram rather than to the connection,
+      so the panel should read as changing subject at this point.
+    -->
+    <header class="bg-muted/50 flex items-center gap-1.5 border-b px-3 py-2">
+      <Waypoints class="text-muted-foreground size-3.5 shrink-0" />
+      <span class="text-muted-foreground text-[10px] font-bold tracking-[0.09em] uppercase">
+        Message flows
       </span>
-      <Button
-        variant="ghost"
-        size="icon"
-        class="text-muted-foreground -my-1 size-6 shrink-0"
-        title="Edit this flow, and how it looks on this connection"
-        @click="openFlowEditor(flow.id, props.edgeId)"
+      <span class="text-muted-foreground/70 ml-auto text-[10px]">on this connection</span>
+    </header>
+
+    <div class="space-y-2 p-3">
+      <div
+        v-for="flow in on"
+        :key="flow.id"
+        class="hover:bg-accent/60 flex items-center gap-1.5 rounded-md px-1.5 py-1"
+        @mouseenter="hover(flow)"
+        @mouseleave="hover(null)"
       >
-        <Settings2 />
-      </Button>
+        <span
+          class="size-2.5 shrink-0 rounded-full border border-black/20 dark:border-white/20"
+          :style="{ background: colourOf(flow) }"
+        />
+        <span class="min-w-0 flex-1 truncate text-xs font-medium">
+          {{ flow.label || flow.id }}
+          <span v-if="tweaked(flow)" class="text-muted-foreground font-normal">· own look</span>
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="text-muted-foreground -my-1 size-6 shrink-0"
+          title="Edit this flow, and how it looks on this connection"
+          @click="openFlowEditor(flow.id, props.edgeId)"
+        >
+          <Settings2 />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="text-muted-foreground -my-1 size-6 shrink-0"
+          title="Take this connection out of the flow"
+          @click="act(() => toggleFlowEdge(flow.id, props.edgeId))"
+        >
+          <X />
+        </Button>
+      </div>
+
       <Button
+        v-if="!on.length"
+        variant="outline"
+        size="sm"
+        class="w-full justify-start"
+        @click="act(() => addFlow([props.edgeId]))"
+      >
+        <Waypoints />
+        Animate a message along this
+      </Button>
+
+      <Button
+        v-for="flow in off"
+        :key="flow.id"
         variant="ghost"
-        size="icon"
-        class="text-muted-foreground -my-1 size-6 shrink-0"
-        title="Take this connection out of the flow"
+        size="sm"
+        class="text-muted-foreground w-full justify-start"
         @click="act(() => toggleFlowEdge(flow.id, props.edgeId))"
       >
-        <X />
+        <Plus />
+        <span class="truncate">Add to “{{ flow.label || flow.id }}”</span>
       </Button>
     </div>
-
-    <Button
-      v-if="!on.length"
-      variant="outline"
-      size="sm"
-      class="w-full justify-start"
-      @click="act(() => addFlow([props.edgeId]))"
-    >
-      <Waypoints />
-      Animate a message along this
-    </Button>
-
-    <Button
-      v-for="flow in off"
-      :key="flow.id"
-      variant="ghost"
-      size="sm"
-      class="text-muted-foreground w-full justify-start"
-      @click="act(() => toggleFlowEdge(flow.id, props.edgeId))"
-    >
-      <Plus />
-      <span class="truncate">Add to “{{ flow.label || flow.id }}”</span>
-    </Button>
   </section>
 </template>

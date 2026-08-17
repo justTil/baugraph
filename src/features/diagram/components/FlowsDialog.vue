@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ChevronRight, Pause, Play, Plus, Trash2, X } from '@lucide/vue'
+import { ChevronRight, Pause, Play, Plus, RotateCcw, Trash2, X } from '@lucide/vue'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { describeFlow } from '@/features/diagram/lib/flow-graph'
 import ColorSwatches from '@/features/diagram/components/ColorSwatches.vue'
+import FlowGlyph from '@/features/diagram/components/FlowGlyph.vue'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 import { COLOR_HEX } from '@/features/diagram/lib/theme'
 
@@ -305,12 +306,31 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                 <SegmentedField
                   :model-value="current.motion"
                   :options="[
-                    { value: 'token', label: 'Messages', title: 'Messages travelling the line' },
-                    { value: 'dash', label: 'Line', title: 'A moving line, for constant traffic' },
-                    { value: 'both', label: 'Both', title: 'Messages over a moving line' },
+                    {
+                      value: 'token',
+                      label: 'Messages',
+                      title: 'Messages travelling the line',
+                      preview: 'motion-token',
+                    },
+                    {
+                      value: 'dash',
+                      label: 'Line',
+                      title: 'A moving line, for constant traffic',
+                      preview: 'motion-dash',
+                    },
+                    {
+                      value: 'both',
+                      label: 'Both',
+                      title: 'Messages over a moving line',
+                      preview: 'motion-both',
+                    },
                   ]"
                   @update:model-value="edit(current!.id, { motion: $event as never })"
-                />
+                >
+                  <template #preview="{ option }">
+                    <FlowGlyph :kind="option.preview as never" :colour="COLOR_HEX[current!.color]" />
+                  </template>
+                </SegmentedField>
               </div>
 
               <div class="space-y-1.5">
@@ -321,12 +341,16 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                   v-if="current.motion !== 'dash'"
                   :model-value="current.token"
                   :options="[
-                    { value: 'dot', label: 'Dot' },
-                    { value: 'packet', label: 'Packet' },
-                    { value: 'envelope', label: 'Envelope' },
+                    { value: 'dot', label: 'Dot', preview: 'dot' },
+                    { value: 'packet', label: 'Packet', preview: 'packet' },
+                    { value: 'envelope', label: 'Envelope', preview: 'envelope' },
                   ]"
                   @update:model-value="edit(current!.id, { token: $event as never })"
-                />
+                >
+                  <template #preview="{ option }">
+                    <FlowGlyph :kind="option.preview as never" :colour="COLOR_HEX[current!.color]" />
+                  </template>
+                </SegmentedField>
                 <p v-else class="text-muted-foreground pt-1.5 text-xs">
                   A moving line has no message to shape.
                 </p>
@@ -344,15 +368,21 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                       label: 'Multiply',
                       title:
                         'The message takes every onward connection at once — one in, three out',
+                      preview: 'fork-broadcast',
                     },
                     {
                       value: 'sequence',
                       label: 'One by one',
                       title: 'A single message walks the connections in turn',
+                      preview: 'fork-sequence',
                     },
                   ]"
                   @update:model-value="edit(current!.id, { mode: $event as never })"
-                />
+                >
+                  <template #preview="{ option }">
+                    <FlowGlyph :kind="option.preview as never" :colour="COLOR_HEX[current!.color]" />
+                  </template>
+                </SegmentedField>
               </div>
 
               <!--
@@ -369,15 +399,21 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                       value: 'burst',
                       label: 'An event',
                       title: 'A message goes through, then the line is quiet until the next one',
+                      preview: 'send-burst',
                     },
                     {
                       value: 'stream',
                       label: 'Constantly',
                       title: 'Messages leave without stopping, so the line is never empty',
+                      preview: 'send-stream',
                     },
                   ]"
                   @update:model-value="edit(current!.id, { stream: $event === 'stream' })"
-                />
+                >
+                  <template #preview="{ option }">
+                    <FlowGlyph :kind="option.preview as never" :colour="COLOR_HEX[current!.color]" />
+                  </template>
+                </SegmentedField>
               </div>
             </div>
 
@@ -449,11 +485,8 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
               — so any connection can be drawn its own way. Collapsed by default:
               most never need it, and the ones that do say so on their own row.
             -->
-            <section class="space-y-1.5 border-t pt-4">
-              <Label class="text-xs">Connections</Label>
-              <p class="text-muted-foreground text-[11px] leading-relaxed">
-                Open one to draw it differently from the rest of the flow.
-              </p>
+            <section class="space-y-2 border-t pt-4">
+              <Label class="text-xs">Connections ({{ hops.length }})</Label>
 
               <ul class="divide-y rounded-md border">
                 <li v-for="hop in hops" :key="hop.id">
@@ -463,29 +496,25 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                   >
                     <button
                       type="button"
-                      class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                      class="flex min-w-0 flex-1 items-center gap-2 text-left"
                       @click="openHop = openHop === hop.id ? null : hop.id"
                     >
                       <ChevronRight
                         class="text-muted-foreground size-3.5 shrink-0 transition-transform"
                         :class="{ 'rotate-90': openHop === hop.id }"
                       />
-                      <span
-                        class="size-2.5 shrink-0 rounded-full border border-black/20 dark:border-white/20"
-                        :style="{
-                          background:
-                            COLOR_HEX[overrideOf(current, hop.id).color ?? current.color],
-                        }"
-                      />
                       <span class="min-w-0 flex-1 truncate text-xs">
                         {{ hop.from }} → {{ hop.to }}
                       </span>
-                      <span
-                        v-if="tweaked(current, hop.id)"
-                        class="text-muted-foreground shrink-0 text-[10px]"
-                      >
-                        own look
-                      </span>
+                      <!-- What this connection draws today, at the size it draws it. -->
+                      <FlowGlyph
+                        :kind="
+                          current.motion === 'dash'
+                            ? 'motion-dash'
+                            : (overrideOf(current, hop.id).token ?? current.token)
+                        "
+                        :colour="COLOR_HEX[overrideOf(current, hop.id).color ?? current.color]"
+                      />
                     </button>
                     <Button
                       variant="ghost"
@@ -498,46 +527,72 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                     </Button>
                   </div>
 
-                  <div v-if="openHop === hop.id" class="grid grid-cols-2 gap-4 px-2 pt-1 pb-3">
-                    <div class="space-y-1.5">
-                      <Label class="text-muted-foreground text-[10px]">Colour here</Label>
-                      <ColorSwatches
-                        :model-value="overrideOf(current, hop.id).color ?? null"
-                        allow-default
-                        :default-hex="COLOR_HEX[current.color]"
-                        @update:model-value="style(hop.id, { color: $event ?? undefined })"
-                      />
-                    </div>
-
-                    <div class="space-y-1.5">
-                      <Label class="text-muted-foreground text-[10px]">Speed here</Label>
-                      <Input
-                        type="number"
-                        step="40"
-                        min="10"
-                        max="4000"
-                        class="h-8"
-                        :model-value="overrideOf(current, hop.id).speed ?? ''"
-                        :placeholder="`${current.speed} — same as the flow`"
-                        @change="setHopSpeed(hop.id, ($event.target as HTMLInputElement).value)"
-                      />
-                    </div>
-
-                    <div v-if="current.motion !== 'dash'" class="col-span-2 space-y-1.5">
-                      <Label class="text-muted-foreground text-[10px]">Message here</Label>
+                  <div v-if="openHop === hop.id" class="space-y-3 px-2 pt-1 pb-3">
+                    <div v-if="current.motion !== 'dash'" class="space-y-1.5">
+                      <Label class="text-muted-foreground text-[10px]">Message</Label>
                       <SegmentedField
                         :model-value="overrideOf(current, hop.id).token ?? 'same'"
                         :options="[
-                          { value: 'same', label: 'Same', title: 'Whatever the flow uses' },
-                          { value: 'dot', label: 'Dot' },
-                          { value: 'packet', label: 'Packet' },
-                          { value: 'envelope', label: 'Envelope' },
+                          {
+                            value: 'same',
+                            label: 'Same',
+                            title: 'Whatever the flow uses',
+                            preview: current.token,
+                          },
+                          { value: 'dot', label: 'Dot', preview: 'dot' },
+                          { value: 'packet', label: 'Packet', preview: 'packet' },
+                          { value: 'envelope', label: 'Envelope', preview: 'envelope' },
                         ]"
                         @update:model-value="
                           style(hop.id, { token: $event === 'same' ? undefined : ($event as never) })
                         "
-                      />
+                      >
+                        <template #preview="{ option }">
+                          <FlowGlyph
+                            :kind="option.preview as never"
+                            :colour="COLOR_HEX[overrideOf(current!, hop.id).color ?? current!.color]"
+                            :faint="option.value === 'same'"
+                          />
+                        </template>
+                      </SegmentedField>
                     </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                      <div class="space-y-1.5">
+                        <Label class="text-muted-foreground text-[10px]">Colour</Label>
+                        <ColorSwatches
+                          :model-value="overrideOf(current, hop.id).color ?? null"
+                          allow-default
+                          :default-hex="COLOR_HEX[current.color]"
+                          @update:model-value="style(hop.id, { color: $event ?? undefined })"
+                        />
+                      </div>
+
+                      <div class="space-y-1.5">
+                        <Label class="text-muted-foreground text-[10px]">Speed</Label>
+                        <Input
+                          type="number"
+                          step="40"
+                          min="10"
+                          max="4000"
+                          class="h-8"
+                          :model-value="overrideOf(current, hop.id).speed ?? ''"
+                          :placeholder="`${current.speed} — same as the flow`"
+                          @change="setHopSpeed(hop.id, ($event.target as HTMLInputElement).value)"
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      v-if="tweaked(current, hop.id)"
+                      variant="ghost"
+                      size="sm"
+                      class="text-muted-foreground h-7 w-full justify-start text-xs"
+                      @click="style(hop.id, { color: undefined, token: undefined, speed: undefined })"
+                    >
+                      <RotateCcw />
+                      Draw this one like the rest again
+                    </Button>
                   </div>
                 </li>
               </ul>
