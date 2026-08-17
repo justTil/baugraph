@@ -61,6 +61,7 @@ export const FLOW_DEFAULTS = {
   // to read as a message, slow enough to follow across a fan-out.
   speed: 220,
   count: 1,
+  stream: false,
   pause: 0.6,
   loop: true,
   enabled: true,

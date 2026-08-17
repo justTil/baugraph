@@ -409,6 +409,10 @@
             "minimum": 1,
             "maximum": 12
           },
+          "stream": {
+            "default": false,
+            "type": "boolean"
+          },
           "pause": {
             "default": 0.6,
             "type": "number",
@@ -422,6 +426,46 @@
           "enabled": {
             "default": true,
             "type": "boolean"
+          },
+          "style": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "color": {
+                  "type": "string",
+                  "enum": [
+                    "slate",
+                    "blue",
+                    "teal",
+                    "green",
+                    "amber",
+                    "red",
+                    "purple",
+                    "pink"
+                  ]
+                },
+                "token": {
+                  "type": "string",
+                  "enum": [
+                    "dot",
+                    "packet",
+                    "envelope"
+                  ]
+                },
+                "speed": {
+                  "type": "number",
+                  "minimum": 10,
+                  "maximum": 4000
+                }
+              }
+            }
           },
           "data": {
             "type": "object",

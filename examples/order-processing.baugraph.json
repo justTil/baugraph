@@ -266,10 +266,25 @@
     {
       "id": "flow-order-placed",
       "label": "Order placed",
-      "edges": ["api-gateway--order-service", "order-service--order-created", "order-created--billing-adapter", "order-created--notification-service", "order-created--analytics-sink"],
+      "edges": ["api-gateway--order-service", "order-service--order-created", "order-created--billing-adapter", "order-created--notification-service", "order-created--analytics-sink", "order-created--dead-letter-queue"],
       "from": "api-gateway",
       "token": "envelope",
-      "pause": 0.9
+      "pause": 0.9,
+      "style": {
+        "order-created--dead-letter-queue": { "color": "red", "token": "packet", "speed": 110 }
+      }
+    },
+    {
+      "id": "flow-customer-traffic",
+      "label": "Customer traffic",
+      "edges": ["customer--api-gateway"],
+      "from": "customer",
+      "color": "teal",
+      "motion": "both",
+      "speed": 190,
+      "count": 3,
+      "stream": true,
+      "pause": 0
     }
   ]
 }

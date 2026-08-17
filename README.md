@@ -111,6 +111,39 @@ Set *Where the path forks* to **One by one** instead of **Multiply** and a singl
 message walks the connections in turn — a routing slip, or a step-by-step
 walkthrough of a sequence.
 
+#### One connection at a time
+
+A node's onward connections rarely mean the same thing: the one to a service is
+the happy path, the one to a dead-letter queue is a failure. Select a
+**connection** and the inspector shows the flows running over it, with the colour,
+the message shape and the speed *for that connection alone* — so the failure path
+can be a red packet crawling while the rest are blue envelopes at full speed.
+
+Every control there reads *same as the flow* until you touch it, and the file
+records only what differs:
+
+```json
+"style": {
+  "order-created--dead-letter-queue": { "color": "red", "token": "packet", "speed": 110 }
+}
+```
+
+The same panel takes a connection out of a flow, or adds it to another one — so
+if the two paths should be separate flows entirely rather than one flow drawn two
+ways, that is a click as well.
+
+#### Constant traffic
+
+*Sends* chooses what kind of thing the flow is. **An event** goes through and
+leaves the line quiet until the next one. **Constantly** never stops: messages
+leave one after another so the connection is never empty, which is what a link
+under permanent load looks like. *In flight* then says how many are on the way at
+once, and the gap no longer applies — there is nothing to wait between.
+
+The seam is not visible. A stream's clock is one departure apart rather than one
+journey long, so as the first message drops back to the source the next is
+already exactly where it was, and both ends of the swap are at zero opacity.
+
 Speed, colour, message shape, how many messages per pass and the gap before it
 repeats are all in the inspector; hovering a flow there haloes the connections it
 runs over. The toolbar's pause button freezes every flow where it is, which is
@@ -190,9 +223,12 @@ for a complete one:
         "order-service--order-created",
         "order-created--billing-adapter",
         "order-created--notification-service",
-        "order-created--analytics-sink"
+        "order-created--dead-letter-queue"
       ],
-      "token": "envelope"
+      "token": "envelope",
+      "style": {
+        "order-created--dead-letter-queue": { "color": "red", "token": "packet", "speed": 110 }
+      }
     }
   ]
 }
@@ -224,6 +260,12 @@ Design decisions, all in service of readable diffs:
   id has to resolve: a flow pointing at a connection that is not there is
   rejected on open, and the editor drops a flow whose last connection is deleted
   rather than leaving one behind. A diagram with no flows writes no `flows` key.
+- **`style` says only what differs.** A per-connection override carries just the
+  fields that are not the flow's own, so a connection meant to look like the rest
+  stores nothing at all rather than a copy that would go stale the next time the
+  flow's colour changed. Styling a connection the flow does not travel is
+  rejected on open, and an override is dropped along with the connection it
+  described.
 - **`data` on any node or edge is yours** — free-form metadata, round-tripped
   untouched. Use it for ticket links, ownership, team conventions.
 

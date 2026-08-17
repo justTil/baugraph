@@ -5,7 +5,7 @@ import { STACKED_SHAPES, contentInset, roundedRect, shapeElements } from '@/feat
 import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
 import type { FlowEdge } from '@/features/diagram/lib/flow-graph'
-import { fadeOf, flowPlan } from '@/features/diagram/lib/flow-graph'
+import { edgeStyle, fadeOf, flowPlan } from '@/features/diagram/lib/flow-graph'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { COLOR_HEX, diagramTheme, edgeColor, mix, nodePaint } from '@/features/diagram/lib/theme'
 import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
@@ -377,8 +377,8 @@ function renderFlows(
     const plan = flowPlan(flow, byId, lengthOf)
     if (!plan.branches.length || plan.duration <= 0) continue
 
-    const color = COLOR_HEX[flow.color]
     const cycle = plan.duration
+    if (cycle <= 0) continue
     const repeat = flow.loop ? 'indefinite' : '1'
     const freeze = flow.loop ? '' : ' fill="freeze"'
 
@@ -386,11 +386,12 @@ function renderFlows(
       for (const id of plan.edges) {
         const geometry = geometries.get(id)
         if (!geometry) continue
+        const look = edgeStyle(flow, id)
         parts.push(
-          `<path d="${geometry.path}" fill="none" stroke="${color}" stroke-width="2.4" ` +
-            `stroke-linecap="round" stroke-dasharray="6 16">` +
+          `<path d="${geometry.path}" fill="none" stroke="${COLOR_HEX[look.color]}" ` +
+            `stroke-width="2.4" stroke-linecap="round" stroke-dasharray="6 16">` +
             `<animate attributeName="stroke-dashoffset" values="0;-22" ` +
-            `dur="${(22 / Math.max(flow.speed, 1)).toFixed(3)}s" repeatCount="indefinite"/>` +
+            `dur="${(22 / Math.max(look.speed, 1)).toFixed(3)}s" repeatCount="indefinite"/>` +
             `</path>`,
         )
       }
@@ -398,42 +399,75 @@ function renderFlows(
 
     if (flow.motion === 'dash') continue
 
+    /*
+     * One element per hop, exactly as the canvas draws it. A whole branch would
+     * otherwise collapse into a single `animateMotion`, which is tidier but
+     * cannot change colour or shape halfway — and the whole point of a
+     * per-connection override is that it does.
+     *
+     * Each element holds still at the start of its hop until the message reaches
+     * it, walks the hop, then holds at the end; the opacity animation is what
+     * hands the message from one hop's element to the next, at the same instant,
+     * so the swap cannot be seen.
+     */
     for (const branch of plan.branches) {
-      const route = branch.hops
-        .map((hop) => geometries.get(hop.edge)?.path)
-        .filter(Boolean)
-        .join(' ')
-      if (!route || branch.journey <= 0) continue
-
+      if (branch.journey <= 0) continue
       const fade = fadeOf(branch.journey)
+      const opacityAt = (t: number) =>
+        fade > 0 ? Math.max(0, Math.min(1, Math.min(t, branch.journey - t) / fade)) : 1
 
-      for (let token = 0; token < flow.count; token++) {
-        const from = token * plan.stagger
-        const to = from + branch.journey
+      for (const hop of branch.hops) {
+        const geometry = geometries.get(hop.edge)
+        if (!geometry || hop.duration <= 0) continue
+        const look = edgeStyle(flow, hop.edge)
+        const h0 = hop.start
+        const h1 = hop.start + hop.duration
 
-        // Held at the start until it is sent, walked to the end, held there —
-        // the two flat stretches are what make one pass repeat cleanly.
-        const motion =
-          `<animateMotion dur="${cycle.toFixed(3)}s" repeatCount="${repeat}"${freeze} ` +
-          `calcMode="linear" keyPoints="0;0;1;1" ` +
-          `keyTimes="${keyTimes([0, from / cycle, to / cycle, 1])}" ` +
-          `path="${route}"/>`
+        for (let token = 0; token < plan.tokens; token++) {
+          // Where this message sits on the clock. A burst runs its later
+          // messages behind the first; a stream runs each one a spacing ahead.
+          const shift = token * plan.offset
+          const at = (t: number) => Math.min(1, Math.max(0, (t - shift) / cycle))
+          const u0 = at(h0)
+          const u1 = at(h1)
+          // This message never reaches this hop inside one cycle.
+          if (u1 <= u0) continue
 
-        const opacity =
-          `<animate attributeName="opacity" dur="${cycle.toFixed(3)}s" ` +
-          `repeatCount="${repeat}"${freeze} calcMode="linear" values="0;0;1;1;0;0" ` +
-          `keyTimes="${keyTimes([
+          const time = (u: number) => u * cycle + shift
+          const progress = (u: number) =>
+            Math.min(1, Math.max(0, (time(u) - h0) / (h1 - h0)))
+          const p0 = progress(u0).toFixed(5)
+          const p1 = progress(u1).toFixed(5)
+
+          const ua = Math.min(u1, Math.max(u0, at(fade)))
+          const ub = Math.min(u1, Math.max(u0, at(branch.journey - fade)))
+
+          const motion =
+            `<animateMotion dur="${cycle.toFixed(3)}s" repeatCount="${repeat}"${freeze} ` +
+            `calcMode="linear" keyPoints="${p0};${p0};${p1};${p1}" ` +
+            `keyTimes="${keyTimes([0, u0, u1, 1])}" path="${geometry.path}"/>`
+
+          const values = [
             0,
-            from / cycle,
-            (from + fade) / cycle,
-            (to - fade) / cycle,
-            to / cycle,
-            1,
-          ])}"/>`
+            0,
+            opacityAt(time(u0)),
+            opacityAt(time(ua)),
+            opacityAt(time(ub)),
+            opacityAt(time(u1)),
+            0,
+            0,
+          ]
+          const opacity =
+            `<animate attributeName="opacity" dur="${cycle.toFixed(3)}s" ` +
+            `repeatCount="${repeat}"${freeze} calcMode="linear" ` +
+            `values="${values.map((v) => v.toFixed(3)).join(';')}" ` +
+            `keyTimes="${keyTimes([0, u0, u0, ua, ub, u1, u1, 1])}"/>`
 
-        parts.push(
-          `<g opacity="0">${tokenMarkup(flow.token, color, bg)}${motion}${opacity}</g>`,
-        )
+          parts.push(
+            `<g opacity="0">${tokenMarkup(look.token, COLOR_HEX[look.color], bg)}` +
+              `${motion}${opacity}</g>`,
+          )
+        }
       }
     }
   }

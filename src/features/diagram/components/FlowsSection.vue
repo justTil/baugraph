@@ -255,6 +255,31 @@ const summaryOf = (flow: MessageFlow) => describeFlow(planOf(flow))
             />
           </div>
 
+          <!--
+            An event happens once and the line goes quiet again; traffic never
+            does. The difference is the single most visible thing about a flow,
+            so it is a choice rather than a checkbox buried in the numbers.
+          -->
+          <div class="space-y-1.5">
+            <Label class="text-xs">Sends</Label>
+            <SegmentedField
+              :model-value="flow.stream ? 'stream' : 'burst'"
+              :options="[
+                {
+                  value: 'burst',
+                  label: 'An event',
+                  title: 'A message goes through, then the line is quiet until the next one',
+                },
+                {
+                  value: 'stream',
+                  label: 'Constantly',
+                  title: 'Messages leave without stopping, so the line is never empty',
+                },
+              ]"
+              @update:model-value="edit(flow.id, { stream: $event === 'stream' })"
+            />
+          </div>
+
           <div class="flex gap-2">
             <div class="relative flex-1 space-y-1.5">
               <Label class="text-xs">Speed</Label>
@@ -276,7 +301,16 @@ const summaryOf = (flow: MessageFlow) => describeFlow(planOf(flow))
               />
             </div>
             <div class="flex-1 space-y-1.5">
-              <Label class="text-xs">Messages</Label>
+              <Label
+                class="text-xs"
+                :title="
+                  flow.stream
+                    ? 'How many messages are on the way at any moment'
+                    : 'How many messages go through per pass'
+                "
+              >
+                {{ flow.stream ? 'In flight' : 'Messages' }}
+              </Label>
               <Input
                 type="number"
                 step="1"
@@ -294,7 +328,8 @@ const summaryOf = (flow: MessageFlow) => describeFlow(planOf(flow))
                 "
               />
             </div>
-            <div class="flex-1 space-y-1.5">
+            <!-- A stream has no pass, so there is nothing to wait between. -->
+            <div v-if="!flow.stream" class="flex-1 space-y-1.5">
               <Label class="text-xs">Gap</Label>
               <Input
                 type="number"

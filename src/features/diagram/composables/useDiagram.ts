@@ -9,6 +9,7 @@ import type {
   DiagramEdge,
   DiagramMeta,
   DiagramNode,
+  FlowEdgeStyle,
   LineStyle,
   MessageFlow,
   Metadata,
@@ -580,9 +581,18 @@ function pruneFlows() {
     .map((flow) => {
       const kept = flow.edges.filter((id) => live.has(id))
       const from = flow.from && nodeIds.has(flow.from) ? flow.from : null
-      if (kept.length === flow.edges.length && from === (flow.from ?? null)) return flow
+      // An override for a connection the flow no longer travels styles nothing,
+      // and the schema rejects it on the way back in.
+      const style = flow.style
+        ? Object.fromEntries(Object.entries(flow.style).filter(([id]) => live.has(id)))
+        : undefined
+      const styleShrank =
+        !!flow.style && Object.keys(style ?? {}).length !== Object.keys(flow.style).length
+      if (kept.length === flow.edges.length && from === (flow.from ?? null) && !styleShrank) {
+        return flow
+      }
       changed = true
-      return { ...flow, edges: kept, from }
+      return { ...flow, edges: kept, from, ...(style ? { style } : {}) }
     })
     .filter((flow) => flow.edges.length > 0)
 
@@ -630,11 +640,46 @@ export function removeFlow(id: string) {
 export function toggleFlowEdge(id: string, edgeId: string) {
   const flow = flows.value.find((f) => f.id === id)
   if (!flow) return
-  const next = flow.edges.includes(edgeId)
-    ? flow.edges.filter((e) => e !== edgeId)
-    : [...flow.edges, edgeId]
-  if (!next.length) removeFlow(id)
-  else updateFlow(id, { edges: next })
+  if (!flow.edges.includes(edgeId)) {
+    updateFlow(id, { edges: [...flow.edges, edgeId] })
+    return
+  }
+  const next = flow.edges.filter((e) => e !== edgeId)
+  if (!next.length) {
+    removeFlow(id)
+    return
+  }
+  // The override goes with the connection it described.
+  const style = { ...(flow.style ?? {}) }
+  delete style[edgeId]
+  updateFlow(id, { edges: next, style: Object.keys(style).length ? style : undefined })
+}
+
+/**
+ * Sets how one connection of a flow is drawn. Passing `undefined` for a field
+ * hands it back to the flow's own setting, so "same as the rest" stays the
+ * absence of a value rather than a copy of one that would then go stale.
+ */
+export function setFlowEdgeStyle(id: string, edgeId: string, patch: Partial<FlowEdgeStyle>) {
+  const flow = flows.value.find((f) => f.id === id)
+  if (!flow || !flow.edges.includes(edgeId)) return
+
+  const entry: FlowEdgeStyle = { ...(flow.style?.[edgeId] ?? {}) }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) delete entry[key as keyof FlowEdgeStyle]
+    else Object.assign(entry, { [key]: value })
+  }
+
+  const style = { ...(flow.style ?? {}) }
+  if (Object.keys(entry).length) style[edgeId] = entry
+  else delete style[edgeId]
+
+  updateFlow(id, { style: Object.keys(style).length ? style : undefined })
+}
+
+/** The flows that run over a given connection — what the edge inspector edits. */
+export function flowsOnEdge(edgeId: string): MessageFlow[] {
+  return flows.value.filter((flow) => flow.edges.includes(edgeId))
 }
 
 /** Connections with both ends inside `ids` — what "animate these nodes" means. */
@@ -1240,6 +1285,8 @@ export function useDiagram() {
     updateFlow,
     removeFlow,
     toggleFlowEdge,
+    setFlowEdgeStyle,
+    flowsOnEdge,
     edgesWithin,
     edgesDownstream,
     reorderNode,
