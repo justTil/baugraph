@@ -156,6 +156,21 @@ export const FLOW_MODES = ['broadcast', 'sequence'] as const
 export type FlowMode = (typeof FLOW_MODES)[number]
 
 /**
+ * How one connection of a flow is drawn, where it should not look like the rest.
+ *
+ * A node's onward connections rarely mean the same thing — the one to a service
+ * is the happy path, the one to a dead-letter queue is a failure — and a diagram
+ * that draws them identically has thrown that away. Anything left out here falls
+ * back to the flow's own setting, so an override says only what differs.
+ */
+export interface FlowEdgeStyle {
+  color?: ColorKey
+  token?: FlowToken
+  /** Canvas units per second on this connection alone. */
+  speed?: number
+}
+
+/**
  * A message travelling the diagram.
  *
  * A flow names a set of connections and lets the editor work out the rest: the
@@ -187,13 +202,27 @@ export interface MessageFlow {
   mode: FlowMode
   /** Canvas units per second, so every hop moves at the same visible rate. */
   speed: number
-  /** Messages sent per pass — one message, or a stream of them. */
+  /**
+   * With `stream` off, how many messages are sent per pass. With it on, how many
+   * are in flight along each branch at any moment.
+   */
   count: number
-  /** Seconds of stillness before the flow repeats. */
+  /**
+   * Messages leave continuously, so a connection is never empty — what a link
+   * under constant load looks like, as opposed to one carrying a single event.
+   * A stream has no beginning and no end, so `pause` does not apply to it.
+   */
+  stream: boolean
+  /** Seconds of stillness before the flow repeats. Ignored while streaming. */
   pause: number
   loop: boolean
   /** Off keeps the flow in the file without animating it. */
   enabled: boolean
+  /**
+   * Per-connection overrides, by edge id. Only for connections this flow
+   * travels; anything else is dropped as the flow is pruned.
+   */
+  style?: Record<string, FlowEdgeStyle>
   /** User metadata; never interpreted by the editor. */
   data?: Metadata
 }

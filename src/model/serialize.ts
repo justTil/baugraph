@@ -87,9 +87,11 @@ const FLOW_KEY_ORDER: (keyof MessageFlow)[] = [
   'mode',
   'speed',
   'count',
+  'stream',
   'pause',
   'loop',
   'enabled',
+  'style',
   'data',
 ]
 
@@ -126,6 +128,14 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
   const flows = (doc.flows ?? []).map((flow) => {
     const trimmed = omitDefaults({ ...flow }, FLOW_DEFAULTS)
     if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    // An override that overrides nothing is noise, and so is an empty map of them.
+    if (trimmed.style) {
+      const style = Object.fromEntries(
+        Object.entries(trimmed.style).filter(([, value]) => Object.keys(value).length > 0),
+      )
+      if (Object.keys(style).length) trimmed.style = style
+      else delete trimmed.style
+    }
     return ordered(trimmed as MessageFlow, FLOW_KEY_ORDER)
   })
 
@@ -149,7 +159,14 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
  */
 const INLINE_KEYS = new Set(['position', 'size'])
 
-function format(value: unknown, indent: string, key?: string): string {
+/**
+ * Keys whose *children* are each one line. A flow's per-connection overrides are
+ * keyed by edge id, so the keys cannot be listed above — but each override is
+ * one small idea ("this one is red") and reads as one line.
+ */
+const INLINE_CHILD_KEYS = new Set(['style'])
+
+function format(value: unknown, indent: string, key?: string, inline = false): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
 
   if (Array.isArray(value)) {
@@ -165,13 +182,14 @@ function format(value: unknown, indent: string, key?: string): string {
 
   const entries = Object.entries(value).filter(([, v]) => v !== undefined)
   if (!entries.length) return '{}'
-  if (key && INLINE_KEYS.has(key)) {
+  if (inline || (key && INLINE_KEYS.has(key))) {
     return `{ ${entries.map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(', ')} }`
   }
 
   const inner = indent + '  '
+  const inlineChildren = !!key && INLINE_CHILD_KEYS.has(key)
   const body = entries
-    .map(([k, v]) => `${inner}${JSON.stringify(k)}: ${format(v, inner, k)}`)
+    .map(([k, v]) => `${inner}${JSON.stringify(k)}: ${format(v, inner, k, inlineChildren)}`)
     .join(',\n')
   return `{\n${body}\n${indent}}`
 }

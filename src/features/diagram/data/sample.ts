@@ -373,11 +373,17 @@ export function sampleDocument(): DiagramDocument {
       },
     ],
     /**
-     * The move the format exists to show: one order is published to the topic,
-     * and three leave it. Only the connections are listed — that the split
-     * happens at `order.created`, and that all three subscribers get their copy
-     * at once, is read off the graph. The failure path is deliberately not in
-     * here: it is not what happens when an order is placed.
+     * Two flows, showing the two things one can be.
+     *
+     * "Order placed" is an event: one order published to the topic, and four
+     * leaving it. Only the connections are listed — that the split happens at
+     * `order.created` is read off the graph. The failure path is one of those
+     * connections but is not the same news, so `style` draws that one alone in
+     * red, as a packet rather than an envelope, and slower.
+     *
+     * "Customer traffic" is not an event at all. It streams, so the connection
+     * from the customer is never empty — the way a link under constant load
+     * looks, as opposed to one carrying a single message.
      */
     flows: [
       {
@@ -389,6 +395,7 @@ export function sampleDocument(): DiagramDocument {
           'order-created--billing-adapter',
           'order-created--notification-service',
           'order-created--analytics-sink',
+          'order-created--dead-letter-queue',
         ],
         from: 'api-gateway',
         color: 'blue',
@@ -397,7 +404,27 @@ export function sampleDocument(): DiagramDocument {
         mode: 'broadcast',
         speed: 220,
         count: 1,
+        stream: false,
         pause: 0.9,
+        loop: true,
+        enabled: true,
+        style: {
+          'order-created--dead-letter-queue': { color: 'red', token: 'packet', speed: 110 },
+        },
+      },
+      {
+        id: 'flow-customer-traffic',
+        label: 'Customer traffic',
+        edges: ['customer--api-gateway'],
+        from: 'customer',
+        color: 'teal',
+        motion: 'both',
+        token: 'dot',
+        mode: 'broadcast',
+        speed: 190,
+        count: 3,
+        stream: true,
+        pause: 0,
         loop: true,
         enabled: true,
       },

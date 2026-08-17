@@ -3,7 +3,7 @@ import { computed, effectScope, ref, watch } from 'vue'
 import gsap from 'gsap'
 import type { ColorKey, MessageFlow } from '@/model'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
-import { flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
+import { edgeStyle, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 
 /**
@@ -184,12 +184,14 @@ function flowState(): ComputedRef<FlowState> {
       if (flow.motion !== 'token') {
         for (const edge of plan.edges) {
           const list = state.dashes.get(edge) ?? []
-          // Tied to the speed the messages travel at, so a flow drawn as both
-          // does not have its line racing its own traffic.
+          // Tied to the speed the messages travel at on *this* connection, so a
+          // flow drawn as both does not have its line racing its own traffic —
+          // and a connection slowed down on purpose slows down whole.
+          const look = edgeStyle(flow, edge)
           list.push({
             flow: flow.id,
-            color: flow.color,
-            duration: DASH_PATTERN / Math.max(flow.speed, 1),
+            color: look.color,
+            duration: DASH_PATTERN / Math.max(look.speed, 1),
           })
           state.dashes.set(edge, list)
         }
@@ -202,15 +204,19 @@ function flowState(): ComputedRef<FlowState> {
         // element has to be the one already in the right coordinate space.
         plan.branches.forEach((branch, branch_) => {
           for (const hop of branch.hops) {
-            for (let token = 0; token < flow.count; token++) {
+            // Each hop is drawn as that connection asks to be drawn, which is
+            // how one node's onward paths end up looking like the different
+            // things they are.
+            const look = edgeStyle(flow, hop.edge)
+            for (let token = 0; token < plan.tokens; token++) {
               const slot: TokenSlot = {
                 key: `${flow.id}|${branch_}|${token}|${hop.edge}`,
                 flow: flow.id,
                 edge: hop.edge,
                 branch: branch_,
                 token,
-                color: flow.color,
-                shape: flow.token,
+                color: look.color,
+                shape: look.token,
               }
               slots.push(slot)
               const list = state.byEdge.get(hop.edge) ?? []
@@ -281,7 +287,7 @@ function paintRun(run: FlowRun) {
     const el = elements.get(slot.key)
     if (!el) continue
     const branch = run.plan.branches[slot.branch]
-    const position = branch ? tokenAt(branch, time - slot.token * run.plan.stagger) : null
+    const position = branch ? tokenAt(branch, time + slot.token * run.plan.offset) : null
     // A branch never visits a connection twice, so the edge alone decides
     // whether this slot is the one carrying the message at this instant.
     if (!position || position.edge !== slot.edge) hide(el)

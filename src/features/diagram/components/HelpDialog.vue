@@ -127,6 +127,21 @@ const SHORTCUTS: [string, string][] = [
             a routing slip, or a walkthrough of a sequence.
           </p>
           <p>
+            Two paths out of the same node rarely mean the same thing, so each connection can
+            be drawn its own way. Select a <em>connection</em> and the inspector shows the flows
+            running over it with the colour, message shape and speed for that connection alone —
+            the failure path as a red packet crawling to the dead-letter queue while the rest
+            are blue envelopes at full speed. Each control reads <em>same as the flow</em> until
+            you touch it. The same panel takes a connection out of a flow or adds it to another.
+          </p>
+          <p>
+            <em>Sends</em> decides what kind of thing a flow is. <em>An event</em> goes through
+            and the line falls quiet until the next one. <em>Constantly</em> never stops:
+            messages leave one after another so the connection is never empty, which is how a
+            link under permanent load reads. <em>In flight</em> then says how many are on the
+            way at once.
+          </p>
+          <p>
             Hover a flow in the inspector to light up the connections it runs over. The pause
             button in the toolbar freezes every flow where it is, which is what you want while
             working on a diagram that animates. Exported SVGs keep their animation; PNGs, being

@@ -1,4 +1,4 @@
-import type { DiagramEdge, MessageFlow } from '@/model'
+import type { DiagramEdge, FlowToken, MessageFlow } from '@/model'
 
 /**
  * Turning a flow's set of connections into a timed traversal.
@@ -19,6 +19,24 @@ import type { DiagramEdge, MessageFlow } from '@/model'
  * passes its live edges straight in, the exporter its parsed ones.
  */
 export type FlowEdge = Pick<DiagramEdge, 'id' | 'source' | 'target'>
+
+/**
+ * How a connection is drawn within a flow: its own override where it has one,
+ * the flow's setting where it does not. Everything that draws a message goes
+ * through here, so the canvas and the export cannot disagree about which
+ * connections were meant to look different.
+ */
+export function edgeStyle(
+  flow: MessageFlow,
+  edge: string,
+): { color: MessageFlow['color']; token: FlowToken; speed: number } {
+  const override = flow.style?.[edge]
+  return {
+    color: override?.color ?? flow.color,
+    token: override?.token ?? flow.token,
+    speed: override?.speed ?? flow.speed,
+  }
+}
 
 /** A message never crosses a hop faster than this, however short the line. */
 const MIN_HOP = 0.12
@@ -44,10 +62,21 @@ export interface FlowBranch {
 
 export interface FlowPlan {
   branches: FlowBranch[]
-  /** Seconds between the messages of a burst (`count` > 1). */
-  stagger: number
-  /** One full pass, including the pause before it repeats. */
+  /** How many messages each branch draws at once. */
+  tokens: number
+  /**
+   * Seconds by which each further message is shifted along the journey.
+   * Negative for a burst — the second message is *behind* the first — and
+   * positive for a stream, where message `k` is a whole spacing further on.
+   */
+  offset: number
+  /**
+   * The clock's cycle. A whole pass for a burst; the gap between departures for
+   * a stream, which has no pass to speak of.
+   */
   duration: number
+  /** Whether this plan never empties the line. */
+  stream: boolean
   /** The connections actually travelled — a flow may list one twice over. */
   edges: Set<string>
   /** Node the message starts at, once resolved. `null` if it cannot be. */
@@ -161,11 +190,15 @@ function sequenceFrom(root: string, edges: FlowEdge[]): string[] {
  * node, so branches out of the same node leave together and long hops take
  * proportionally longer — one speed across the whole diagram.
  */
-function timeRoute(route: string[], lengthOf: (edge: string) => number, speed: number): FlowBranch {
+function timeRoute(
+  route: string[],
+  lengthOf: (edge: string) => number,
+  speedOf: (edge: string) => number,
+): FlowBranch {
   const hops: FlowHop[] = []
   let cursor = 0
   for (const edge of route) {
-    const duration = Math.max(MIN_HOP, lengthOf(edge) / Math.max(speed, 1))
+    const duration = Math.max(MIN_HOP, lengthOf(edge) / Math.max(speedOf(edge), 1))
     hops.push({ edge, start: cursor, duration })
     cursor += duration
   }
@@ -184,9 +217,16 @@ export function flowPlan(
 ): FlowPlan {
   const edges = resolveEdges(flow, edgesById)
   const from = flowRoot(flow, edges)
-  if (!edges.length || !from) {
-    return { branches: [], stagger: 0, duration: 0, edges: new Set(), from: null }
+  const empty: FlowPlan = {
+    branches: [],
+    tokens: 0,
+    offset: 0,
+    duration: 0,
+    stream: flow.stream,
+    edges: new Set(),
+    from: null,
   }
+  if (!edges.length || !from) return empty
 
   const routes: string[][] =
     flow.mode === 'sequence' ? [sequenceFrom(from, edges)] : branchesFrom(from, edges)
@@ -209,17 +249,42 @@ export function flowPlan(
 
   const branches = routes
     .filter((route) => route.length)
-    .map((route) => timeRoute(route, lengthOf, flow.speed))
+    .map((route) => timeRoute(route, lengthOf, (edge) => edgeStyle(flow, edge).speed))
 
   const longest = branches.reduce((max, b) => Math.max(max, b.journey), 0)
+  const count = Math.max(1, flow.count)
+
+  /*
+   * A stream has no pass to repeat: messages leave one `spacing` apart forever.
+   * The clock is therefore one spacing long, and message `k` runs a spacing
+   * ahead of message `k − 1`, so `count` of them sit evenly along the journey at
+   * every instant. When the clock wraps, message 0 drops back to the source and
+   * the one that had reached the far end disappears into it — both at zero
+   * opacity, so the seam cannot be seen and the line is never empty.
+   */
+  if (flow.stream) {
+    const spacing = longest / count
+    return {
+      branches,
+      tokens: count,
+      offset: spacing,
+      duration: spacing,
+      stream: true,
+      edges: new Set(branches.flatMap((b) => b.hops.map((h) => h.edge))),
+      from,
+    }
+  }
+
   // A burst has to finish inside its own pass, so the spacing gives way before
   // the messages start overtaking the loop.
-  const stagger = flow.count > 1 ? Math.min(0.24, longest / (flow.count + 1)) : 0
+  const stagger = count > 1 ? Math.min(0.24, longest / (count + 1)) : 0
 
   return {
     branches,
-    stagger,
-    duration: longest + stagger * (flow.count - 1) + Math.max(0, flow.pause),
+    tokens: count,
+    offset: -stagger,
+    duration: longest + stagger * (count - 1) + Math.max(0, flow.pause),
+    stream: false,
     edges: new Set(branches.flatMap((b) => b.hops.map((h) => h.edge))),
     from,
   }
@@ -261,6 +326,9 @@ export function describeFlow(plan: FlowPlan): string {
   const hops = plan.edges.size
   const parts = [`${hops} hop${hops === 1 ? '' : 's'}`]
   if (plan.branches.length > 1) parts.push(`fans out to ${plan.branches.length}`)
-  parts.push(`${plan.duration.toFixed(1)}s`)
+  // A stream's cycle is the gap between messages, which is not a fact about the
+  // flow anyone wants; how long one message is on the road is.
+  const journey = plan.branches.reduce((max, b) => Math.max(max, b.journey), 0)
+  parts.push(plan.stream ? `${journey.toFixed(1)}s · continuous` : `${plan.duration.toFixed(1)}s`)
   return parts.join(' · ')
 }

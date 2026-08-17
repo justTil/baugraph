@@ -30,6 +30,7 @@ import IconPicker from '@/features/diagram/components/IconPicker.vue'
 import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 import FlowsSection from '@/features/diagram/components/FlowsSection.vue'
+import EdgeFlowSection from '@/features/diagram/components/EdgeFlowSection.vue'
 import { SHAPE_KEYS } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
 import { TECH_CATEGORIES, categoryFirst, techTerms } from '@/features/diagram/data/tech'
@@ -523,6 +524,13 @@ function withCommit(fn: () => void) {
             </Button>
           </div>
         </section>
+
+        <!--
+          How this one connection animates. It lives on the connection because
+          that is the thing being designed: two paths out of the same node mean
+          different things and are meant to look it.
+        -->
+        <EdgeFlowSection :edge-id="edge.id" />
       </template>
 
       <!-- ------------------------------------------------------- selection -->

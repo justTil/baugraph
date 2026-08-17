@@ -90,6 +90,12 @@ export const edgeSchema = z.object({
   data: metadataSchema.optional(),
 })
 
+const flowEdgeStyleSchema = z.object({
+  color: z.enum(COLOR_KEYS).optional(),
+  token: z.enum(FLOW_TOKENS).optional(),
+  speed: z.number().finite().min(10).max(4000).optional(),
+})
+
 export const flowSchema = z.object({
   id: idSchema,
   label: z.string().default(FLOW_DEFAULTS.label),
@@ -103,9 +109,11 @@ export const flowSchema = z.object({
   mode: z.enum(FLOW_MODES).default(FLOW_DEFAULTS.mode),
   speed: z.number().finite().min(10).max(4000).default(FLOW_DEFAULTS.speed),
   count: z.number().int().min(1).max(12).default(FLOW_DEFAULTS.count),
+  stream: z.boolean().default(FLOW_DEFAULTS.stream),
   pause: z.number().finite().min(0).max(60).default(FLOW_DEFAULTS.pause),
   loop: z.boolean().default(FLOW_DEFAULTS.loop),
   enabled: z.boolean().default(FLOW_DEFAULTS.enabled),
+  style: z.record(idSchema, flowEdgeStyleSchema).optional(),
   data: metadataSchema.optional(),
 })
 
@@ -243,6 +251,17 @@ export const documentSchema = z
           code: 'custom',
           path: ['flows', i, 'from'],
           message: `start node "${flow.from}" does not exist`,
+        })
+      }
+
+      // Styling a connection the flow does not travel would draw nothing and
+      // read as a bug in the diagram rather than in the file.
+      for (const edge of Object.keys(flow.style ?? {})) {
+        if (seenEdges.has(edge)) continue
+        ctx.addIssue({
+          code: 'custom',
+          path: ['flows', i, 'style', edge],
+          message: `"${edge}" is styled but is not one of this flow's connections`,
         })
       }
     })
