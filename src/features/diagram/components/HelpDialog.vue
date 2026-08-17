@@ -129,11 +129,12 @@ const SHORTCUTS: [string, string][] = [
           </p>
           <p>
             Two paths out of the same node rarely mean the same thing, so each connection can
-            be drawn its own way. Select a <em>connection</em> and the inspector shows the flows
-            running over it with the colour, message shape and speed for that connection alone —
-            the failure path as a red packet crawling to the dead-letter queue while the rest
-            are blue envelopes at full speed. Each control reads <em>same as the flow</em> until
-            you touch it. The same panel takes a connection out of a flow or adds it to another.
+            be drawn its own way — the failure path as a red packet crawling to the dead-letter
+            queue while the rest are blue envelopes at full speed. Open a connection under
+            <em>Connections</em> in the flow editor and set its colour, message shape or speed
+            there; each control reads <em>same as the flow</em> until you touch it. Selecting a
+            <em>connection</em> on the canvas shows which flows it is part of, adds it to another
+            or takes it out, and opens the editor on that connection.
           </p>
           <p>
             <em>Sends</em> decides what kind of thing a flow is. <em>An event</em> goes through

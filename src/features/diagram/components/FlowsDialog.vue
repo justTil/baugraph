@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
-import { Pause, Play, Plus, Trash2 } from '@lucide/vue'
+import { computed, ref, watch } from 'vue'
+import { ChevronRight, Pause, Play, Plus, Trash2, X } from '@lucide/vue'
 import {
   Dialog,
   DialogContent,
@@ -26,12 +26,15 @@ import { COLOR_HEX } from '@/features/diagram/lib/theme'
  * A flow belongs to the diagram rather than to anything selected on it, so it is
  * edited in a room of its own: the list on the left, one flow's settings on the
  * right, wide enough to put the numbers side by side instead of stacking eight
- * controls down a 288-pixel column. A connection's own inspector keeps only what
- * is genuinely about that connection — whether it is in a flow, and how the
- * message looks while it crosses this one line.
+ * controls down a 288-pixel column. Every control a flow has lives here, the
+ * per-connection overrides included — a connection's inspector says which flows
+ * it is part of and sends you here for the rest, so there is one colour picker
+ * for a flow rather than two that disagree about which one you last used.
  */
 
 const {
+  nodes,
+  edges,
   flows,
   selectedEdges,
   commit,
@@ -39,20 +42,54 @@ const {
   addFlow,
   updateFlow,
   removeFlow,
+  toggleFlowEdge,
+  setFlowEdgeStyle,
 } = useDiagram()
 
-const { paused, reduced, highlighted, editorOpen, editing, planOf } = useFlows()
+const { paused, reduced, highlighted, editorOpen, editing, editingEdge, planOf } = useFlows()
 
 const current = computed(() => flows.value.find((flow) => flow.id === editing.value) ?? null)
 
+/** The flow's connections, named by the nodes they run between. */
+const hops = computed(() => {
+  const flow = current.value
+  if (!flow) return []
+  const byId = new Map(edges.value.map((e) => [e.id, e]))
+  const label = (id: string) => nodes.value.find((n) => n.id === id)?.data?.label || id
+  return flow.edges.flatMap((id) => {
+    const edge = byId.get(id)
+    return edge ? [{ id, from: label(edge.source), to: label(edge.target) }] : []
+  })
+})
+
+const overrideOf = (flow: MessageFlow, edgeId: string) => flow.style?.[edgeId] ?? {}
+
+/** Whether a connection is drawn its own way rather than like the rest. */
+const tweaked = (flow: MessageFlow, edgeId: string) =>
+  Object.keys(overrideOf(flow, edgeId)).length > 0
+
 /** A flow can only be made where there is something for a message to travel. */
 const candidate = computed(() => selectedEdges.value.map((e) => e.id))
+
+/** Which connection's overrides are open. One at a time; the list gets long. */
+const openHop = ref<string | null>(null)
 
 // Opening on nothing — from the toolbar, with no flow named — should still land
 // on something to edit, and a deleted flow must not leave the panel blank.
 watch([editorOpen, flows], () => {
   if (!editorOpen.value) return
   if (!current.value) editing.value = flows.value[0]?.id ?? null
+})
+
+// Arriving from a connection opens that connection; switching flows by hand
+// closes whatever was open, since it belonged to the flow you left.
+watch(editingEdge, (edge) => {
+  openHop.value = edge
+})
+watch(editing, () => {
+  if (editingEdge.value && current.value?.edges.includes(editingEdge.value)) return
+  editingEdge.value = null
+  openHop.value = null
 })
 
 function act(fn: () => void) {
@@ -89,6 +126,35 @@ function hover(flow: MessageFlow | null) {
 }
 
 const summaryOf = (flow: MessageFlow) => describeFlow(planOf(flow))
+
+/**
+ * Sets one field of a connection's own look. `undefined` hands it back to the
+ * flow, so "same as the rest" stays the absence of a value rather than a copy of
+ * one that would go stale the moment the flow changed.
+ */
+function style(edgeId: string, patch: Parameters<typeof setFlowEdgeStyle>[2]) {
+  const flow = current.value
+  if (!flow) return
+  act(() => setFlowEdgeStyle(flow.id, edgeId, patch))
+}
+
+/** An empty speed box means "whatever the flow runs at". */
+function setHopSpeed(edgeId: string, raw: string) {
+  const value = raw.trim()
+  if (!value) return style(edgeId, { speed: undefined })
+  const speed = Number(value)
+  if (!Number.isFinite(speed)) return
+  style(edgeId, { speed: Math.min(4000, Math.max(10, speed)) })
+}
+
+/** Dropping the last connection would take the flow with it — so warn instead. */
+function dropHop(edgeId: string) {
+  const flow = current.value
+  if (!flow) return
+  if (flow.edges.length === 1) return drop(flow.id)
+  if (openHop.value === edgeId) openHop.value = null
+  act(() => toggleFlowEdge(flow.id, edgeId))
+}
 
 /** Clamps a number field to its own bounds, falling back on the flow's value. */
 const clamp = (raw: string, min: number, max: number, fallback: number, round = false) => {
@@ -377,6 +443,106 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
               </div>
             </div>
 
+            <!--
+              Two paths out of the same node rarely mean the same thing — the
+              failure one crawling to a dead-letter queue, the rest at full speed
+              — so any connection can be drawn its own way. Collapsed by default:
+              most never need it, and the ones that do say so on their own row.
+            -->
+            <section class="space-y-1.5 border-t pt-4">
+              <Label class="text-xs">Connections</Label>
+              <p class="text-muted-foreground text-[11px] leading-relaxed">
+                Open one to draw it differently from the rest of the flow.
+              </p>
+
+              <ul class="divide-y rounded-md border">
+                <li v-for="hop in hops" :key="hop.id">
+                  <div
+                    class="hover:bg-accent/60 flex items-center gap-1.5 px-2 py-1.5"
+                    :class="{ 'bg-accent/60': openHop === hop.id }"
+                  >
+                    <button
+                      type="button"
+                      class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                      @click="openHop = openHop === hop.id ? null : hop.id"
+                    >
+                      <ChevronRight
+                        class="text-muted-foreground size-3.5 shrink-0 transition-transform"
+                        :class="{ 'rotate-90': openHop === hop.id }"
+                      />
+                      <span
+                        class="size-2.5 shrink-0 rounded-full border border-black/20 dark:border-white/20"
+                        :style="{
+                          background:
+                            COLOR_HEX[overrideOf(current, hop.id).color ?? current.color],
+                        }"
+                      />
+                      <span class="min-w-0 flex-1 truncate text-xs">
+                        {{ hop.from }} → {{ hop.to }}
+                      </span>
+                      <span
+                        v-if="tweaked(current, hop.id)"
+                        class="text-muted-foreground shrink-0 text-[10px]"
+                      >
+                        own look
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="text-muted-foreground -my-1 size-6 shrink-0"
+                      title="Take this connection out of the flow"
+                      @click="dropHop(hop.id)"
+                    >
+                      <X />
+                    </Button>
+                  </div>
+
+                  <div v-if="openHop === hop.id" class="grid grid-cols-2 gap-4 px-2 pt-1 pb-3">
+                    <div class="space-y-1.5">
+                      <Label class="text-muted-foreground text-[10px]">Colour here</Label>
+                      <ColorSwatches
+                        :model-value="overrideOf(current, hop.id).color ?? null"
+                        allow-default
+                        :default-hex="COLOR_HEX[current.color]"
+                        @update:model-value="style(hop.id, { color: $event ?? undefined })"
+                      />
+                    </div>
+
+                    <div class="space-y-1.5">
+                      <Label class="text-muted-foreground text-[10px]">Speed here</Label>
+                      <Input
+                        type="number"
+                        step="40"
+                        min="10"
+                        max="4000"
+                        class="h-8"
+                        :model-value="overrideOf(current, hop.id).speed ?? ''"
+                        :placeholder="`${current.speed} — same as the flow`"
+                        @change="setHopSpeed(hop.id, ($event.target as HTMLInputElement).value)"
+                      />
+                    </div>
+
+                    <div v-if="current.motion !== 'dash'" class="col-span-2 space-y-1.5">
+                      <Label class="text-muted-foreground text-[10px]">Message here</Label>
+                      <SegmentedField
+                        :model-value="overrideOf(current, hop.id).token ?? 'same'"
+                        :options="[
+                          { value: 'same', label: 'Same', title: 'Whatever the flow uses' },
+                          { value: 'dot', label: 'Dot' },
+                          { value: 'packet', label: 'Packet' },
+                          { value: 'envelope', label: 'Envelope' },
+                        ]"
+                        @update:model-value="
+                          style(hop.id, { token: $event === 'same' ? undefined : ($event as never) })
+                        "
+                      />
+                    </div>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
             <div class="flex items-center gap-2 border-t pt-4">
               <Toggle
                 size="sm"
@@ -396,11 +562,6 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
                 Delete flow
               </Button>
             </div>
-
-            <p class="text-muted-foreground text-xs leading-relaxed">
-              To change the colour, message or speed on one connection only, select that
-              connection on the canvas — its inspector overrides what is set here.
-            </p>
           </div>
         </div>
       </div>
