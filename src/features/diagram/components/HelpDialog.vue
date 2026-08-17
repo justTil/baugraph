@@ -108,11 +108,12 @@ const SHORTCUTS: [string, string][] = [
             Message flows
           </h3>
           <p>
-            A diagram can show a message moving through it. Select the node it starts at and
-            press <em>Flow from …</em> at the bottom of the inspector — or right-click the node
-            and choose <em>Animate message from here</em>. The message travels every connection
-            onwards and <em>multiplies wherever the path forks</em>: one order published to a
-            topic with three subscribers is one envelope arriving and three leaving.
+            A diagram can show a message moving through it. Select the connections it travels
+            and add a flow — from the <em>Message flows</em> button in the toolbar, from a
+            selected connection's inspector, or by right-clicking a node and choosing
+            <em>Animate message from here</em>, which picks up everything downstream of it in
+            one go. The message <em>multiplies wherever the path forks</em>: one order published
+            to a topic with three subscribers is one envelope arriving and three leaving.
           </p>
           <p>
             None of that is drawn by hand. A flow only records which connections the message
@@ -142,7 +143,7 @@ const SHORTCUTS: [string, string][] = [
             way at once.
           </p>
           <p>
-            Hover a flow in the inspector to light up the connections it runs over. The pause
+            Hover a flow in the editor to light up the connections it runs over. The pause
             button in the toolbar freezes every flow where it is, which is what you want while
             working on a diagram that animates. Exported SVGs keep their animation; PNGs, being
             one frame, leave it out.

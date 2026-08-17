@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Plus, Waypoints, X } from '@lucide/vue'
+import { Plus, Settings2, Waypoints, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -34,7 +34,7 @@ const {
   flowsOnEdge,
 } = useDiagram()
 
-const { highlighted, planOf } = useFlows()
+const { highlighted, planOf, openFlowEditor } = useFlows()
 
 const on = computed(() => flowsOnEdge(props.edgeId))
 const off = computed(() => flows.value.filter((flow) => !flow.edges.includes(props.edgeId)))
@@ -65,7 +65,7 @@ function setSpeed(flow: MessageFlow, raw: string) {
 
 <template>
   <section class="space-y-2.5 border-b p-3">
-    <Label class="text-xs">Message flow</Label>
+    <Label class="text-xs">Flows on this connection</Label>
 
     <div
       v-for="flow in on"
@@ -82,6 +82,16 @@ function setSpeed(flow: MessageFlow, raw: string) {
         <span class="min-w-0 flex-1 truncate text-xs font-medium">
           {{ flow.label || flow.id }}
         </span>
+        <!-- What the flow itself does belongs to the flow, so hand it over. -->
+        <Button
+          variant="ghost"
+          size="icon"
+          class="text-muted-foreground -my-1 size-6 shrink-0"
+          title="Open this flow's own settings"
+          @click="openFlowEditor(flow.id)"
+        >
+          <Settings2 />
+        </Button>
         <Button
           variant="ghost"
           size="icon"

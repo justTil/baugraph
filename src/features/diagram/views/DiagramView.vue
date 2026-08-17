@@ -6,6 +6,7 @@ import DiagramCanvas from '@/features/diagram/components/DiagramCanvas.vue'
 import DiagramToolbar from '@/features/diagram/components/DiagramToolbar.vue'
 import InspectorPanel from '@/features/diagram/components/InspectorPanel.vue'
 import ExportDialog from '@/features/diagram/components/ExportDialog.vue'
+import FlowsDialog from '@/features/diagram/components/FlowsDialog.vue'
 import HelpDialog from '@/features/diagram/components/HelpDialog.vue'
 import OpenDialog from '@/features/diagram/components/OpenDialog.vue'
 import { sampleDocument } from '@/features/diagram/data/sample'
@@ -68,6 +69,9 @@ function onNew() {
     <DiagramCanvas @export="exportOpen = true" />
     <InspectorPanel @export="exportOpen = true" />
   </div>
+
+  <!-- Opens itself: both the toolbar and a connection's inspector reach for it. -->
+  <FlowsDialog />
 
   <ExportDialog v-model:open="exportOpen" />
   <OpenDialog v-model:open="openOpen" />
