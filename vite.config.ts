@@ -7,8 +7,8 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // GitHub Pages serves the project at /baugraph/; dev and preview stay at /.
-  base: process.env.BASE_PATH ?? '/',
+  // Served from the custom domain baugraph.com at the root, so the base stays /.
+  base: '/',
   plugins: [
     vue(),
     vueDevTools(),
