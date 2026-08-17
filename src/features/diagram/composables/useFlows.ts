@@ -91,6 +91,17 @@ const paused = ref(false)
  */
 const highlighted = ref<{ id: string; color: ColorKey; edges: Set<string> } | null>(null)
 
+/**
+ * The flow editor: whether it is open, which flow it is showing, and which of
+ * that flow's connections is opened up. Shared state rather than a prop because
+ * the two things that open it — the toolbar and a connection's inspector — sit
+ * on opposite sides of the canvas from it, and arriving from a connection should
+ * land on that connection rather than on a list to hunt through.
+ */
+const editorOpen = ref(false)
+const editing = ref<string | null>(null)
+const editingEdge = ref<string | null>(null)
+
 const reduced = ref(false)
 if (typeof window !== 'undefined' && window.matchMedia) {
   const query = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -418,6 +429,15 @@ export function useFlows() {
     running,
     reduced,
     highlighted,
+    editorOpen,
+    editing,
+    editingEdge,
+    /** Opens the flow editor, on `id` when one is named and `edge` when one is. */
+    openFlowEditor: (id: string | null = null, edge: string | null = null) => {
+      editing.value = id
+      editingEdge.value = edge
+      editorOpen.value = true
+    },
     /** Token slots a connection has to draw. */
     tokensFor: (edge: string) => state.value.byEdge.get(edge) ?? [],
     /** Moving-line overlays a connection has to draw. */

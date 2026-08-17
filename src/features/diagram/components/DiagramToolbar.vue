@@ -10,6 +10,7 @@ import {
   Redo2,
   Sun,
   Undo2,
+  Waypoints,
   ZoomIn,
   ZoomOut,
 } from '@lucide/vue'
@@ -27,7 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const { meta, canvas, flows, canUndo, canRedo, undo, redo, commit, endCoalesce } = useDiagram()
-const { paused } = useFlows()
+const { paused, openFlowEditor } = useFlows()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
 
 const zoomLabel = computed(() => `${Math.round(viewport.value.zoom * 100)}%`)
@@ -90,6 +91,19 @@ function onTitleInput() {
   </Tooltip>
 
   <div class="ml-auto flex items-center gap-1">
+    <!--
+      Flows belong to the diagram, not to anything selected on it, so this is
+      where they are edited — one door, in the same place whatever is selected.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="icon" class="size-8" @click="openFlowEditor()">
+          <Waypoints />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Message flows</TooltipContent>
+    </Tooltip>
+
     <!--
       Only offered once there is something to stop. Freezing the messages is the
       first thing wanted while working *on* a diagram that animates.

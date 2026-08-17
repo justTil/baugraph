@@ -26,7 +26,10 @@ const { groups, isActive, setActiveItem, activeItemId } = useNavigation()
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" class="cursor-default hover:bg-transparent">
-            <!-- Wordmark: "BG" set in Sora, matching public/favicon.svg. -->
+            <!--
+              Wordmark: "BG" in the UI sans. public/favicon.svg carries the same
+              two letters as outlines and still needs redrawing to match Geist.
+            -->
             <div
               class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg font-sans text-[13px] leading-none font-bold tracking-tight"
             >
