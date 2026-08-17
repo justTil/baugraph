@@ -5,6 +5,8 @@ import {
   Magnet,
   Maximize,
   Moon,
+  Pause,
+  Play,
   Redo2,
   Sun,
   Undo2,
@@ -17,13 +19,15 @@ import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 
 const emit = defineEmits<{
   (e: 'new' | 'open' | 'export' | 'help'): void
 }>()
 
-const { meta, canvas, canUndo, canRedo, undo, redo, commit, endCoalesce } = useDiagram()
+const { meta, canvas, flows, canUndo, canRedo, undo, redo, commit, endCoalesce } = useDiagram()
+const { paused } = useFlows()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
 
 const zoomLabel = computed(() => `${Math.round(viewport.value.zoom * 100)}%`)
@@ -86,6 +90,20 @@ function onTitleInput() {
   </Tooltip>
 
   <div class="ml-auto flex items-center gap-1">
+    <!--
+      Only offered once there is something to stop. Freezing the messages is the
+      first thing wanted while working *on* a diagram that animates.
+    -->
+    <Tooltip v-if="flows.length">
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="icon" class="size-8" @click="paused = !paused">
+          <Play v-if="paused" />
+          <Pause v-else />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{{ paused ? 'Play message flows' : 'Pause message flows' }}</TooltipContent>
+    </Tooltip>
+
     <Tooltip>
       <TooltipTrigger as-child>
         <Toggle

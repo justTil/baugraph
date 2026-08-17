@@ -105,6 +105,37 @@ const SHORTCUTS: [string, string][] = [
 
         <section class="space-y-2">
           <h3 class="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+            Message flows
+          </h3>
+          <p>
+            A diagram can show a message moving through it. Select the node it starts at and
+            press <em>Flow from …</em> at the bottom of the inspector — or right-click the node
+            and choose <em>Animate message from here</em>. The message travels every connection
+            onwards and <em>multiplies wherever the path forks</em>: one order published to a
+            topic with three subscribers is one envelope arriving and three leaving.
+          </p>
+          <p>
+            None of that is drawn by hand. A flow only records which connections the message
+            travels; the order of the hops, and where it splits, are worked out from how those
+            connections are wired — so adding a fourth subscriber to a fan-out is one click, and
+            rerouting a connection or dragging a node leaves the animation correct.
+          </p>
+          <p>
+            Pick how it is shown: <em>Messages</em> travelling the line, a moving <em>Line</em>
+            for a link under constant load, or both. Set <em>Where the path forks</em> to
+            <em>One by one</em> and a single message walks the connections in turn instead —
+            a routing slip, or a walkthrough of a sequence.
+          </p>
+          <p>
+            Hover a flow in the inspector to light up the connections it runs over. The pause
+            button in the toolbar freezes every flow where it is, which is what you want while
+            working on a diagram that animates. Exported SVGs keep their animation; PNGs, being
+            one frame, leave it out.
+          </p>
+        </section>
+
+        <section class="space-y-2">
+          <h3 class="text-muted-foreground text-xs font-bold tracking-wider uppercase">
             The file format
           </h3>
           <p>

@@ -1,15 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { EdgeProps } from '@vue-flow/core'
 import type { EdgeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import {
+  invalidateEdgePath,
+  registerEdgePath,
+  unregisterEdgePath,
+  useFlows,
+} from '@/features/diagram/composables/useFlows'
+import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
-import { diagramTheme, edgeColor, mix } from '@/features/diagram/lib/theme'
+import { COLOR_HEX, diagramTheme, edgeColor, mix } from '@/features/diagram/lib/theme'
 import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
 const { canvas } = useDiagram()
+const { highlightOf } = useFlows()
 
 const theme = computed(() => diagramTheme(canvas.theme))
 
@@ -38,6 +46,38 @@ const dash = computed(() => dashArray(props.data.line))
 const showEndArrow = computed(() => props.data.arrows !== 'none')
 const showStartArrow = computed(() => props.data.arrows === 'both')
 
+/**
+ * The drawn path is handed to the flow runtime, which samples it directly to
+ * place messages. Following the rendered element rather than re-deriving the
+ * route is what keeps a message on the line while the node it leads to is still
+ * being dragged: the geometry it reads is the geometry on screen.
+ */
+const pathEl = ref<SVGPathElement | null>(null)
+
+watch(pathEl, (el, previous) => {
+  if (previous && !el) unregisterEdgePath(props.id)
+  if (el) registerEdgePath(props.id, el)
+})
+
+// A reroute changes how long the connection is, and so how long a hop takes.
+watch(
+  () => geometry.value.path,
+  () => invalidateEdgePath(props.id),
+  { flush: 'post' },
+)
+
+onBeforeUnmount(() => unregisterEdgePath(props.id))
+
+/**
+ * Lit while the inspector points at a flow that runs over this connection. The
+ * halo takes the flow's colour, so two flows sharing a connection stay tellable
+ * apart as each is pointed at in turn.
+ */
+const highlight = computed(() => {
+  const color = highlightOf(props.id)
+  return color ? COLOR_HEX[color] : null
+})
+
 const label = computed(() => {
   if (!props.data.label) return null
   const width = measureText(props.data.label, 11) + 13
@@ -62,8 +102,22 @@ const label = computed(() => {
     stroke-width="16"
     class="vue-flow__edge-interaction"
   />
+  <!-- Halo for a flow the inspector is pointing at; under the line it belongs to. -->
+  <path
+    v-if="highlight"
+    :d="geometry.path"
+    fill="none"
+    :stroke="highlight"
+    stroke-width="9"
+    stroke-opacity="0.22"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class="pointer-events-none"
+  />
+
   <path
     :id="id"
+    ref="pathEl"
     :d="geometry.path"
     fill="none"
     :stroke="stroke"
@@ -84,6 +138,9 @@ const label = computed(() => {
     :d="arrowHeadPath(geometry.start, geometry.startDir)"
     :fill="stroke"
   />
+
+  <!-- Messages travelling this connection, and any moving line under them. -->
+  <FlowTokens :edge-id="id" :path="geometry.path" />
 
   <template v-if="label">
     <rect

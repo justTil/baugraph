@@ -40,7 +40,7 @@ export function exportSvg(doc: DiagramDocument, { transparent = false } = {}) {
 }
 
 export async function exportPng(doc: DiagramDocument, scale = 2) {
-  const svg = renderDocumentSvg(doc)
+  const svg = renderDocumentSvg(doc, { animate: false })
   const bounds = contentBounds(doc)
 
   // btoa() only handles latin-1, so encode UTF-8 bytes first.

@@ -11,6 +11,10 @@ import { MiniMap } from '@vue-flow/minimap'
 import type { ColorKey, Side } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import {
+  installFlowRuntime,
+  stopFlowRuntime,
+} from '@/features/diagram/composables/useFlows'
 import { useCanvas, CANVAS_ID } from '@/features/diagram/composables/useCanvas'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
@@ -402,8 +406,18 @@ function onKeyDown(event: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeyDown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+  // The flow tweens belong to the canvas: nothing outside it can see a message
+  // move, and the watchers they hang off are scoped to this component so they
+  // go away with it.
+  installFlowRuntime()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  stopFlowRuntime()
+})
 
 /**
  * Re-fit whenever a document is loaded from disk or storage — but only once Vue

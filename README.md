@@ -82,6 +82,42 @@ draggable, not connectable — which is what makes rearranging the contents of a
 bearable. A locked node carries a small lock badge; clicking it unlocks that node
 again, and the inspector can unlock everything at once.
 
+### Message flows
+
+A diagram can show a message moving through it. Select the node it starts at and
+press *Flow from …* in the inspector (or right-click → **Animate message from
+here**), and a message travels every connection onwards — **multiplying wherever
+the path forks**. One order published to a topic with three subscribers is one
+envelope arriving and three leaving, which is the move most middleware diagrams
+are drawn to explain and the one a still picture cannot make.
+
+Nothing about that split is authored. A flow stores only *which* connections the
+message travels; the order the hops happen in, and where the message multiplies,
+are read off the graph every time it runs. Adding a fourth subscriber to a
+fan-out is one more id in `edges` — never a rewritten timeline — and rerouting a
+connection or dragging a node keeps the animation correct, because the messages
+follow the path that is actually on screen.
+
+Two engines draw it, and a flow can use either or both:
+
+- **Messages** — discrete tokens (dot, packet or envelope) travelling the line,
+  driven by GSAP against the connection's own SVG path. Every hop moves at the
+  same speed, so a long connection honestly takes longer than a short one, and
+  branches out of a fork leave together.
+- **Line** — a marching dash along the connection, the way a link under constant
+  load reads. Pure CSS on an SVG stroke, so it costs nothing to leave running.
+
+Set *Where the path forks* to **One by one** instead of **Multiply** and a single
+message walks the connections in turn — a routing slip, or a step-by-step
+walkthrough of a sequence.
+
+Speed, colour, message shape, how many messages per pass and the gap before it
+repeats are all in the inspector; hovering a flow there haloes the connections it
+runs over. The toolbar's pause button freezes every flow where it is, which is
+what you want while working *on* a diagram that animates. A system asking for
+reduced motion is never animated at all: the messages are shown parked on the
+connections they travel instead.
+
 | Shortcut | |
 | --- | --- |
 | `Shift` + drag | rubber-band select |
@@ -145,6 +181,19 @@ for a complete one:
       "targetSide": "top",
       "label": "POST /orders"
     }
+  ],
+  "flows": [
+    {
+      "id": "flow-order-placed",
+      "label": "Order placed",
+      "edges": [
+        "order-service--order-created",
+        "order-created--billing-adapter",
+        "order-created--notification-service",
+        "order-created--analytics-sink"
+      ],
+      "token": "envelope"
+    }
   ]
 }
 ```
@@ -169,6 +218,12 @@ Design decisions, all in service of readable diffs:
   a zone may itself have a parent.
 - **`locked` is an editing aid**, written only when true. It keeps a node out of the
   way while you work on its neighbours and has no effect on rendering or export.
+- **A flow names connections, not a timeline.** `edges` is a set of edge ids and
+  the traversal is derived from them, so the fan-out above is four ids rather
+  than a hand-written schedule that would go stale the moment a node moved. Every
+  id has to resolve: a flow pointing at a connection that is not there is
+  rejected on open, and the editor drops a flow whose last connection is deleted
+  rather than leaving one behind. A diagram with no flows writes no `flows` key.
 - **`data` on any node or edge is yours** — free-form metadata, round-tripped
   untouched. Use it for ticket links, ownership, team conventions.
 
@@ -198,12 +253,20 @@ mapped across. See `src/model/migrate.ts`.
 | Format | Use |
 | --- | --- |
 | `.baugraph.json` | The editable source — this is the one to commit |
-| SVG | Vector, opaque or transparent background |
+| SVG | Vector, opaque or transparent background, message flows animated |
 | PNG | Raster at 2× or 4× |
 
 SVG and PNG are rendered by a standalone renderer (`src/features/diagram/lib/render-svg.ts`)
 that reuses the same shape, routing and colour code as the canvas, so an export matches
 what is on screen. Everything happens in the browser; nothing is uploaded.
+
+An exported SVG keeps its message flows: they are written as SMIL
+(`animateMotion` along the connections' own paths), so the file animates on its
+own in a browser with no script and no stylesheet. Because every hop of a journey
+runs at one speed, distance along a route is proportional to time along it, and a
+whole branch — fan-out included — collapses into a single declarative animation.
+PNG leaves the flows out; a raster is one frame, and one frame of an animation is
+not a picture of the diagram.
 
 ## Project layout
 
@@ -213,8 +276,10 @@ src/
                            (de)serialisation, migration, id generation
   features/diagram/
     components/            canvas, custom nodes and edges, palette, inspector
-    composables/           editor state, undo/redo, autosave, placement
-    lib/                   shape geometry, edge routing, theme, SVG export
+    composables/           editor state, undo/redo, autosave, placement,
+                           the GSAP message-flow runtime
+    lib/                   shape geometry, edge routing, flow traversal,
+                           theme, SVG export
     data/                  node-type and technology catalogues, the palette
                            built from both, curated Lucide icons, sample
   components/

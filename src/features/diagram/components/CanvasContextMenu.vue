@@ -53,6 +53,7 @@ import {
   Trash2,
   Undo2,
   Ungroup,
+  Waypoints,
 } from '@lucide/vue'
 import {
   ContextMenuCheckboxItem,
@@ -69,6 +70,7 @@ import {
 } from '@/components/ui/context-menu'
 import type { AlignAction } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { PALETTE, type PaletteItem } from '@/features/diagram/data/palette'
 import { NODE_TYPE_GROUPS } from '@/features/diagram/data/node-types'
@@ -114,9 +116,14 @@ const {
   reorderNode,
   alignSelection,
   toDocument,
+  flows,
+  addFlow,
+  edgesWithin,
+  edgesDownstream,
 } = useDiagram()
 
 const { fitView, addSelectedNodes, addSelectedEdges, getNodes, getEdges } = useCanvas()
+const { paused } = useFlows()
 
 /* ------------------------------------------------------------------ target */
 
@@ -223,6 +230,15 @@ function paintNodes(color: string) {
 /** Stamps one technology across a whole selection — "these five are Java". */
 function applyTech(tech: string) {
   selectedNodes.value.forEach((n) => setNodeTech(n.id, tech))
+}
+
+/**
+ * Animating from a node is the gesture worth having on a right-click: it takes
+ * everything a message reaches from there, so pointing at the service that
+ * publishes gets the broker and every subscriber hanging off it in one go.
+ */
+function animate(edgeIds: string[]) {
+  act(() => addFlow(edgeIds))
 }
 
 /**
@@ -415,6 +431,13 @@ function copySelectionIds() {
         <Ungroup />
         Release contents
       </ContextMenuItem>
+      <ContextMenuItem
+        :disabled="!edgesDownstream(node.id).length"
+        @select="animate(edgesDownstream(node!.id))"
+      >
+        <Waypoints />
+        Animate message from here
+      </ContextMenuItem>
       <ContextMenuItem @select="act(() => reorderNode(node!.id, 'front'))">
         <BringToFront />
         Bring to front
@@ -477,6 +500,10 @@ function copySelectionIds() {
       <ContextMenuItem @select="act(() => reverseEdge(edge!.id))">
         <ArrowLeftRight />
         Reverse direction
+      </ContextMenuItem>
+      <ContextMenuItem @select="animate([edge!.id])">
+        <Waypoints />
+        Animate a message along this
       </ContextMenuItem>
 
       <ContextMenuSeparator />
@@ -697,6 +724,24 @@ function copySelectionIds() {
         Lock selection
         <ContextMenuShortcut>⇧⌘L</ContextMenuShortcut>
       </ContextMenuItem>
+      <ContextMenuItem
+        :disabled="
+          !(selectedEdges.length
+            ? selectedEdges.map((e) => e.id)
+            : edgesWithin(selectedNodes.map((n) => n.id))
+          ).length
+        "
+        @select="
+          animate(
+            selectedEdges.length
+              ? selectedEdges.map((e) => e.id)
+              : edgesWithin(selectedNodes.map((n) => n.id)),
+          )
+        "
+      >
+        <Waypoints />
+        Animate message through selection
+      </ContextMenuItem>
 
       <ContextMenuSeparator />
 
@@ -829,6 +874,15 @@ function copySelectionIds() {
       >
         <Moon />
         Dark canvas
+      </ContextMenuCheckboxItem>
+
+      <ContextMenuCheckboxItem
+        v-if="flows.length"
+        :model-value="!paused"
+        @update:model-value="paused = $event !== true"
+      >
+        <Waypoints />
+        Run message flows
       </ContextMenuCheckboxItem>
 
       <ContextMenuItem v-if="lockedCount" @select="act(unlockAll)">

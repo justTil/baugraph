@@ -33,3 +33,12 @@ export function nodeId(label: string, taken: Iterable<string>): string {
 export function edgeId(source: string, target: string, taken: Iterable<string>): string {
   return uniqueId(`${source}--${target}`, taken)
 }
+
+/**
+ * Flows are usually created before they are named, so the id falls back to the
+ * node the message starts at — `flow-order-service` reads better in a diff than
+ * `flow-2`, and it survives the rename that follows.
+ */
+export function flowId(label: string, taken: Iterable<string>): string {
+  return uniqueId(`flow-${slugify(label, 'message')}`, taken)
+}

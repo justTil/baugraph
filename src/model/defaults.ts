@@ -3,6 +3,7 @@ import type {
   DiagramDocument,
   DiagramEdge,
   DiagramNode,
+  MessageFlow,
 } from '@/model/types'
 import { FORMAT_VERSION } from '@/model/types'
 
@@ -49,6 +50,22 @@ export const EDGE_DEFAULTS = {
   color: null,
 } as const satisfies Partial<DiagramEdge>
 
+export const FLOW_DEFAULTS = {
+  label: '',
+  from: null,
+  color: 'blue',
+  motion: 'token',
+  token: 'dot',
+  mode: 'broadcast',
+  // Roughly a second across a default-width node's worth of canvas: fast enough
+  // to read as a message, slow enough to follow across a fan-out.
+  speed: 220,
+  count: 1,
+  pause: 0.6,
+  loop: true,
+  enabled: true,
+} as const satisfies Partial<MessageFlow>
+
 export function blankDocument(title = 'Untitled diagram'): DiagramDocument {
   return {
     baugraph: FORMAT_VERSION,
@@ -56,5 +73,6 @@ export function blankDocument(title = 'Untitled diagram'): DiagramDocument {
     canvas: { ...DEFAULT_CANVAS },
     nodes: [],
     edges: [],
+    flows: [],
   }
 }

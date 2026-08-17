@@ -2,9 +2,12 @@ import { createApp, h } from 'vue'
 import type { DiagramDocument, DiagramNode } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { STACKED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
+import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
+import type { FlowEdge } from '@/features/diagram/lib/flow-graph'
+import { fadeOf, flowPlan } from '@/features/diagram/lib/flow-graph'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
-import { diagramTheme, edgeColor, mix, nodePaint } from '@/features/diagram/lib/theme'
+import { COLOR_HEX, diagramTheme, edgeColor, mix, nodePaint } from '@/features/diagram/lib/theme'
 import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
 
 /**
@@ -269,10 +272,185 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
   return parts.join('')
 }
 
+/* ------------------------------------------------------------------ flows */
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+/**
+ * How long each connection is drawn, which only a browser can say. Measured
+ * through one throwaway `<path>` rather than one per connection — the export
+ * already runs in a document, and this keeps it to a single insertion.
+ */
+function pathLengths(paths: Map<string, string>): Map<string, number> {
+  const out = new Map<string, number>()
+  if (typeof document === 'undefined' || !paths.size) return out
+
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('width', '0')
+  svg.setAttribute('height', '0')
+  svg.setAttribute('style', 'position:absolute;visibility:hidden')
+  const probe = document.createElementNS(SVG_NS, 'path')
+  svg.append(probe)
+  document.body.append(svg)
+
+  for (const [id, d] of paths) {
+    probe.setAttribute('d', d)
+    try {
+      out.set(id, probe.getTotalLength())
+    } catch {
+      out.set(id, 0)
+    }
+  }
+
+  svg.remove()
+  return out
+}
+
+/**
+ * SMIL wants a non-decreasing list running from exactly 0 to exactly 1, and
+ * rejects the whole animation when it does not get one. Rounding a duration can
+ * put two stops out of order by a millionth, so they are tidied here rather than
+ * trusted.
+ */
+function keyTimes(times: number[]): string {
+  let previous = 0
+  const clean = times.map((t, i) => {
+    if (i === 0) return 0
+    if (i === times.length - 1) return 1
+    previous = Math.min(1, Math.max(previous, t))
+    return previous
+  })
+  return clean.map((t) => t.toFixed(5)).join(';')
+}
+
+/** The message glyphs, drawn about their own centre so they ride the path. */
+function tokenMarkup(shape: string, color: string, bg: string): string {
+  if (shape === 'packet') {
+    return (
+      `<rect x="-6.5" y="-4.5" width="13" height="9" rx="2.5" fill="${color}" ` +
+      `stroke="${bg}" stroke-width="1.2"/>`
+    )
+  }
+  if (shape === 'envelope') {
+    return (
+      `<rect x="-7.5" y="-5.5" width="15" height="11" rx="1.8" fill="${color}" ` +
+      `stroke="${bg}" stroke-width="1.2"/>` +
+      `<path d="M-7.5,-5.5 L0,0.6 L7.5,-5.5" fill="none" stroke="${bg}" stroke-width="1.3" ` +
+      `stroke-linecap="round" stroke-linejoin="round"/>`
+    )
+  }
+  return (
+    `<circle r="7.5" fill="${color}" opacity="0.18"/>` +
+    `<circle r="3.8" fill="${color}" stroke="${bg}" stroke-width="1.2"/>`
+  )
+}
+
+/**
+ * The flows, as SMIL.
+ *
+ * An exported SVG has no script and no stylesheet to lean on, so the animation
+ * has to be declarative — which turns out to suit the model exactly. Every hop
+ * of a journey runs at one speed, so distance along the route is proportional to
+ * time along it, and a whole branch collapses into a single `animateMotion` over
+ * the concatenated hop paths. The gap between one hop's end and the next one's
+ * start is the node in between: the message crosses it the way it does on the
+ * canvas, by going in one side and coming out the other.
+ */
+function renderFlows(
+  doc: DiagramDocument,
+  geometries: Map<string, EdgeGeometry>,
+  bg: string,
+): string {
+  const flows = doc.flows ?? []
+  if (!flows.length) return ''
+
+  const byId = new Map<string, FlowEdge>(doc.edges.map((e) => [e.id, e]))
+  const lengths = pathLengths(
+    new Map([...geometries].map(([id, geometry]) => [id, geometry.path])),
+  )
+  const lengthOf = (id: string) => lengths.get(id) ?? 0
+
+  const parts: string[] = []
+
+  for (const flow of flows) {
+    if (!flow.enabled) continue
+    const plan = flowPlan(flow, byId, lengthOf)
+    if (!plan.branches.length || plan.duration <= 0) continue
+
+    const color = COLOR_HEX[flow.color]
+    const cycle = plan.duration
+    const repeat = flow.loop ? 'indefinite' : '1'
+    const freeze = flow.loop ? '' : ' fill="freeze"'
+
+    if (flow.motion !== 'token') {
+      for (const id of plan.edges) {
+        const geometry = geometries.get(id)
+        if (!geometry) continue
+        parts.push(
+          `<path d="${geometry.path}" fill="none" stroke="${color}" stroke-width="2.4" ` +
+            `stroke-linecap="round" stroke-dasharray="6 16">` +
+            `<animate attributeName="stroke-dashoffset" values="0;-22" ` +
+            `dur="${(22 / Math.max(flow.speed, 1)).toFixed(3)}s" repeatCount="indefinite"/>` +
+            `</path>`,
+        )
+      }
+    }
+
+    if (flow.motion === 'dash') continue
+
+    for (const branch of plan.branches) {
+      const route = branch.hops
+        .map((hop) => geometries.get(hop.edge)?.path)
+        .filter(Boolean)
+        .join(' ')
+      if (!route || branch.journey <= 0) continue
+
+      const fade = fadeOf(branch.journey)
+
+      for (let token = 0; token < flow.count; token++) {
+        const from = token * plan.stagger
+        const to = from + branch.journey
+
+        // Held at the start until it is sent, walked to the end, held there —
+        // the two flat stretches are what make one pass repeat cleanly.
+        const motion =
+          `<animateMotion dur="${cycle.toFixed(3)}s" repeatCount="${repeat}"${freeze} ` +
+          `calcMode="linear" keyPoints="0;0;1;1" ` +
+          `keyTimes="${keyTimes([0, from / cycle, to / cycle, 1])}" ` +
+          `path="${route}"/>`
+
+        const opacity =
+          `<animate attributeName="opacity" dur="${cycle.toFixed(3)}s" ` +
+          `repeatCount="${repeat}"${freeze} calcMode="linear" values="0;0;1;1;0;0" ` +
+          `keyTimes="${keyTimes([
+            0,
+            from / cycle,
+            (from + fade) / cycle,
+            (to - fade) / cycle,
+            to / cycle,
+            1,
+          ])}"/>`
+
+        parts.push(
+          `<g opacity="0">${tokenMarkup(flow.token, color, bg)}${motion}${opacity}</g>`,
+        )
+      }
+    }
+  }
+
+  return parts.join('')
+}
+
 export interface SvgOptions {
   /** Omits the background rectangle. */
   transparent?: boolean
   padding?: number
+  /**
+   * Writes the message flows as SMIL. On by default, and turned off for the
+   * raster export — a PNG is one frame, and a frame of an animation is not a
+   * picture of the diagram.
+   */
+  animate?: boolean
 }
 
 export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}): string {
@@ -285,17 +463,27 @@ export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}
     .map((n) => renderZone(n, boxes.get(n.id)!, nodePaint(n, theme)))
     .join('')
 
-  const edges = doc.edges
-    .map((edge) => {
-      const source = boxes.get(edge.source)
-      const target = boxes.get(edge.target)
-      if (!source || !target) return ''
-
-      const geometry = edgeGeometry(source, target, {
+  // Routed once and kept: the connections are drawn from these, and so are the
+  // messages that travel them, which is what stops the two disagreeing.
+  const geometries = new Map<string, EdgeGeometry>()
+  for (const edge of doc.edges) {
+    const source = boxes.get(edge.source)
+    const target = boxes.get(edge.target)
+    if (!source || !target) continue
+    geometries.set(
+      edge.id,
+      edgeGeometry(source, target, {
         sourceSide: edge.sourceSide,
         targetSide: edge.targetSide,
         route: edge.route,
-      })
+      }),
+    )
+  }
+
+  const edges = doc.edges
+    .map((edge) => {
+      const geometry = geometries.get(edge.id)
+      if (!geometry) return ''
       const color = edgeColor(edge.color, theme)
       const dash = dashArray(edge.line)
 
@@ -325,6 +513,11 @@ export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}
     })
     .join('')
 
+  // Between the connections and the nodes, exactly as on the canvas: a message
+  // rides over the line it travels and slips behind the node it arrives at.
+  const flows =
+    options.animate === false ? '' : renderFlows(doc, geometries, theme.bg)
+
   const shapes = doc.nodes
     .filter((n) => n.kind !== 'zone')
     .map((n) => renderShape(n, boxes.get(n.id)!, nodePaint(n, theme)))
@@ -343,6 +536,7 @@ export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}
     background +
     zones +
     edges +
+    flows +
     shapes +
     `</svg>`
   )
