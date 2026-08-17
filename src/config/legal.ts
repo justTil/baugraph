@@ -1,14 +1,18 @@
 /**
- * Legal texts (Impressum, Datenschutzerklärung, Haftungsausschluss).
+ * Legal texts (Datenschutzerklärung, Haftungsausschluss).
+ *
+ * The Impressum itself is *not* maintained here: it is hosted by
+ * online-impressum.de and embedded verbatim by the Impressum view, so it stays
+ * correct without a redeploy. See `imprintUrl` below.
  *
  * German law requires an Impressum to be "leicht erkennbar, unmittelbar
- * erreichbar und ständig verfügbar" (§ 5 DDG), so these live in a first-class
- * view rather than a dialog.
+ * erreichbar und ständig verfügbar" (§ 5 DDG), which is why both the Impressum
+ * and these texts are first-class views rather than a dialog.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * BEFORE GOING LIVE: replace every value marked with `TODO:` in `operator`
- * below. Until then the Legal view renders a loud warning banner instead of
- * pretending the placeholders are a valid Impressum.
+ * Values marked with `TODO:` are still placeholders; the Legal view renders a
+ * loud warning banner while any remain, instead of pretending the texts are
+ * valid.
  * ─────────────────────────────────────────────────────────────────────────
  *
  * This is a template, not legal advice. Have it checked if the project ever
@@ -20,14 +24,25 @@ export type LegalLocale = 'de' | 'en'
 /** Marker for values that must be filled in before deployment. */
 const TODO = 'TODO:'
 
-/** Site operator — the natural person behind a private, non-commercial site. */
+/**
+ * Externally hosted Impressum, embedded by `ImprintView`.
+ * Single source of truth for the § 5 DDG details — edit it at online-impressum.de,
+ * not here.
+ */
+export const imprintUrl = 'https://mein.online-impressum.de/baugraph/'
+
+/**
+ * Site operator — the natural person behind a private, non-commercial site.
+ * Mirrors the hosted Impressum, because the GDPR wants the controller named in
+ * the privacy policy itself rather than by reference.
+ */
 export const operator = {
-  name: `${TODO} Vorname Nachname`,
-  street: `${TODO} Straße und Hausnummer`,
-  postalCode: `${TODO} PLZ`,
-  city: `${TODO} Ort`,
+  name: 'Til Schwarze',
+  street: 'c/o Online-Impressum #10198, Europaring 90',
+  postalCode: '53757',
+  city: 'St. Augustin',
   country: 'Deutschland',
-  email: `${TODO} kontakt@example.com`,
+  email: 'baugraph@mail.online-impressum.de',
   /** Optional. Leave empty to omit the line; e-mail alone satisfies § 5 DDG. */
   phone: '',
 }
@@ -35,7 +50,7 @@ export const operator = {
 export const site = {
   name: 'Baugraph',
   /** Public URL, used in the privacy policy. */
-  url: `${TODO} https://example.github.io/baugraph/`,
+  url: 'https://baugraph.com/',
 }
 
 /** Where the static build is served from — a processor under Art. 28 GDPR. */
@@ -107,34 +122,6 @@ const contactEn = [
 ]
 
 const de: LegalDocument[] = [
-  {
-    id: 'imprint',
-    label: 'Impressum',
-    title: 'Impressum',
-    blocks: [
-      { heading: 'Angaben gemäß § 5 DDG', lines: address },
-      { heading: 'Kontakt', lines: contact },
-      {
-        heading: 'Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV',
-        lines: address.slice(0, 3),
-      },
-      {
-        heading: 'Art des Angebots',
-        paragraphs: [
-          `${site.name} ist ein privates, nicht-kommerzielles Projekt. Die Anwendung wird `
-          + 'unentgeltlich bereitgestellt, es werden keine Verträge geschlossen, keine Zahlungen '
-          + 'entgegengenommen und keine Benutzerkonten geführt.',
-        ],
-      },
-      {
-        heading: 'Verbraucherstreitbeilegung',
-        paragraphs: [
-          'Ich bin nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer '
-          + 'Verbraucherschlichtungsstelle teilzunehmen.',
-        ],
-      },
-    ],
-  },
   {
     id: 'privacy',
     label: 'Datenschutz',
@@ -342,33 +329,6 @@ const de: LegalDocument[] = [
 
 const en: LegalDocument[] = [
   {
-    id: 'imprint',
-    label: 'Imprint',
-    title: 'Imprint (Impressum)',
-    blocks: [
-      { heading: 'Information pursuant to § 5 DDG', lines: address },
-      { heading: 'Contact', lines: contactEn },
-      {
-        heading: 'Responsible for content pursuant to § 18 (2) MStV',
-        lines: address.slice(0, 3),
-      },
-      {
-        heading: 'Nature of this service',
-        paragraphs: [
-          `${site.name} is a private, non-commercial project. It is provided free of charge; no `
-          + 'contracts are concluded, no payments are accepted and no user accounts exist.',
-        ],
-      },
-      {
-        heading: 'Consumer dispute resolution',
-        paragraphs: [
-          'I am neither willing nor obliged to participate in dispute resolution proceedings '
-          + 'before a consumer arbitration board.',
-        ],
-      },
-    ],
-  },
-  {
     id: 'privacy',
     label: 'Privacy',
     title: 'Privacy Policy',
@@ -557,6 +517,19 @@ const en: LegalDocument[] = [
 ]
 
 export const legalDocuments: Record<LegalLocale, LegalDocument[]> = { de, en }
+
+/**
+ * Shown below the embedded Impressum. The hosted page covers § 5 DDG and
+ * consumer dispute resolution; this only adds what it cannot know — that the
+ * service is private and non-commercial.
+ */
+export const imprintNotice: Record<LegalLocale, string> = {
+  de: `${site.name} ist ein privates, nicht-kommerzielles Projekt. Die Anwendung wird `
+    + 'unentgeltlich bereitgestellt, es werden keine Verträge geschlossen, keine Zahlungen '
+    + 'entgegengenommen und keine Benutzerkonten geführt.',
+  en: `${site.name} is a private, non-commercial project. It is provided free of charge; no `
+    + 'contracts are concluded, no payments are accepted and no user accounts exist.',
+}
 
 /** German is the binding version; the English texts are a convenience translation. */
 export const bindingLocaleNotice: Record<LegalLocale, string> = {

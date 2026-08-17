@@ -1,5 +1,5 @@
 import type { NavGroup } from '@/types/navigation'
-import { Scale, Settings, Workflow } from '@lucide/vue'
+import { Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
 
 /**
  * Single source of truth for the sidebar navigation.
@@ -13,7 +13,9 @@ export const navigation: NavGroup[] = [
       { id: 'settings', label: 'Settings', icon: Settings },
       // Labelled "Impressum": § 5 DDG wants the entry to be recognisable at a
       // glance, and German case law treats that exact word as unambiguous.
-      { id: 'legal', label: 'Impressum', icon: Scale },
+      // Everything else (privacy, liability, copyright) lives under "Legal".
+      { id: 'imprint', label: 'Impressum', icon: Scale },
+      { id: 'legal', label: 'Legal', icon: ScrollText },
     ],
   },
 ]

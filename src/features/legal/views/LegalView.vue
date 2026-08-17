@@ -10,14 +10,17 @@ import { bindingLocaleNotice, hasPlaceholders, legalDocuments } from '@/config/l
 
 const locale = ref<LegalLocale>('de')
 const documents = computed(() => legalDocuments[locale.value])
-const activeTab = ref('imprint')
+// First document rather than a hard-coded id, so adding or reordering documents
+// in `legal.ts` cannot leave the tab list with nothing selected.
+const activeTab = ref(legalDocuments.de[0]?.id ?? '')
 </script>
 
 <template>
   <div class="mx-auto w-full max-w-3xl space-y-4 overflow-y-auto p-6">
     <!--
-      Placeholders would ship as an invalid Impressum, which is exactly the kind
-      of thing nobody notices until it is cited at them. Say so loudly.
+      Placeholders would ship as an invalid privacy policy, which is exactly the
+      kind of thing nobody notices until it is cited at them. Say so loudly.
+      (The Impressum itself is embedded from online-impressum.de, see ImprintView.)
     -->
     <div
       v-if="hasPlaceholders"
