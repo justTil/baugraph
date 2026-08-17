@@ -16,23 +16,20 @@ import { COLOR_HEX } from '@/features/diagram/lib/theme'
 /**
  * Message flows, in the inspector.
  *
- * Creating one is a single click because the interesting part is derived, not
- * authored: point at the service that publishes and the editor works out the
- * broker, the subscribers hanging off it and the order it all happens in. What
- * is left to set is what the message *looks* like, which is what this panel is.
+ * A flow is authored on connections, never on nodes: the lines it runs are the
+ * thing being edited, so a node selection has nothing here to offer and the
+ * create button stays hidden until connections are picked. What is left to set
+ * is what the message *looks* like, which is what this panel is.
  */
 
 const {
   flows,
-  selectedNodes,
   selectedEdges,
   commit,
   endCoalesce,
   addFlow,
   updateFlow,
   removeFlow,
-  edgesWithin,
-  edgesDownstream,
 } = useDiagram()
 
 const { paused, reduced, highlighted, planOf } = useFlows()
@@ -40,38 +37,8 @@ const { paused, reduced, highlighted, planOf } = useFlows()
 /** Which flow's settings are open. One at a time; the panel is narrow. */
 const open = ref<string | null>(null)
 
-/**
- * What "add a flow" means right now. A single node is the common case and the
- * good one — everything a message reaches from there, fan-out included.
- */
-const source = computed(() => {
-  const nodes = selectedNodes.value
-  const edges = selectedEdges.value
-
-  if (edges.length) {
-    return {
-      label: `Flow along ${edges.length} connection${edges.length === 1 ? '' : 's'}`,
-      edges: () => edges.map((e) => e.id),
-    }
-  }
-  if (nodes.length === 1) {
-    const node = nodes[0]!
-    return {
-      label: `Flow from ${node.data.label || node.id}`,
-      edges: () => edgesDownstream(node.id),
-    }
-  }
-  if (nodes.length > 1) {
-    return {
-      label: `Flow through ${nodes.length} nodes`,
-      edges: () => edgesWithin(nodes.map((n) => n.id)),
-    }
-  }
-  return null
-})
-
 /** A flow can only be made where there is something for a message to travel. */
-const candidate = computed(() => source.value?.edges() ?? [])
+const candidate = computed(() => selectedEdges.value.map((e) => e.id))
 
 function create() {
   const ids = candidate.value
@@ -123,25 +90,24 @@ const summaryOf = (flow: MessageFlow) => describeFlow(planOf(flow))
       </Button>
     </div>
 
+    <!-- No connections selected, nothing to animate along — so no button. -->
     <Button
+      v-if="candidate.length"
       variant="outline"
       size="sm"
       class="w-full justify-start"
-      :disabled="!candidate.length"
-      :title="
-        candidate.length
-          ? `Animate a message over ${candidate.length} connection${candidate.length === 1 ? '' : 's'}`
-          : 'Select a node or a connection to animate a message along'
-      "
+      :title="`Animate a message over ${candidate.length} connection${candidate.length === 1 ? '' : 's'}`"
       @click="create"
     >
       <Plus />
-      <span class="truncate">{{ source?.label ?? 'Add message flow' }}</span>
+      <span class="truncate">
+        Flow along {{ candidate.length }} connection{{ candidate.length === 1 ? '' : 's' }}
+      </span>
     </Button>
 
     <p v-if="!flows.length" class="text-muted-foreground text-xs leading-relaxed">
-      Select the node a message starts at and add a flow: it travels every connection
-      onwards, multiplying wherever the path forks — one message into a topic, three
+      Select the connections a message travels and add a flow: it runs the lines you
+      picked, multiplying wherever the path forks — one message into a topic, three
       out of it.
     </p>
 

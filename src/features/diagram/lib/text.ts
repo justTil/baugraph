@@ -7,7 +7,7 @@
  */
 
 export const SANS =
-  "Sora,-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif"
+  "Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif"
 
 let context: CanvasRenderingContext2D | null | undefined
 
@@ -29,7 +29,7 @@ export async function fontsReady(): Promise<void> {
   const fonts = typeof document === 'undefined' ? undefined : document.fonts
   if (!fonts) return
   try {
-    await Promise.all([fonts.load('400 13px Sora'), fonts.load('600 13px Sora')])
+    await Promise.all([fonts.load('400 13px Geist'), fonts.load('600 13px Geist')])
     await fonts.ready
   } catch {
     // A webfont that never arrives just means the fallback metrics stand.
