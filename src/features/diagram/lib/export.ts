@@ -1,6 +1,7 @@
 import type { DiagramDocument } from '@/model'
 import { stringify } from '@/model'
-import { contentBounds, documentFrames, renderDocumentSvg } from '@/features/diagram/lib/render-svg'
+import { documentFrames, renderDocumentSvg } from '@/features/diagram/lib/render-svg'
+import type { FrameOptions } from '@/features/diagram/lib/frame'
 import { gifPalette, gifWriter } from '@/features/diagram/lib/gif'
 import { diagramTheme } from '@/features/diagram/lib/theme'
 
@@ -123,10 +124,13 @@ export function exportJson(doc: DiagramDocument) {
   )
 }
 
-export function exportSvg(doc: DiagramDocument, { transparent = false, animate = true } = {}) {
+export function exportSvg(
+  doc: DiagramDocument,
+  { transparent = false, animate = true, frame }: { transparent?: boolean; animate?: boolean; frame?: FrameOptions } = {},
+) {
   download(
     `${slug(doc)}.svg`,
-    new Blob([renderDocumentSvg(doc, { transparent, animate })], { type: 'image/svg+xml' }),
+    new Blob([renderDocumentSvg(doc, { transparent, animate, frame })], { type: 'image/svg+xml' }),
   )
 }
 
@@ -158,9 +162,22 @@ function context(width: number, height: number): CanvasRenderingContext2D {
   return ctx
 }
 
-export async function exportPng(doc: DiagramDocument, scale = 2, { transparent = false } = {}) {
-  const image = await svgImage(renderDocumentSvg(doc, { animate: false, transparent }))
-  const bounds = contentBounds(doc)
+export async function exportPng(
+  doc: DiagramDocument,
+  scale = 2,
+  { transparent = false, frame }: { transparent?: boolean; frame?: FrameOptions } = {},
+) {
+  // Through the frames rather than `contentBounds`, because a dressed export is
+  // larger than its content and the canvas has to be the size of the picture.
+  const frames = documentFrames(doc, { animate: false, transparent, frame })
+  const bounds = frames.bounds
+  let svg: string
+  try {
+    svg = frames.frame()
+  } finally {
+    frames.dispose()
+  }
+  const image = await svgImage(svg)
 
   const ctx = context(Math.round(bounds.width * scale), Math.round(bounds.height * scale))
   const { canvas } = ctx
@@ -201,6 +218,7 @@ export function gifShape(duration: number, fps: number) {
 export interface GifExportOptions {
   fps?: number
   scale?: number
+  frame?: FrameOptions
   /** Called with 0 → 1 as the frames are drawn; a GIF takes long enough to say so. */
   onProgress?: (done: number) => void
 }
@@ -219,7 +237,7 @@ export interface GifExportOptions {
  */
 export async function exportGif(doc: DiagramDocument, options: GifExportOptions = {}) {
   const { scale = 1, onProgress } = options
-  const frames = documentFrames(doc)
+  const frames = documentFrames(doc, { frame: options.frame })
 
   try {
     if (frames.duration <= 0) {

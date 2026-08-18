@@ -23,6 +23,8 @@ import {
   gifShape,
 } from '@/features/diagram/lib/export'
 import { documentFrames } from '@/features/diagram/lib/render-svg'
+import type { BackdropId, ChromeId } from '@/features/diagram/lib/frame'
+import { BACKDROP_OPTIONS, CHROME_OPTIONS } from '@/features/diagram/lib/frame'
 
 /**
  * Choosing what to export, next to a picture of what that will be.
@@ -36,7 +38,7 @@ import { documentFrames } from '@/features/diagram/lib/render-svg'
 
 const open = defineModel<boolean>('open', { required: true })
 
-const { documentId, toDocument } = useDiagram()
+const { documentId, meta, toDocument } = useDiagram()
 
 type Format = 'json' | 'svg' | 'png' | 'gif'
 
@@ -52,6 +54,31 @@ const GIF_SCALES = ['1', '2'].map((v) => ({ value: v, label: `${v}×` }))
 const GIF_RATES = ['12', '16', '20', '25'].map((v) => ({ value: v, label: `${v} fps` }))
 
 const format = ref<Format>('svg')
+/**
+ * The dressing: a desktop window around the diagram and a gradient behind it,
+ * for the exports that are going somewhere they have to look like a screenshot
+ * rather than like a figure. Off to begin with — the plain picture is still the
+ * one to embed in a README.
+ */
+const chrome = ref<ChromeId>('none')
+const backdrop = ref<BackdropId>('none')
+
+/** A window with nothing behind it looks unfinished, so choosing one picks a
+ *  backdrop to stand it on — the first time, and never over a choice already made. */
+watch(chrome, (now, before) => {
+  if (now !== 'none' && before === 'none' && backdrop.value === 'none') {
+    backdrop.value = now === 'windows' ? 'windows' : 'macos'
+  }
+})
+
+const frame = computed(() =>
+  format.value === 'json'
+    ? undefined
+    // The title bar carries the diagram's own name.
+    : { chrome: chrome.value, backdrop: backdrop.value, title: meta.title },
+)
+
+const dressed = computed(() => chrome.value !== 'none' || backdrop.value !== 'none')
 const transparent = ref(false)
 const animate = ref(true)
 const pngScale = ref('2')
@@ -74,6 +101,7 @@ const preview = computed(() => {
   const doc = toDocument()
 
   const frames = documentFrames(doc, {
+    frame: frame.value,
     transparent: transparent.value && (format.value === 'svg' || format.value === 'png'),
     // A PNG is one frame, and a frame of an animation is not a picture of the
     // diagram; a GIF is nothing but the animation.
@@ -171,15 +199,16 @@ async function run() {
         if (!(await saveDocumentAs(documentId))) return
         break
       case 'svg':
-        exportSvg(doc, { transparent: transparent.value, animate: animate.value })
+        exportSvg(doc, { transparent: transparent.value, animate: animate.value, frame: frame.value })
         break
       case 'png':
-        await exportPng(doc, scale.value, { transparent: transparent.value })
+        await exportPng(doc, scale.value, { transparent: transparent.value, frame: frame.value })
         break
       case 'gif':
         await exportGif(doc, {
           fps: Number(gifRate.value),
           scale: scale.value,
+          frame: frame.value,
           onProgress: (done) => (progress.value = done),
         })
         break
@@ -230,7 +259,44 @@ async function run() {
             </div>
           </template>
 
-          <div v-if="format === 'svg' || format === 'png'" class="flex flex-wrap gap-2">
+          <template v-if="format !== 'json'">
+            <div class="space-y-1.5">
+              <p class="text-xs font-medium">Window</p>
+              <SegmentedField
+                :model-value="chrome"
+                :options="CHROME_OPTIONS"
+                @update:model-value="chrome = $event as ChromeId"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <p class="text-xs font-medium">Backdrop</p>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="option in BACKDROP_OPTIONS"
+                  :key="option.value"
+                  type="button"
+                  class="ring-offset-background focus-visible:ring-ring size-7 rounded-md border transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                  :class="
+                    backdrop === option.value
+                      ? 'border-primary ring-primary/40 ring-2'
+                      : 'border-border hover:border-foreground/40'
+                  "
+                  :title="option.label"
+                  :aria-label="option.label"
+                  :aria-pressed="backdrop === option.value"
+                  :style="option.css ? { backgroundImage: option.css } : undefined"
+                  @click="backdrop = option.value as BackdropId"
+                >
+                  <span v-if="!option.css" class="text-muted-foreground text-[10px]">—</span>
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <div
+            v-if="(format === 'svg' || format === 'png') && !dressed"
+            class="flex flex-wrap gap-2"
+          >
             <Toggle
               size="sm"
               variant="outline"
@@ -239,8 +305,10 @@ async function run() {
             >
               {{ transparent ? 'No background' : 'Background' }}
             </Toggle>
+          </div>
+
+          <div v-if="format === 'svg'" class="flex flex-wrap gap-2">
             <Toggle
-              v-if="format === 'svg'"
               size="sm"
               variant="outline"
               :model-value="animate"
@@ -260,7 +328,7 @@ async function run() {
         <div class="space-y-2">
           <div
             class="flex h-64 items-center justify-center overflow-hidden rounded-md border p-3"
-            :class="transparent && format !== 'gif' ? 'bg-export-checker' : 'bg-muted/40'"
+            :class="transparent && !dressed && format !== 'gif' ? 'bg-export-checker' : 'bg-muted/40'"
           >
             <pre
               v-if="format === 'json'"
