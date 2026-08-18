@@ -23,7 +23,8 @@ const SHORTCUTS: [string, string][] = [
   ['⌘G', 'wrap selection in a zone'],
   ['⇧⌘L', 'lock selection'],
   ['⌘Z / ⇧⌘Z', 'undo / redo'],
-  ['⌘S', 'download the .baugraph.json'],
+  ['⌘S', 'save to the .baugraph.json file'],
+  ['⇧⌘S', 'save to a different file'],
   ['⌫', 'delete selection'],
   ['arrows', 'nudge (⇧ = ×5)'],
 ]

@@ -684,7 +684,7 @@ function withCommit(fn: () => void) {
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘D</kbd></dt>
             <dd>duplicate</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘S</kbd></dt>
-            <dd>download JSON</dd>
+            <dd>save to file</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌫</kbd></dt>
             <dd>delete</dd>
           </dl>

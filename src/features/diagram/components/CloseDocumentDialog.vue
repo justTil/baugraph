@@ -12,6 +12,8 @@ import {
 const props = defineProps<{
   open: boolean
   title: string
+  /** Names the file it would be written to, when the diagram is linked to one. */
+  fileName?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -30,8 +32,13 @@ function onOpenChange(open: boolean) {
       <DialogHeader>
         <DialogTitle>Save “{{ props.title }}” before closing?</DialogTitle>
         <DialogDescription>
-          It has changes that are not in a file yet. The diagram stays in this browser either
-          way — you can reopen it from Open — but the JSON you commit will not have them.
+          It has changes that are not in
+          <template v-if="props.fileName">
+            <span class="font-mono text-xs">{{ props.fileName }}</span> yet.
+          </template>
+          <template v-else>a file yet.</template>
+          The diagram stays in this browser either way — you can reopen it from Open — but the
+          JSON you commit will not have them.
         </DialogDescription>
       </DialogHeader>
 
@@ -39,7 +46,7 @@ function onOpenChange(open: boolean) {
         <Button variant="ghost" @click="emit('cancel')">Cancel</Button>
         <div class="flex gap-2">
           <Button variant="outline" @click="emit('discard')">Close without saving</Button>
-          <Button @click="emit('save')">Download and close</Button>
+          <Button @click="emit('save')">Save and close</Button>
         </div>
       </DialogFooter>
     </DialogContent>

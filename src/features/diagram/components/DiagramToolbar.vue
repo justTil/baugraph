@@ -22,12 +22,25 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
+import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
 
 const emit = defineEmits<{
-  (e: 'new' | 'open' | 'export' | 'help'): void
+  (e: 'new' | 'open' | 'save' | 'export' | 'help'): void
 }>()
 
-const { meta, canvas, flows, canUndo, canRedo, undo, redo, commit, endCoalesce } = useDiagram()
+const { documentId, meta, canvas, flows, canUndo, canRedo, dirty, undo, redo, commit, endCoalesce } =
+  useDiagram()
+const { canOverwriteFiles, fileName } = useDocumentFile(documentId)
+
+/** What ⌘S will do, so the button can say it before it is pressed. */
+const saveHint = computed(() => {
+  const target = !canOverwriteFiles
+    ? 'Download the source file'
+    : fileName.value
+      ? `Save to ${fileName.value}`
+      : 'Save to a file…'
+  return dirty.value ? `${target} — unsaved changes (⌘S)` : `${target} (⌘S)`
+})
 const { paused, openFlowEditor } = useFlows()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
 
@@ -165,6 +178,22 @@ function onTitleInput() {
 
     <Button variant="ghost" size="sm" class="h-8" @click="emit('new')">New</Button>
     <Button variant="ghost" size="sm" class="h-8" @click="emit('open')">Open</Button>
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="sm" class="h-8" @click="emit('save')">
+          Save
+          <!-- A dot rather than an asterisk in the title: the file is behind,
+               the diagram itself is safe in the browser either way. Hidden from
+               assistive tech, which reads the tooltip instead. -->
+          <span
+            v-if="dirty"
+            class="bg-foreground/60 ml-1.5 size-1.5 rounded-full"
+            aria-hidden="true"
+          />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{{ saveHint }}</TooltipContent>
+    </Tooltip>
     <Button variant="outline" size="sm" class="h-8" @click="emit('export')">Export</Button>
     <Button variant="ghost" size="icon" class="size-8" title="Help (?)" @click="emit('help')">
       ?

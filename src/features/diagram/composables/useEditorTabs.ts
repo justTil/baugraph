@@ -4,6 +4,7 @@ import type { DiagramDocument } from '@/model'
 import { blankDocument } from '@/model'
 import { closePanel, openPanel, setPanelTitle } from '@/features/workspace/composables/useWorkspace'
 import { diagramStore } from '@/features/diagram/composables/useDiagram'
+import { unlinkDocumentFile } from '@/features/diagram/composables/useDocumentFile'
 import {
   adoptDocument,
   createDocument,
@@ -77,6 +78,7 @@ export function resolveCloseRequest(documentId: string, close: boolean) {
  */
 export function discardDocument(documentId: string) {
   closePanel(editorPanelId(documentId))
+  unlinkDocumentFile(documentId)
   forgetDocument(documentId)
 }
 

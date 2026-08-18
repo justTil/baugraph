@@ -11,13 +11,14 @@ import {
 } from '@/components/ui/dialog'
 import type { DiagramParseError } from '@/model'
 import { safeParse } from '@/model'
+import { linkDocumentFile } from '@/features/diagram/composables/useDocumentFile'
 import { ensureDocument, useDocuments } from '@/features/diagram/composables/useDocuments'
 import {
   discardDocument,
   openDocumentTab,
   openDocumentTabFrom,
 } from '@/features/diagram/composables/useEditorTabs'
-import { readFile } from '@/features/diagram/lib/export'
+import { canOverwriteFiles, droppedHandle, pickJson, readFile } from '@/features/diagram/lib/export'
 
 const open = defineModel<boolean>('open', { required: true })
 
@@ -29,23 +30,50 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
 const error = ref<DiagramParseError | null>(null)
 
-async function ingest(file: File | undefined) {
-  if (!file) return
-  error.value = null
-  const result = safeParse(await readFile(file))
+/**
+ * Takes the parsed diagram into its own tab, so opening a file never puts the
+ * one you were working on out of reach.
+ *
+ * `handle` is what makes the next save overwrite this file instead of
+ * downloading a numbered copy beside it; browsers without the File System
+ * Access API simply do not supply one.
+ */
+function adopt(text: string, handle: FileSystemFileHandle | null) {
+  const result = safeParse(text)
   if (!result.ok) {
     error.value = result.error
     return
   }
-  // Its own tab, so opening a file never puts the diagram you were working on
-  // out of reach.
-  openDocumentTabFrom(result.document)
+  const panel = openDocumentTabFrom(result.document)
+  const documentId = (panel?.params as { documentId?: string } | undefined)?.documentId
+  if (handle && documentId) linkDocumentFile(documentId, handle)
   open.value = false
+}
+
+async function ingest(file: File | undefined, handle: FileSystemFileHandle | null = null) {
+  if (!file) return
+  error.value = null
+  adopt(await readFile(file), handle)
+}
+
+/** The picker hands back a handle; the file input cannot. */
+async function choose() {
+  error.value = null
+  try {
+    const picked = await pickJson()
+    if (picked) adopt(picked.text, picked.handle)
+  } catch {
+    fileInput.value?.click()
+  }
 }
 
 function onDrop(event: DragEvent) {
   dragging.value = false
-  void ingest(event.dataTransfer?.files?.[0])
+  const file = event.dataTransfer?.files?.[0]
+  // Read the handle before awaiting anything: the drag data is cleared as soon
+  // as the event handler yields.
+  const handle = droppedHandle(event.dataTransfer?.items?.[0])
+  void handle.then((h) => ingest(file, h))
 }
 
 /** Deleting is the one thing here that cannot be undone, so it asks. */
@@ -90,7 +118,9 @@ function onPick(event: Event) {
       >
         <Upload class="text-muted-foreground mx-auto mb-3 size-6" />
         <p class="text-muted-foreground mb-3 text-sm">Drop a file here</p>
-        <Button variant="outline" size="sm" @click="fileInput?.click()">Choose file…</Button>
+        <Button variant="outline" size="sm" @click="canOverwriteFiles ? choose() : fileInput?.click()">
+          Choose file…
+        </Button>
         <input
           ref="fileInput"
           type="file"
