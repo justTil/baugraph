@@ -2,6 +2,7 @@
 import type { CSSProperties } from 'vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { EdgeProps } from '@vue-flow/core'
+import { useVueFlow } from '@vue-flow/core'
 import type { EdgeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
@@ -13,6 +14,7 @@ import { measureText } from '@/features/diagram/lib/text'
 const props = defineProps<EdgeProps<EdgeData>>()
 
 const { canvas } = useDiagram()
+const { getNodes } = useVueFlow()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 
 const theme = computed(() => diagramTheme(canvas.theme))
@@ -25,11 +27,25 @@ const boxOf = (node: EdgeProps['sourceNode']) => ({
   height: node.dimensions.height,
 })
 
+/**
+ * The nodes this connection has to get around.
+ *
+ * Zones are left out on purpose: a zone is a container, and the nodes a
+ * connection runs between routinely sit inside one. Routing around them would
+ * send every line that leaves a group on a tour of the canvas.
+ */
+const obstacles = computed(() =>
+  getNodes.value
+    .filter((node) => node.type !== 'zone' && node.id !== props.source && node.id !== props.target)
+    .map(boxOf),
+)
+
 const geometry = computed(() =>
   edgeGeometry(boxOf(props.sourceNode), boxOf(props.targetNode), {
     sourceSide: props.data.sourceSide,
     targetSide: props.data.targetSide,
     route: props.data.route,
+    obstacles: obstacles.value,
   }),
 )
 

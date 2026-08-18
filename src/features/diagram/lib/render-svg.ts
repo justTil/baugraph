@@ -711,16 +711,25 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
   // Routed once and kept: the connections are drawn from these, and so are the
   // messages that travel them, which is what stops the two disagreeing.
   const geometries = new Map<string, EdgeGeometry>()
+  // Connections route around the nodes, so the same obstacle set the canvas
+  // works from is handed over here — an export that re-drew a line straight
+  // through a box would not match what was on screen. Zones are excluded: they
+  // are containers the connections legitimately run in and out of.
+  const solids = doc.nodes.filter((n) => n.kind !== 'zone')
   for (const edge of doc.edges) {
     const source = boxes.get(edge.source)
     const target = boxes.get(edge.target)
     if (!source || !target) continue
+    const obstacles = solids
+      .filter((n) => n.id !== edge.source && n.id !== edge.target)
+      .map((n) => boxes.get(n.id)!)
     geometries.set(
       edge.id,
       edgeGeometry(source, target, {
         sourceSide: edge.sourceSide,
         targetSide: edge.targetSide,
         route: edge.route,
+        obstacles,
       }),
     )
   }

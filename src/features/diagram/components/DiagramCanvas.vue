@@ -709,7 +709,7 @@ watch(isVisible, (visible) => {
             leave-to-class="translate-y-1 opacity-0"
           >
             <!-- An edit made while the confirmation is still up retires it early. -->
-            <Alert v-if="saved && !dirty" class="w-auto shadow-lg">
+            <Alert v-if="saved && !dirty" variant="success" class="w-auto shadow-lg">
               <Check />
               <AlertTitle>Saved</AlertTitle>
               <AlertDescription>
@@ -719,9 +719,9 @@ watch(isVisible, (visible) => {
 
             <p
               v-else-if="dirty"
-              class="text-muted-foreground flex items-center gap-1.5 font-mono text-xs"
+              class="text-destructive flex items-center gap-1.5 font-mono text-xs"
             >
-              <span class="bg-foreground/60 size-1.5 shrink-0 rounded-full" aria-hidden="true" />
+              <span class="bg-destructive size-1.5 shrink-0 rounded-full" aria-hidden="true" />
               Unsaved changes
             </p>
           </Transition>

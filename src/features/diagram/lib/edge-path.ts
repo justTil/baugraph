@@ -178,62 +178,338 @@ function align(source: Box, target: Box, sa: Anchor, ta: Anchor): void {
   ta.point[axis] = shared
 }
 
-export interface EdgeRouteOptions {
-  sourceSide: Side
-  targetSide: Side
-  route: Route
+/* ------------------------------------------------------ obstacle avoidance */
+
+/**
+ * How much room a detouring connector keeps between itself and a node.
+ *
+ * Wide enough that the line reads as going *around* the box rather than
+ * grazing it, tight enough that two nodes a grid step apart still leave a lane
+ * open between them.
+ */
+const CLEARANCE = 14
+
+/** Retried with when the full margin leaves no way through a crowded patch. */
+const TIGHT_CLEARANCE = 5
+
+/** How far outside the boxes it connects the search may roam. */
+const SEARCH_MARGIN = 90
+
+/**
+ * What a corner costs, in pixels of line.
+ *
+ * Every way around a box is the same length — Manhattan distance does not care
+ * which way it is walked — so length alone leaves the search free to return a
+ * staircase. Pricing corners is what makes it pick the two-turn detour a person
+ * would have drawn.
+ */
+const TURN_COST = 26
+
+/** Corner rounding per route style, once a connector has had to divert. */
+const DETOUR_RADIUS = { orthogonal: 10, straight: 8, curved: 26 } as const
+
+/** Ceilings on the search, so a crowded diagram cannot stall a drag. */
+const MAX_CELLS = 3000
+const MAX_VISITS = 12000
+
+const inflate = (b: Box, by: number): Box => ({
+  x: b.x - by,
+  y: b.y - by,
+  width: b.width + by * 2,
+  height: b.height + by * 2,
+})
+
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+const contains = (b: Box, p: Vec) =>
+  p.x > b.x && p.x < b.x + b.width && p.y > b.y && p.y < b.y + b.height
+
+function boundsOf(points: Vec[]): Box {
+  const x = Math.min(...points.map((p) => p.x))
+  const y = Math.min(...points.map((p) => p.y))
+  return {
+    x,
+    y,
+    width: Math.max(...points.map((p) => p.x)) - x,
+    height: Math.max(...points.map((p) => p.y)) - y,
+  }
 }
 
-export function edgeGeometry(
-  source: Box,
-  target: Box,
-  { sourceSide, targetSide, route }: EdgeRouteOptions,
-): EdgeGeometry {
-  if (source === target || (source.x === target.x && source.y === target.y && source.width === target.width)) {
-    return selfLoop(source)
+function union(a: Box, b: Box): Box {
+  const x = Math.min(a.x, b.x)
+  const y = Math.min(a.y, b.y)
+  return {
+    x,
+    y,
+    width: Math.max(a.x + a.width, b.x + b.width) - x,
+    height: Math.max(a.y + a.height, b.y + b.height) - y,
   }
+}
 
-  const sa = anchor(source, sourceSide === 'auto' ? autoSide(source, target) : sourceSide)
-  const ta = anchor(target, targetSide === 'auto' ? autoSide(target, source) : targetSide)
-  align(source, target, sa, ta)
+/**
+ * Whether a segment passes through the inside of a box.
+ *
+ * Liang–Barsky clipping against a box pulled in by half a pixel, so a line that
+ * runs along a node's edge — or clips its corner — does not count as crossing
+ * it. Only actually going through the box does.
+ */
+function segmentBlocked(a: Vec, b: Vec, box: Box): boolean {
+  const EPS = 0.5
+  const xLo = box.x + EPS
+  const xHi = box.x + box.width - EPS
+  const yLo = box.y + EPS
+  const yHi = box.y + box.height - EPS
+  if (xHi <= xLo || yHi <= yLo) return false
 
-  const gap = 2
-  const s: Vec = { x: sa.point.x + sa.normal.x * gap, y: sa.point.y + sa.normal.y * gap }
-  const t: Vec = { x: ta.point.x + ta.normal.x * gap, y: ta.point.y + ta.normal.y * gap }
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  let t0 = 0
+  let t1 = 1
+  const clip = (p: number, q: number) => {
+    if (p === 0) return q >= 0
+    const t = q / p
+    if (p < 0) {
+      if (t > t1) return false
+      if (t > t0) t0 = t
+    } else {
+      if (t < t0) return false
+      if (t < t1) t1 = t
+    }
+    return true
+  }
+  return clip(-dx, a.x - xLo) && clip(dx, xHi - a.x) && clip(-dy, a.y - yLo) && clip(dy, yHi - a.y)
+}
 
-  if (route === 'straight') {
-    const dx = t.x - s.x
-    const dy = t.y - s.y
-    const len = Math.hypot(dx, dy) || 1
-    return {
-      path: `M${s.x},${s.y}L${t.x},${t.y}`,
-      mid: { x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 },
-      start: s,
-      end: t,
-      startDir: { x: -dx / len, y: -dy / len },
-      endDir: { x: dx / len, y: dy / len },
+function polylineBlocked(points: Vec[], boxes: Box[]): boolean {
+  for (let i = 1; i < points.length; i++) {
+    for (const box of boxes) {
+      if (segmentBlocked(points[i - 1]!, points[i]!, box)) return true
+    }
+  }
+  return false
+}
+
+/** A curve is tested as the polyline through a sample of its points. */
+const bezierSamples = (a: Vec, b: Vec, c: Vec, d: Vec, steps = 24): Vec[] =>
+  Array.from({ length: steps + 1 }, (_, i) => bezierPoint(a, b, c, d, i / steps))
+
+/** Direction index of an axis-aligned unit vector: 0 = +x, 1 = +y, 2 = -x, 3 = -y. */
+const dirOf = (v: Vec) => (v.x > 0 ? 0 : v.x < 0 ? 2 : v.y > 0 ? 1 : 3)
+
+/** Grid coordinates are quantised, so a point can be looked up by value. */
+const tick = (v: number) => Math.round(v * 2) / 2
+
+/** Sorted, de-duplicated coordinates, with anything outside `[lo, hi]` dropped. */
+function axisTicks(values: number[], lo: number, hi: number): number[] {
+  const seen = new Set<number>()
+  for (const v of values) {
+    const t = tick(v)
+    if (t >= lo && t <= hi) seen.add(t)
+  }
+  return [...seen].sort((a, b) => a - b)
+}
+
+/** Drops the middle of any three points that lie on one straight run. */
+function simplify(points: Vec[]): Vec[] {
+  const out: Vec[] = []
+  for (const p of points) {
+    const a = out.at(-2)
+    const b = out.at(-1)
+    if (b && Math.abs(p.x - b.x) < 0.5 && Math.abs(p.y - b.y) < 0.5) continue
+    if (a && b) {
+      const alongX = Math.abs(a.x - b.x) < 0.5 && Math.abs(b.x - p.x) < 0.5
+      const alongY = Math.abs(a.y - b.y) < 0.5 && Math.abs(b.y - p.y) < 0.5
+      if (alongX || alongY) out.pop()
+    }
+    out.push(p)
+  }
+  return out
+}
+
+/* A binary min-heap, kept as two parallel arrays of numbers: the search runs on
+   every frame of a drag, and this is the part of it that runs the most. */
+
+function heapPush(costs: number[], items: number[], cost: number, item: number): void {
+  let i = costs.length
+  costs.push(cost)
+  items.push(item)
+  while (i > 0) {
+    const up = (i - 1) >> 1
+    if (costs[up]! <= costs[i]!) break
+    ;[costs[up], costs[i]] = [costs[i]!, costs[up]!]
+    ;[items[up], items[i]] = [items[i]!, items[up]!]
+    i = up
+  }
+}
+
+function heapPop(costs: number[], items: number[]): number {
+  const top = items[0]!
+  const cost = costs.pop()!
+  const item = items.pop()!
+  if (costs.length) {
+    costs[0] = cost
+    items[0] = item
+    for (let i = 0; ; ) {
+      const left = i * 2 + 1
+      const right = left + 1
+      let low = i
+      if (left < costs.length && costs[left]! < costs[low]!) low = left
+      if (right < costs.length && costs[right]! < costs[low]!) low = right
+      if (low === i) break
+      ;[costs[low], costs[i]] = [costs[i]!, costs[low]!]
+      ;[items[low], items[i]] = [items[i]!, items[low]!]
+      i = low
+    }
+  }
+  return top
+}
+
+/**
+ * An orthogonal route from `s` to `t` that stays out of `boxes`, or `null` when
+ * there is none to be had.
+ *
+ * A* over the Hanan grid: the lines through every obstacle edge, plus the two
+ * endpoints and their stubs. Any shortest rectilinear path around a set of
+ * boxes turns only on those lines, so the grid stays small — a few dozen points
+ * for a normal diagram — without giving up a route that exists. The search
+ * state carries the direction of travel, which is what lets a corner be priced,
+ * and what lets the route be made to leave and arrive along the sides the
+ * connection is attached to.
+ */
+function detour(
+  s: Vec,
+  t: Vec,
+  sa: Anchor,
+  ta: Anchor,
+  boxes: Box[],
+  clearance: number,
+): Vec[] | null {
+  const stub = 22
+  const s1 = { x: s.x + sa.normal.x * stub, y: s.y + sa.normal.y * stub }
+  const t1 = { x: t.x + ta.normal.x * stub, y: t.y + ta.normal.y * stub }
+
+  // The ground the search may use: what it connects, whatever stands in the
+  // way, and enough room to get past it.
+  let region = boundsOf([s, t, s1, t1])
+  for (const box of boxes) {
+    if (overlaps(inflate(region, SEARCH_MARGIN), box)) region = union(region, box)
+  }
+  region = inflate(region, SEARCH_MARGIN)
+
+  const walls = boxes.filter((b) => overlaps(region, b)).map((b) => inflate(b, clearance))
+  if (!walls.length) return null
+  // A stub buried in a neighbour leaves nowhere to set off from.
+  if (polylineBlocked([s, s1], walls) || polylineBlocked([t1, t], walls)) return null
+
+  const xHi = region.x + region.width
+  const yHi = region.y + region.height
+  const xs = axisTicks(
+    [region.x, xHi, s.x, s1.x, t.x, t1.x, ...walls.flatMap((w) => [w.x, w.x + w.width])],
+    region.x,
+    xHi,
+  )
+  const ys = axisTicks(
+    [region.y, yHi, s.y, s1.y, t.y, t1.y, ...walls.flatMap((w) => [w.y, w.y + w.height])],
+    region.y,
+    yHi,
+  )
+  const nx = xs.length
+  const ny = ys.length
+  if (nx < 2 || ny < 2 || nx * ny > MAX_CELLS) return null
+
+  const sx = xs.indexOf(tick(s1.x))
+  const sy = ys.indexOf(tick(s1.y))
+  const tx = xs.indexOf(tick(t1.x))
+  const ty = ys.indexOf(tick(t1.y))
+  if (sx < 0 || sy < 0 || tx < 0 || ty < 0) return null
+
+  const stateOf = (ix: number, iy: number, dir: number) => (iy * nx + ix) * 4 + dir
+  const start = stateOf(sx, sy, dirOf(sa.normal))
+  const goal = stateOf(tx, ty, dirOf({ x: -ta.normal.x, y: -ta.normal.y }))
+  const heuristic = (ix: number, iy: number) =>
+    Math.abs(xs[ix]! - xs[tx]!) + Math.abs(ys[iy]! - ys[ty]!)
+
+  const best = new Map<number, number>([[start, 0]])
+  const cameFrom = new Map<number, number>()
+  const settled = new Set<number>()
+  const costs: number[] = []
+  const items: number[] = []
+  heapPush(costs, items, heuristic(sx, sy), start)
+
+  let visits = 0
+  while (items.length) {
+    const state = heapPop(costs, items)
+    if (state === goal) break
+    if (settled.has(state)) continue
+    settled.add(state)
+    if (++visits > MAX_VISITS) return null
+
+    const dir = state % 4
+    const cell = (state - dir) / 4
+    const ix = cell % nx
+    const iy = (cell - ix) / nx
+    const g = best.get(state)!
+
+    for (let step = 0; step < 4; step++) {
+      const jx = ix + (step === 0 ? 1 : step === 2 ? -1 : 0)
+      const jy = iy + (step === 1 ? 1 : step === 3 ? -1 : 0)
+      if (jx < 0 || jy < 0 || jx >= nx || jy >= ny) continue
+      const a = { x: xs[ix]!, y: ys[iy]! }
+      const b = { x: xs[jx]!, y: ys[jy]! }
+      if (walls.some((w) => segmentBlocked(a, b, w))) continue
+      const cost = g + Math.abs(b.x - a.x) + Math.abs(b.y - a.y) + (step === dir ? 0 : TURN_COST)
+      const next = stateOf(jx, jy, step)
+      if (cost >= (best.get(next) ?? Infinity)) continue
+      best.set(next, cost)
+      cameFrom.set(next, state)
+      heapPush(costs, items, cost + heuristic(jx, jy), next)
     }
   }
 
-  if (route === 'curved') {
-    const reach = clamp(Math.hypot(t.x - s.x, t.y - s.y) * 0.42, 34, 150)
-    const c1 = { x: s.x + sa.normal.x * reach, y: s.y + sa.normal.y * reach }
-    const c2 = { x: t.x + ta.normal.x * reach, y: t.y + ta.normal.y * reach }
-    const nearEnd = bezierPoint(s, c1, c2, t, 0.96)
-    const nearStart = bezierPoint(s, c1, c2, t, 0.04)
-    const le = Math.hypot(t.x - nearEnd.x, t.y - nearEnd.y) || 1
-    const ls = Math.hypot(s.x - nearStart.x, s.y - nearStart.y) || 1
-    return {
-      path: `M${s.x},${s.y}C${c1.x},${c1.y} ${c2.x},${c2.y} ${t.x},${t.y}`,
-      mid: bezierPoint(s, c1, c2, t, 0.5),
-      start: s,
-      end: t,
-      startDir: { x: (s.x - nearStart.x) / ls, y: (s.y - nearStart.y) / ls },
-      endDir: { x: (t.x - nearEnd.x) / le, y: (t.y - nearEnd.y) / le },
-    }
-  }
+  if (!best.has(goal)) return null
 
-  /* orthogonal */
+  const points: Vec[] = []
+  for (let state: number | undefined = goal; state !== undefined; state = cameFrom.get(state)) {
+    const cell = (state - (state % 4)) / 4
+    const ix = cell % nx
+    points.push({ x: xs[ix]!, y: ys[(cell - ix) / nx]! })
+    if (points.length > nx * ny) return null
+  }
+  points.reverse()
+  return simplify([s, ...points, t])
+}
+
+/** Tries for a detour with proper clearance, then for any detour at all. */
+function detourRoute(s: Vec, t: Vec, sa: Anchor, ta: Anchor, walls: Box[]): Vec[] | null {
+  return detour(s, t, sa, ta, walls, CLEARANCE) ?? detour(s, t, sa, ta, walls, TIGHT_CLEARANCE)
+}
+
+/** Geometry for a connector drawn as a polyline with its corners rounded off. */
+function fromPolyline(points: Vec[], radius: number): EdgeGeometry {
+  const cleaned = points.filter((p, i) => {
+    const previous = points[i - 1]
+    return !previous || Math.abs(p.x - previous.x) > 0.5 || Math.abs(p.y - previous.y) > 0.5
+  })
+  const first = cleaned[0] ?? { x: 0, y: 0 }
+  const afterFirst = cleaned[1] ?? first
+  const last = cleaned.at(-1) ?? first
+  const beforeLast = cleaned.at(-2) ?? last
+  const ls = Math.hypot(afterFirst.x - first.x, afterFirst.y - first.y) || 1
+  const le = Math.hypot(last.x - beforeLast.x, last.y - beforeLast.y) || 1
+
+  return {
+    path: polylinePath(cleaned, radius),
+    mid: polylineMid(cleaned),
+    start: first,
+    end: last,
+    startDir: { x: (first.x - afterFirst.x) / ls, y: (first.y - afterFirst.y) / ls },
+    endDir: { x: (last.x - beforeLast.x) / le, y: (last.y - beforeLast.y) / le },
+  }
+}
+
+/** The plain right-angled route between two anchors, ignoring everything else. */
+function orthogonalPoints(s: Vec, t: Vec, sa: Anchor, ta: Anchor): Vec[] {
   const stub = 22
   const s1 = { x: s.x + sa.normal.x * stub, y: s.y + sa.normal.y * stub }
   const t1 = { x: t.x + ta.normal.x * stub, y: t.y + ta.normal.y * stub }
@@ -257,26 +533,95 @@ export function edgeGeometry(
     points.push({ x: s1.x, y: t1.y })
   }
   points.push(t1, t)
+  return points
+}
 
-  const cleaned = points.filter((p, i) => {
-    const previous = points[i - 1]
-    return !previous || Math.abs(p.x - previous.x) > 0.5 || Math.abs(p.y - previous.y) > 0.5
-  })
-  const last = cleaned.at(-1) ?? t
-  const beforeLast = cleaned.at(-2) ?? last
-  const le = Math.hypot(last.x - beforeLast.x, last.y - beforeLast.y) || 1
-  const first = cleaned[0] ?? s
-  const afterFirst = cleaned[1] ?? first
-  const ls = Math.hypot(afterFirst.x - first.x, afterFirst.y - first.y) || 1
+export interface EdgeRouteOptions {
+  sourceSide: Side
+  targetSide: Side
+  route: Route
+  /**
+   * Boxes the connector must not run through — every other node on the canvas.
+   *
+   * Passed in rather than looked up, because the two callers hold different
+   * things: the canvas has live, mid-drag node boxes, the exporter has the
+   * document's. Source and target are filtered out here, so a caller can hand
+   * over the whole set without picking through it.
+   */
+  obstacles?: Box[]
+}
 
-  return {
-    path: polylinePath(cleaned, 10),
-    mid: polylineMid(cleaned),
-    start: first,
-    end: last,
-    startDir: { x: (first.x - afterFirst.x) / ls, y: (first.y - afterFirst.y) / ls },
-    endDir: { x: (last.x - beforeLast.x) / le, y: (last.y - beforeLast.y) / le },
+export function edgeGeometry(
+  source: Box,
+  target: Box,
+  { sourceSide, targetSide, route, obstacles }: EdgeRouteOptions,
+): EdgeGeometry {
+  if (source === target || (source.x === target.x && source.y === target.y && source.width === target.width)) {
+    return selfLoop(source)
   }
+
+  const sa = anchor(source, sourceSide === 'auto' ? autoSide(source, target) : sourceSide)
+  const ta = anchor(target, targetSide === 'auto' ? autoSide(target, source) : targetSide)
+  align(source, target, sa, ta)
+
+  const gap = 2
+  const s: Vec = { x: sa.point.x + sa.normal.x * gap, y: sa.point.y + sa.normal.y * gap }
+  const t: Vec = { x: ta.point.x + ta.normal.x * gap, y: ta.point.y + ta.normal.y * gap }
+
+  // A box sitting on top of an endpoint is not something a detour can help
+  // with — there is no way out of it — so it is not treated as one.
+  const walls = (obstacles ?? []).filter(
+    (b) => b !== source && b !== target && !contains(b, s) && !contains(b, t),
+  )
+
+  if (route === 'straight') {
+    if (walls.length && polylineBlocked([s, t], walls)) {
+      const around = detourRoute(s, t, sa, ta, walls)
+      if (around) return fromPolyline(around, DETOUR_RADIUS.straight)
+    }
+    const dx = t.x - s.x
+    const dy = t.y - s.y
+    const len = Math.hypot(dx, dy) || 1
+    return {
+      path: `M${s.x},${s.y}L${t.x},${t.y}`,
+      mid: { x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 },
+      start: s,
+      end: t,
+      startDir: { x: -dx / len, y: -dy / len },
+      endDir: { x: dx / len, y: dy / len },
+    }
+  }
+
+  if (route === 'curved') {
+    const reach = clamp(Math.hypot(t.x - s.x, t.y - s.y) * 0.42, 34, 150)
+    const c1 = { x: s.x + sa.normal.x * reach, y: s.y + sa.normal.y * reach }
+    const c2 = { x: t.x + ta.normal.x * reach, y: t.y + ta.normal.y * reach }
+    if (walls.length && polylineBlocked(bezierSamples(s, c1, c2, t), walls)) {
+      const around = detourRoute(s, t, sa, ta, walls)
+      // Rounded generously: a curve that has to divert should still read as one.
+      if (around) return fromPolyline(around, DETOUR_RADIUS.curved)
+    }
+    const nearEnd = bezierPoint(s, c1, c2, t, 0.96)
+    const nearStart = bezierPoint(s, c1, c2, t, 0.04)
+    const le = Math.hypot(t.x - nearEnd.x, t.y - nearEnd.y) || 1
+    const ls = Math.hypot(s.x - nearStart.x, s.y - nearStart.y) || 1
+    return {
+      path: `M${s.x},${s.y}C${c1.x},${c1.y} ${c2.x},${c2.y} ${t.x},${t.y}`,
+      mid: bezierPoint(s, c1, c2, t, 0.5),
+      start: s,
+      end: t,
+      startDir: { x: (s.x - nearStart.x) / ls, y: (s.y - nearStart.y) / ls },
+      endDir: { x: (t.x - nearEnd.x) / le, y: (t.y - nearEnd.y) / le },
+    }
+  }
+
+  /* orthogonal */
+  const points = orthogonalPoints(s, t, sa, ta)
+  if (walls.length && polylineBlocked(points, walls)) {
+    const around = detourRoute(s, t, sa, ta, walls)
+    if (around) return fromPolyline(around, DETOUR_RADIUS.orthogonal)
+  }
+  return fromPolyline(points, DETOUR_RADIUS.orthogonal)
 }
 
 /** Triangular arrowhead pointing along `dir`, with its tip at `point`. */
