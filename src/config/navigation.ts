@@ -1,4 +1,4 @@
-import type { NavGroup } from '@/types/navigation'
+import type { NavGroup, NavItem } from '@/types/navigation'
 import { Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
 
 /**
@@ -22,3 +22,11 @@ export const navigation: NavGroup[] = [
 
 /** Item selected on first load. */
 export const defaultNavItemId = 'editor'
+
+/**
+ * Lookup by id. The sidebar, the dock's tabs and the panel titles all label
+ * themselves from the same entry, so a rename here reaches every surface.
+ */
+export function navItem(id: string): NavItem | undefined {
+  return navigation.flatMap((group) => group.items).find((item) => item.id === id)
+}

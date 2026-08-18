@@ -1,19 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
-import { useNavigation } from '@/composables/useNavigation'
-import { views } from '@/config/views'
-
-const { activeItemId } = useNavigation()
-
-const activeView = computed(() => views[activeItemId.value])
+import WorkspaceDock from '@/features/workspace/components/WorkspaceDock.vue'
 </script>
 
 <template>
   <AppShell>
-    <component :is="activeView" v-if="activeView" />
-    <p v-else class="text-muted-foreground text-sm">
-      Für diesen Eintrag existiert noch keine Ansicht.
-    </p>
+    <!--
+      Which views are on screen, and how they are arranged, is the dock's
+      business now - the shell only hands it the space below the header.
+    -->
+    <WorkspaceDock />
   </AppShell>
 </template>

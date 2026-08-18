@@ -1,30 +1,23 @@
-import type { NavItem } from '@/types/navigation'
-import { computed, ref } from 'vue'
-import { defaultNavItemId, navigation } from '@/config/navigation'
-
-const allItems = computed<NavItem[]>(() => navigation.flatMap(group => group.items))
-
-const activeItemId = ref<string>(defaultNavItemId)
-
-const activeItem = computed<NavItem | undefined>(() =>
-  allItems.value.find(item => item.id === activeItemId.value),
-)
-
-function setActiveItem(id: string) {
-  activeItemId.value = id
-}
+import { navigation } from '@/config/navigation'
+import { useWorkspace } from '@/features/workspace/composables/useWorkspace'
 
 /**
  * Shared navigation state.
- * Deliberately router-free for now - swap the internals for `useRoute()`
- * once vue-router is introduced; the component API stays the same.
+ *
+ * The dock owns which views exist and which one has focus; a nav item is just
+ * a request to open or focus the matching panel. Several views can be on screen
+ * at once, so `isActive` (focused) and `isOpen` (has a tab) are distinct.
  */
 export function useNavigation() {
+  const { activeViewId, activeItem, isActive, isOpen, isVisible, openView } = useWorkspace()
+
   return {
     groups: navigation,
-    activeItemId,
+    activeItemId: activeViewId,
     activeItem,
-    setActiveItem,
-    isActive: (id: string) => activeItemId.value === id,
+    setActiveItem: openView,
+    isActive,
+    isOpen,
+    isVisible,
   }
 }

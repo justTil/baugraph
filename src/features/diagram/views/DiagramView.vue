@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { HEADER_SLOT_SELECTOR } from '@/components/layout/header-slot'
+import { usePanel } from '@/features/workspace/composables/usePanel'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import DiagramCanvas from '@/features/diagram/components/DiagramCanvas.vue'
 import DiagramToolbar from '@/features/diagram/components/DiagramToolbar.vue'
@@ -15,6 +16,10 @@ import { fontsReady } from '@/features/diagram/lib/text'
 import { safeParse } from '@/model'
 
 const { nodes, loadDocument, newDocument, toDocument, restorePersisted } = useDiagram()
+
+// Docked views stay mounted behind their tab; the header is shared, so the
+// toolbar may only claim it while this panel is actually on screen.
+const { isVisible } = usePanel()
 
 const exportOpen = ref(false)
 const helpOpen = ref(false)
@@ -44,6 +49,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onSave))
 
 /** ⌘S downloads the source file rather than letting the browser save the page. */
 function onSave(event: KeyboardEvent) {
+  if (!isVisible.value) return
   if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return
   event.preventDefault()
   exportJson(toDocument())
@@ -56,7 +62,7 @@ function onNew() {
 </script>
 
 <template>
-  <Teleport v-if="mounted" :to="HEADER_SLOT_SELECTOR">
+  <Teleport v-if="mounted && isVisible" :to="HEADER_SLOT_SELECTOR">
     <DiagramToolbar
       @new="onNew"
       @open="openOpen = true"
