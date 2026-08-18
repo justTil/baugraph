@@ -48,6 +48,12 @@ function onDrop(event: DragEvent) {
   void ingest(event.dataTransfer?.files?.[0])
 }
 
+/** Deleting is the one thing here that cannot be undone, so it asks. */
+function discard(entry: { id: string; title: string }) {
+  if (!window.confirm(`Delete “${entry.title}” from this browser? This cannot be undone.`)) return
+  discardDocument(entry.id)
+}
+
 function openStored(id: string) {
   if (!ensureDocument(id)) {
     discardDocument(id)
@@ -110,7 +116,7 @@ function onPick(event: Event) {
               type="button"
               class="text-muted-foreground hover:bg-accent hover:text-destructive grid size-7 shrink-0 place-items-center rounded"
               :aria-label="`Delete ${entry.title}`"
-              @click="discardDocument(entry.id)"
+              @click="discard(entry)"
             >
               <Trash2 class="size-3.5" />
             </button>

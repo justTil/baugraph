@@ -13,7 +13,7 @@ import { exportJson, exportPng, exportSvg } from '@/features/diagram/lib/export'
 
 const open = defineModel<boolean>('open', { required: true })
 
-const { toDocument } = useDiagram()
+const { toDocument, markSaved } = useDiagram()
 const error = ref<string | null>(null)
 
 async function run(action: () => void | Promise<void>) {
@@ -40,7 +40,7 @@ async function run(action: () => void | Promise<void>) {
       <div class="space-y-4">
         <div class="space-y-2">
           <p class="text-sm font-medium">Source</p>
-          <Button variant="outline" class="w-full justify-start" @click="run(() => exportJson(toDocument()))">
+          <Button variant="outline" class="w-full justify-start" @click="run(() => { exportJson(toDocument()); markSaved() })">
             <span class="font-mono text-xs">.baugraph.json</span>
             <span class="text-muted-foreground ml-2 text-xs">
               editable, diff-friendly — commit this one

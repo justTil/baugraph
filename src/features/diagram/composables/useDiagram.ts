@@ -1,6 +1,6 @@
 import type { Edge, GraphEdge, GraphNode, Node } from '@vue-flow/core'
 import type { ComputedRef, InjectionKey, Ref } from 'vue'
-import { computed, effectScope, inject, reactive, ref, watch } from 'vue'
+import { computed, effectScope, inject, nextTick, reactive, ref, watch } from 'vue'
 import type {
   ArrowMode,
   CanvasSettings,
@@ -23,7 +23,6 @@ import {
   DEFAULT_ZONE_SIZE,
   FLOW_DEFAULTS,
   FORMAT_VERSION,
-  blankDocument,
   edgeId as makeEdgeId,
   flowId as makeFlowId,
   nodeId as makeNodeId,
@@ -122,6 +121,21 @@ function createDiagramStore(documentId: string) {
 
   /** Set by the view once Vue Flow is mounted, so the store can trigger a re-fit. */
   const fitRequest = ref(0)
+
+  /**
+   * Whether this diagram has edits that are not in a file yet.
+   *
+   * The autosave below means nothing is *lost* when a tab closes — the diagram
+   * stays in this browser either way. What can be lost is the JSON on disk
+   * falling behind, which is the copy that gets committed, so that is what the
+   * flag tracks and what closing a tab asks about.
+   *
+   * Raised from `commit`, the checkpoint every user edit already takes, rather
+   * than from watching the nodes: Vue Flow writes measurements back into them
+   * as it lays the canvas out, and a diagram that has only been *rendered* has
+   * not been changed.
+   */
+  const dirty = ref(false)
 
   /* -------------------------------------------------------- document <-> VF */
 
@@ -300,11 +314,29 @@ function createDiagramStore(documentId: string) {
   let lastCoalesceKey: string | null = null
 
   function commit(coalesceKey?: string) {
+    dirty.value = true
     if (coalesceKey && coalesceKey === lastCoalesceKey) return
     lastCoalesceKey = coalesceKey ?? null
     past.value.push(toDocument())
     if (past.value.length > HISTORY_LIMIT) past.value.shift()
     future.value = []
+  }
+
+  /** Marks the diagram as matching the last file written from it. */
+  function markSaved() {
+    dirty.value = false
+  }
+
+  /**
+   * Clears the flag for an edit that is not the user's: loading a document
+   * mutates every source the watcher below is on, and that pass must not count
+   * as a change. `nextTick` runs after the watcher has settled.
+   */
+  function markClean() {
+    dirty.value = false
+    void nextTick(() => {
+      dirty.value = false
+    })
   }
 
   /** Ends a coalescing run, so the next edit starts a fresh undo step. */
@@ -1234,15 +1266,17 @@ function createDiagramStore(documentId: string) {
       future.value = []
     }
     endCoalesce()
+    markClean()
     fitRequest.value++
   }
 
-  function newDocument() {
-    commit()
-    applyDocument(blankDocument())
-  }
-
-  scope.run(() => watch([nodes, edges, flows, meta, canvas], persist, { deep: true }))
+  scope.run(() => {
+    watch([nodes, edges, flows, meta, canvas], persist, { deep: true })
+    // The canvas settings and the flows are ours alone — nothing but an edit
+    // moves them — so they can be watched directly for what `commit` misses:
+    // the toolbar's theme and grid toggles.
+    watch([flows, meta, canvas], () => (dirty.value = true), { deep: true })
+  })
 
   return {
     documentId,
@@ -1257,7 +1291,9 @@ function createDiagramStore(documentId: string) {
     canRedo: computed(() => future.value.length > 0),
     lockedCount,
     fitRequest,
+    dirty,
     // actions
+    markSaved,
     commit,
     endCoalesce,
     undo,
@@ -1294,7 +1330,6 @@ function createDiagramStore(documentId: string) {
     alignSelection,
     nudgeSelection,
     loadDocument,
-    newDocument,
     toDocument,
     sizeOf,
     restorePersisted: restore,

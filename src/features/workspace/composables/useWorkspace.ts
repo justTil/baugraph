@@ -31,6 +31,12 @@ export interface PanelParams {
 export interface WorkspacePolicy {
   defaultLayout: () => void
   canRestore: (params: PanelParams) => boolean
+  /**
+   * Called before a tab is closed by hand. Returning `false` cancels the close
+   * and leaves the view to take over — asking about unsaved work, say — after
+   * which it closes the panel itself.
+   */
+  confirmClose: (params: PanelParams) => boolean
 }
 
 const STORAGE_KEY = 'baugraph:workspace:v1'
@@ -38,7 +44,11 @@ const STORAGE_KEY = 'baugraph:workspace:v1'
 /** `shallowRef` deliberately: the dockview api must not be made reactive. */
 const dock = shallowRef<DockviewApi | null>(null)
 
-let policy: WorkspacePolicy = { defaultLayout: () => {}, canRestore: () => true }
+let policy: WorkspacePolicy = {
+  defaultLayout: () => {},
+  canRestore: () => true,
+  confirmClose: () => true,
+}
 
 const openViewIds = ref<string[]>([])
 const visibleViewIds = ref<string[]>([])
@@ -159,9 +169,19 @@ export function openView(viewId: string): IDockviewPanel | undefined {
   return openPanel({ id: viewId, viewId, title: navItem(viewId)?.label ?? viewId })
 }
 
-/** Closes a tab, if it is open. */
+/** Closes a tab, if it is open. Bypasses {@link WorkspacePolicy.confirmClose}. */
 export function closePanel(panelId: string) {
   dock.value?.getPanel(panelId)?.api.close()
+}
+
+/**
+ * Closes a tab the way the user asked to — through its close button — giving
+ * the view a chance to intervene first.
+ */
+export function requestClosePanel(panelId: string) {
+  const panel = dock.value?.getPanel(panelId)
+  if (!panel) return
+  if (policy.confirmClose(paramsOf(panel))) panel.api.close()
 }
 
 /** Renames an open tab, for a view whose title follows its content. */

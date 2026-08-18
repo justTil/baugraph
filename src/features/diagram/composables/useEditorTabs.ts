@@ -1,4 +1,5 @@
 import type { IDockviewPanel } from 'dockview-vue'
+import { ref } from 'vue'
 import type { DiagramDocument } from '@/model'
 import { blankDocument } from '@/model'
 import { closePanel, openPanel, setPanelTitle } from '@/features/workspace/composables/useWorkspace'
@@ -36,6 +37,38 @@ export function openDocumentTab(documentId: string): IDockviewPanel | undefined 
     title: diagramStore(documentId).meta.title,
     documentId,
   })
+}
+
+/* ------------------------------------------------------------------ closing */
+
+/**
+ * The document whose tab is waiting on an answer about its unsaved changes.
+ *
+ * One at a time: the prompt is modal, so a second tab cannot be closed while it
+ * is up. The editor panel for this document renders the dialog, because that is
+ * the component that can actually write the file.
+ */
+const pendingClose = ref<string | null>(null)
+
+export function useCloseRequest() {
+  return { pendingClose }
+}
+
+/**
+ * Whether the tab holding `documentId` may close now. A diagram with changes
+ * that are not in a file yet puts the question to the user instead, and the
+ * answer comes back through {@link resolveCloseRequest}.
+ */
+export function requestCloseDocument(documentId: string | undefined): boolean {
+  if (!documentId || !diagramStore(documentId).dirty.value) return true
+  pendingClose.value = documentId
+  return false
+}
+
+/** Answers the prompt: close the tab, or leave it open. */
+export function resolveCloseRequest(documentId: string, close: boolean) {
+  pendingClose.value = null
+  if (close) closePanel(editorPanelId(documentId))
 }
 
 /**

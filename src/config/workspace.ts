@@ -3,6 +3,7 @@ import {
   EDITOR_VIEW_ID,
   canRestoreEditor,
   openStartupEditor,
+  requestCloseDocument,
 } from '@/features/diagram/composables/useEditorTabs'
 
 /**
@@ -13,4 +14,6 @@ export const workspacePolicy: WorkspacePolicy = {
   defaultLayout: openStartupEditor,
   canRestore: (params) =>
     params.viewId !== EDITOR_VIEW_ID || canRestoreEditor(params.documentId),
+  confirmClose: (params) =>
+    params.viewId !== EDITOR_VIEW_ID || requestCloseDocument(params.documentId),
 }

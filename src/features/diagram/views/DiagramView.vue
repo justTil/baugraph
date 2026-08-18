@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { HEADER_SLOT_SELECTOR } from '@/components/layout/header-slot'
 import { usePanel } from '@/features/workspace/composables/usePanel'
 import {
@@ -10,7 +10,13 @@ import {
   useIsActiveDocument,
 } from '@/features/diagram/composables/useDiagram'
 import { rememberDocument } from '@/features/diagram/composables/useDocuments'
-import { newDocumentTab, renameDocumentTab } from '@/features/diagram/composables/useEditorTabs'
+import {
+  newDocumentTab,
+  renameDocumentTab,
+  resolveCloseRequest,
+  useCloseRequest,
+} from '@/features/diagram/composables/useEditorTabs'
+import CloseDocumentDialog from '@/features/diagram/components/CloseDocumentDialog.vue'
 import DiagramCanvas from '@/features/diagram/components/DiagramCanvas.vue'
 import DiagramToolbar from '@/features/diagram/components/DiagramToolbar.vue'
 import InspectorPanel from '@/features/diagram/components/InspectorPanel.vue'
@@ -34,7 +40,12 @@ if (!documentId) throw new Error('The diagram view can only be opened on a docum
  */
 provide(DOCUMENT_ID, documentId)
 
-const { meta, toDocument } = diagramStore(documentId)
+const { meta, toDocument, markSaved } = diagramStore(documentId)
+
+// Closing a tab with edits that are not in a file yet asks first; the question
+// is raised by the tab, and answered here because this is what can write it.
+const { pendingClose } = useCloseRequest()
+const closing = computed(() => pendingClose.value === documentId)
 
 /**
  * The app header holds one toolbar and several editors can share the screen, so
@@ -76,7 +87,13 @@ function onSave(event: KeyboardEvent) {
   if (!owns.value) return
   if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return
   event.preventDefault()
+  save()
+}
+
+/** Writes the diagram to a file, which is what "saved" means for this app. */
+function save() {
   exportJson(toDocument())
+  markSaved()
 }
 </script>
 
@@ -97,6 +114,14 @@ function onSave(event: KeyboardEvent) {
 
   <!-- Opens itself: both the toolbar and a connection's inspector reach for it. -->
   <FlowsDialog />
+
+  <CloseDocumentDialog
+    :open="closing"
+    :title="meta.title"
+    @save="save(), resolveCloseRequest(documentId, true)"
+    @discard="resolveCloseRequest(documentId, true)"
+    @cancel="resolveCloseRequest(documentId, false)"
+  />
 
   <!-- A new diagram is a new tab, so this one is left exactly as it was. -->
   <NewDocumentDialog v-model:open="newOpen" @create="newDocumentTab($event)" />
