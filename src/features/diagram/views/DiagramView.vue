@@ -17,6 +17,7 @@ import {
   useCloseRequest,
 } from '@/features/diagram/composables/useEditorTabs'
 import CloseDocumentDialog from '@/features/diagram/components/CloseDocumentDialog.vue'
+import RenameFileDialog from '@/features/diagram/components/RenameFileDialog.vue'
 import DiagramCanvas from '@/features/diagram/components/DiagramCanvas.vue'
 import DiagramToolbar from '@/features/diagram/components/DiagramToolbar.vue'
 import InspectorPanel from '@/features/diagram/components/InspectorPanel.vue'
@@ -30,6 +31,7 @@ import {
   saveDocument,
   saveDocumentAs,
   useDocumentFile,
+  useRenamePrompt,
 } from '@/features/diagram/composables/useDocumentFile'
 
 // Docked views stay mounted behind their tab, and several can share the screen,
@@ -53,6 +55,12 @@ const { meta } = diagramStore(documentId)
 // is raised by the tab, and answered here because this is what can write it.
 const { pendingClose } = useCloseRequest()
 const { fileName } = useDocumentFile(documentId)
+
+// Raised by a save that found the diagram renamed and the file unrenameable.
+const { pendingRename } = useRenamePrompt()
+const renaming = computed(() =>
+  pendingRename.value?.documentId === documentId ? pendingRename.value : null,
+)
 const closing = computed(() => pendingClose.value === documentId)
 
 /**
@@ -137,6 +145,8 @@ async function saveAndClose() {
     @discard="resolveCloseRequest(documentId, true)"
     @cancel="resolveCloseRequest(documentId, false)"
   />
+
+  <RenameFileDialog :prompt="renaming" />
 
   <!-- A new diagram is a new tab, so this one is left exactly as it was. -->
   <NewDocumentDialog v-model:open="newOpen" @create="newDocumentTab($event)" />

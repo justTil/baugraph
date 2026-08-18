@@ -18,6 +18,14 @@ interface FileSystemHandle {
     descriptor?: FileSystemHandlePermissionDescriptor,
   ) => Promise<PermissionState>
   isSameEntry: (other: FileSystemHandle) => Promise<boolean>
+  /**
+   * Renames, or moves, the entry. Chromium only, and not for every handle it
+   * hands out — callers must treat a rejection as "this file cannot be renamed".
+   */
+  move?: (
+    destination: string | FileSystemDirectoryHandle,
+    name?: string,
+  ) => Promise<void>
 }
 
 interface FilePickerAcceptType {

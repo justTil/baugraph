@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   Grid3x3,
   Magnet,
   Maximize,
   Moon,
   Pause,
+  Pencil,
   Play,
   Redo2,
   Sun,
@@ -49,18 +50,42 @@ const zoomLabel = computed(() => `${Math.round(viewport.value.zoom * 100)}%`)
 function onTitleInput() {
   commit('meta.title')
 }
+
+/**
+ * Bound rather than left to `group-focus-within`: the pointer is still over the
+ * field after a click, and Tailwind's variant order lets the hover rule win.
+ */
+const editingTitle = ref(false)
 </script>
 
 <template>
-  <Input
-    :model-value="meta.title"
-    class="h-8 w-56 shrink-0 border-transparent text-sm font-medium shadow-none hover:border-input focus-visible:border-input"
-    placeholder="Untitled diagram"
-    spellcheck="false"
-    @update:model-value="meta.title = String($event)"
-    @input="onTitleInput"
-    @blur="endCoalesce()"
-  />
+  <!--
+    The title reads as a heading, so nothing about it says "type here". The
+    pencil is the affordance: visible at rest, brighter under the pointer, and
+    out of the way once the field has focus and the caret says it all.
+  -->
+  <Tooltip>
+    <TooltipTrigger as-child>
+      <div class="group/title relative shrink-0">
+        <Input
+          :model-value="meta.title"
+          class="hover:border-input focus-visible:border-input h-8 w-56 border-transparent pr-8 text-sm font-medium shadow-none"
+          placeholder="Untitled diagram"
+          spellcheck="false"
+          aria-label="Diagram name"
+          @update:model-value="meta.title = String($event)"
+          @input="onTitleInput"
+          @focus="editingTitle = true"
+          @blur="editingTitle = false, endCoalesce()"
+        />
+        <Pencil
+          v-show="!editingTitle"
+          class="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-3.5 -translate-y-1/2 opacity-50 transition-opacity group-hover/title:opacity-100"
+        />
+      </div>
+    </TooltipTrigger>
+    <TooltipContent>Rename this diagram</TooltipContent>
+  </Tooltip>
 
   <Separator orientation="vertical" class="mx-1 h-4" />
 

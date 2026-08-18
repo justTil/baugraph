@@ -5,6 +5,19 @@
  * structured clone — which is the only reason a reload can still overwrite the
  * file you opened this morning rather than starting a new one beside it.
  */
+
+/**
+ * A diagram's link to a file.
+ *
+ * `slug` is the title the file was last written under, not the file's name: a
+ * file the user deliberately called something else must not be "corrected" on
+ * every save, so what a rename keys off is the title having moved.
+ */
+export interface FileLink {
+  handle: FileSystemFileHandle
+  slug: string
+}
+
 const DB_NAME = 'baugraph'
 const DB_VERSION = 1
 const STORE = 'file-handles'
@@ -44,20 +57,20 @@ function withStore<T>(
   })
 }
 
-export function rememberFileHandle(documentId: string, handle: FileSystemFileHandle) {
-  void withStore('readwrite', (store) => store.put(handle, documentId))
+export function rememberFileLink(documentId: string, link: FileLink) {
+  void withStore('readwrite', (store) => store.put({ ...link }, documentId))
 }
 
-export async function recallFileHandle(
-  documentId: string,
-): Promise<FileSystemFileHandle | null> {
-  const stored = await withStore<unknown>('readonly', (store) => store.get(documentId))
+export async function recallFileLink(documentId: string): Promise<FileLink | null> {
+  const stored = (await withStore<unknown>('readonly', (store) =>
+    store.get(documentId),
+  )) as Partial<FileLink> | null
   // Anything else in there is from an older build; treat it as no link.
-  return stored && typeof (stored as FileSystemFileHandle).createWritable === 'function'
-    ? (stored as FileSystemFileHandle)
+  return typeof stored?.handle?.createWritable === 'function'
+    ? { handle: stored.handle, slug: stored.slug ?? '' }
     : null
 }
 
-export function forgetFileHandle(documentId: string) {
+export function forgetFileLink(documentId: string) {
   void withStore('readwrite', (store) => store.delete(documentId))
 }

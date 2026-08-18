@@ -18,7 +18,13 @@ import {
   openDocumentTab,
   openDocumentTabFrom,
 } from '@/features/diagram/composables/useEditorTabs'
-import { canOverwriteFiles, droppedHandle, pickJson, readFile } from '@/features/diagram/lib/export'
+import {
+  canOverwriteFiles,
+  droppedHandle,
+  pickJson,
+  readFile,
+  slug,
+} from '@/features/diagram/lib/export'
 
 const open = defineModel<boolean>('open', { required: true })
 
@@ -46,7 +52,7 @@ function adopt(text: string, handle: FileSystemFileHandle | null) {
   }
   const panel = openDocumentTabFrom(result.document)
   const documentId = (panel?.params as { documentId?: string } | undefined)?.documentId
-  if (handle && documentId) linkDocumentFile(documentId, handle)
+  if (handle && documentId) linkDocumentFile(documentId, handle, slug(result.document))
   open.value = false
 }
 
