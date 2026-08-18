@@ -105,7 +105,7 @@ function hover(flow: MessageFlow | null) {
         @click="act(() => addFlow([props.edgeId]))"
       >
         <Waypoints />
-        Animate a message along this
+        Create new message flow
       </Button>
 
       <Button

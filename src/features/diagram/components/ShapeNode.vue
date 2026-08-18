@@ -127,7 +127,13 @@ const HANDLES = [
         class="shrink-0"
         :style="{ color: paint.accent }"
       />
-      <div class="min-w-0 flex-1" :style="{ maxWidth: textWidth }">
+      <!-- Stacked, the text must not grow: `flex-1` down the column would eat
+           the free height and shove the icon against the top edge. -->
+      <div
+        class="min-w-0"
+        :class="stacked ? 'max-w-full' : 'flex-1'"
+        :style="{ maxWidth: textWidth }"
+      >
         <div
           class="truncate text-[13px] leading-tight font-semibold"
           :style="{ color: paint.ink }"

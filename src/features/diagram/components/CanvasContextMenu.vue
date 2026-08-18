@@ -503,7 +503,7 @@ function copySelectionIds() {
       </ContextMenuItem>
       <ContextMenuItem @select="animate([edge!.id])">
         <Waypoints />
-        Animate a message along this
+        Create new message flow
       </ContextMenuItem>
 
       <ContextMenuSeparator />
