@@ -7,7 +7,7 @@ import { Lock } from '@lucide/vue'
 import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { DEFAULT_NODE_SIZE } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
-import { STACKED_SHAPES, contentInset, shapeElements } from '@/features/diagram/lib/shapes'
+import { CENTERED_SHAPES, contentInset, shapeElements } from '@/features/diagram/lib/shapes'
 import { fitNodeSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
@@ -37,17 +37,25 @@ const inset = computed(() => contentInset(props.data.shape, height.value))
 /** What the node is, kept on it whatever the user renames it to. */
 const caption = computed(() => nodeCaption(props.data))
 
-/** Diamonds and circles have little usable width at the edges, so text stacks. */
-const stacked = computed(() => STACKED_SHAPES.has(props.data.shape) || !icon.value)
+/**
+ * Diamonds and circles have little usable width at their edges, so the icon and
+ * the text ride together in the middle instead of starting at the left padding.
+ * A node with no icon centres too — there is nothing for the text to sit beside.
+ */
+const centered = computed(() => CENTERED_SHAPES.has(props.data.shape) || !icon.value)
+
+/** How much of the row the icon claims, in the same units as the gap below. */
+const ICON_BLOCK = 20 + 10
 
 /**
- * Diamonds and circles taper, so their text has to be held well inside the box.
- * Every other shape lets flexbox do the clamping — see `min-w-0` below.
+ * Diamonds and circles taper, so their text has to be held well inside the box,
+ * and an icon beside it eats into the same allowance. Every other shape lets
+ * flexbox do the clamping — see `min-w-0` below.
  */
 const textWidth = computed(() => {
-  if (props.data.shape === 'diamond') return `${width.value * 0.62}px`
-  if (props.data.shape === 'circle') return `${width.value * 0.72}px`
-  return undefined
+  const share = props.data.shape === 'diamond' ? 0.62 : props.data.shape === 'circle' ? 0.72 : 0
+  if (!share) return undefined
+  return `${Math.max(24, width.value * share - (icon.value ? ICON_BLOCK : 0))}px`
 })
 
 /** A resize drag stops here, so a node can never be pulled in over its own text. */
@@ -113,7 +121,7 @@ const HANDLES = [
 
     <div
       class="relative flex h-full items-center gap-2.5 px-3"
-      :class="stacked ? 'flex-col justify-center gap-1.5 text-center' : ''"
+      :class="centered ? 'justify-center text-center' : ''"
       :style="{
         paddingTop: `${inset.top}px`,
         paddingRight: `${12 + inset.right}px`,
@@ -127,11 +135,11 @@ const HANDLES = [
         class="shrink-0"
         :style="{ color: paint.accent }"
       />
-      <!-- Stacked, the text must not grow: `flex-1` down the column would eat
-           the free height and shove the icon against the top edge. -->
+      <!-- Centred, the text must not grow: `flex-1` would spread it across the
+           whole row and push the icon back out to the left edge. -->
       <div
         class="min-w-0"
-        :class="stacked ? 'max-w-full' : 'flex-1'"
+        :class="centered ? '' : 'flex-1'"
         :style="{ maxWidth: textWidth }"
       >
         <div

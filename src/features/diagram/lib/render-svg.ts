@@ -1,7 +1,7 @@
 import { createApp, h } from 'vue'
 import type { DiagramDocument, DiagramNode } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
-import { STACKED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
+import { CENTERED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
 import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
 import type { FlowEdge } from '@/features/diagram/lib/flow-graph'
@@ -46,6 +46,8 @@ function iconInnerMarkup(id: string): string {
 }
 
 const ICON_SIZE = 20
+/** The canvas's `gap-2.5` between an icon and the text beside it. */
+const ICON_GAP = 10
 
 function iconGroup(id: string, x: number, y: number, color: string): string {
   const inner = iconInnerMarkup(id)
@@ -121,6 +123,20 @@ interface TextLine {
 const lineHeight = (line: TextLine) => line.size + 4
 
 const blockHeight = (lines: TextLine[]) => lines.reduce((total, l) => total + lineHeight(l), 0)
+
+/**
+ * How wide the text actually runs, so a centred block can be measured off
+ * against the icon standing beside it rather than against the whole box.
+ */
+const blockWidth = (lines: TextLine[]) =>
+  lines.reduce(
+    (widest, line) =>
+      Math.max(
+        widest,
+        line.runs.reduce((sum, run) => sum + measureText(run.text, line.size, run.weight), 0),
+      ),
+    0,
+  )
 
 /**
  * The three lines a node can carry: its name, the fixed type/technology caption,
@@ -245,28 +261,31 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
   }
 
   const hasIcon = !!node.icon && !!iconInnerMarkup(node.icon)
-  const stacked = STACKED_SHAPES.has(node.shape) || !hasIcon
+  const centered = CENTERED_SHAPES.has(node.shape) || !hasIcon
   const inset = contentInset(node.shape, box.height)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2 + inset.top / 2
 
   const lines = nodeTextLines(node, paint)
   const text = blockHeight(lines)
+  const top = cy - text / 2
+  const iconBlock = hasIcon ? ICON_SIZE + ICON_GAP : 0
 
-  if (stacked) {
-    // Icon above the text, the pair centred together.
-    const gap = hasIcon ? 6 : 0
-    const iconBlock = hasIcon ? ICON_SIZE + gap : 0
-    const top = cy - (iconBlock + text) / 2
-    if (hasIcon) parts.push(iconGroup(node.icon!, cx - ICON_SIZE / 2, top, paint.accent))
-    const available =
-      node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right
-    parts.push(renderTextBlock(lines, cx, top + iconBlock, available, 'middle'))
+  if (centered) {
+    // Icon then text, the pair centred as one block: a tapering outline leaves
+    // no room at the left edge for the content row every other shape uses.
+    const room =
+      (node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right) - iconBlock
+    const available = Math.max(24, room)
+    const width = Math.min(available, blockWidth(lines))
+    const left = cx - (iconBlock + width) / 2
+    if (hasIcon) parts.push(iconGroup(node.icon!, left, cy - ICON_SIZE / 2, paint.accent))
+    parts.push(renderTextBlock(lines, left + iconBlock + width / 2, top, available, 'middle'))
   } else {
     parts.push(iconGroup(node.icon!, box.x + 12, cy - ICON_SIZE / 2, paint.accent))
-    const textX = box.x + 12 + ICON_SIZE + 12
+    const textX = box.x + 12 + iconBlock
     const available = box.x + box.width - inset.right - 12 - textX
-    parts.push(renderTextBlock(lines, textX, cy - text / 2, available, 'start'))
+    parts.push(renderTextBlock(lines, textX, top, available, 'start'))
   }
 
   return parts.join('')

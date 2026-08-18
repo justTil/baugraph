@@ -106,8 +106,12 @@ export function shapeElements(shape: ShapeKey, w: number, h: number): ShapeEleme
   }
 }
 
-/** Shapes whose label always sits centred, with the icon stacked above it. */
-export const STACKED_SHAPES = new Set<ShapeKey>(['circle', 'diamond', 'hexagon', 'pill'])
+/**
+ * Shapes that taper or round away at their edges. Their content is centred as a
+ * block — icon then text, the same order as everywhere else — because text run
+ * up against the left edge of a circle or a diamond falls outside the outline.
+ */
+export const CENTERED_SHAPES = new Set<ShapeKey>(['circle', 'diamond', 'hexagon', 'pill'])
 
 /** Extra top padding needed so text clears a shape's cap or fold. */
 export function contentInset(shape: ShapeKey, h: number) {
