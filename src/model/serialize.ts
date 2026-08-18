@@ -1,5 +1,5 @@
 import type { DiagramDocument, DiagramEdge, DiagramNode, MessageFlow } from '@/model/types'
-import { FORMAT_VERSION } from '@/model/types'
+import { FORMAT_VERSION, PORT_SIDES } from '@/model/types'
 import { EDGE_DEFAULTS, FLOW_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
 import { documentSchema } from '@/model/schema'
 import { migrate } from '@/model/migrate'
@@ -58,6 +58,7 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'icon',
   'position',
   'size',
+  'ports',
   'parent',
   'locked',
   'data',
@@ -68,7 +69,9 @@ const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'source',
   'target',
   'sourceSide',
+  'sourcePort',
   'targetSide',
+  'targetPort',
   'label',
   'route',
   'line',
@@ -118,11 +121,31 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
       NODE_DEFAULTS,
     )
     if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    // A side that was never added to is the side every node already has, so it
+    // says nothing: `"ports": { "right": 4 }` is the whole of what changed.
+    if (trimmed.ports) {
+      const ports = Object.fromEntries(
+        PORT_SIDES.filter((side) => (trimmed.ports?.[side] ?? 1) > 1).map((side) => [
+          side,
+          trimmed.ports![side],
+        ]),
+      )
+      if (Object.keys(ports).length) trimmed.ports = ports
+      else delete trimmed.ports
+    }
     return ordered(trimmed as DiagramNode, NODE_KEY_ORDER)
   })
 
   const edges = doc.edges.map((edge) => {
-    const trimmed = omitDefaults({ ...edge }, EDGE_DEFAULTS)
+    // Which point an end sits on only means anything once that end names a side:
+    // `auto` places itself, and a stale index left beside it would read as an
+    // instruction that is not being followed.
+    const placed = {
+      ...edge,
+      sourcePort: edge.sourceSide === 'auto' ? EDGE_DEFAULTS.sourcePort : edge.sourcePort,
+      targetPort: edge.targetSide === 'auto' ? EDGE_DEFAULTS.targetPort : edge.targetPort,
+    }
+    const trimmed = omitDefaults(placed, EDGE_DEFAULTS)
     if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
     return ordered(trimmed as DiagramEdge, EDGE_KEY_ORDER)
   })
@@ -159,7 +182,7 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
  * `{ "x": 300, "y": 60 }` over four, turning "moved a node" into a four-line
  * diff — the single most common change a diagram ever sees.
  */
-const INLINE_KEYS = new Set(['position', 'size'])
+const INLINE_KEYS = new Set(['position', 'size', 'ports'])
 
 /**
  * Keys whose *children* are each one line. A flow's per-connection overrides are

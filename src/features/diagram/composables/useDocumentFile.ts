@@ -116,12 +116,44 @@ async function renameInPlace(handle: FileSystemFileHandle, to: string): Promise<
   }
 }
 
+/* ----------------------------------------------------- saved confirmation */
+
+/**
+ * A save that has just happened, for the editor to confirm.
+ *
+ * Saving is the one thing the editor does that leaves nothing behind to look
+ * at — the diagram is exactly as it was — so it is the one that most needs an
+ * answer. Kept per document, because two open tabs saving is two saves, each
+ * to be confirmed in the editor that did it.
+ */
+export interface SavedNotice {
+  /** Rises on every save, so saving twice re-raises a notice already up. */
+  id: number
+  /** The file written to, or null when all the browser could do was download. */
+  fileName: string | null
+}
+
+/** `shallowReactive` for the same reason as `links`: the map, not its values. */
+const savedNotices = shallowReactive(new Map<string, SavedNotice>())
+let saveCount = 0
+
+/** Marks the diagram as matching the file, and says so. */
+function noteSaved(documentId: string, fileName: string | null) {
+  diagramStore(documentId).markSaved()
+  savedNotices.set(documentId, { id: ++saveCount, fileName })
+}
+
+/** The document's last completed save. Null until it has one. */
+export function useSavedNotice(documentId: string) {
+  return computed(() => savedNotices.get(documentId) ?? null)
+}
+
 /** Writes the diagram to `link`, recording the title it went out under. */
 async function writeTo(documentId: string, link: FileLink, titleSlug: string): Promise<boolean> {
   const store = diagramStore(documentId)
   if (!(await writeJson(link.handle, store.toDocument()))) return false
   setLink(documentId, { handle: link.handle, slug: titleSlug })
-  store.markSaved()
+  noteSaved(documentId, link.handle.name)
   return true
 }
 
@@ -141,7 +173,7 @@ export async function saveDocument(documentId: string): Promise<boolean> {
     // Nothing to write back to; a download is the whole of what this browser
     // can do, and the numbering that comes with it is the browser's.
     exportJson(store.toDocument())
-    store.markSaved()
+    noteSaved(documentId, null)
     return true
   }
 
@@ -174,7 +206,7 @@ export async function saveDocumentAs(documentId: string): Promise<boolean> {
 
   if (!canOverwriteFiles) {
     exportJson(store.toDocument())
-    store.markSaved()
+    noteSaved(documentId, null)
     return true
   }
 
@@ -183,7 +215,7 @@ export async function saveDocumentAs(documentId: string): Promise<boolean> {
   if (!handle) return false
   pinnedNames.delete(documentId)
   setLink(documentId, { handle, slug: slug(doc) })
-  store.markSaved()
+  noteSaved(documentId, handle.name)
   return true
 }
 

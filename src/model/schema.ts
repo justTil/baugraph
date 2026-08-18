@@ -9,6 +9,7 @@ import {
   FORMAT_VERSION,
   LINE_STYLES,
   LINE_WIDTHS,
+  MAX_PORTS,
   ROUTES,
   SHAPE_KEYS,
   SIDES,
@@ -61,6 +62,22 @@ const catalogueIdSchema = z
   .max(64)
   .regex(/^[a-z0-9_]*$/, 'catalogue ids are lower-case, digits and _')
 
+/**
+ * Connection points per side.
+ *
+ * Every side is optional and every side defaults to the one point it has always
+ * had, so a file only names the sides it added to — and one written before this
+ * existed parses to exactly the node it always did.
+ */
+const portCountSchema = z.number().int().min(1).max(MAX_PORTS)
+
+const portsSchema = z.object({
+  top: portCountSchema.optional(),
+  right: portCountSchema.optional(),
+  bottom: portCountSchema.optional(),
+  left: portCountSchema.optional(),
+})
+
 export const nodeSchema = z.object({
   id: idSchema,
   kind: z.enum(['shape', 'zone']).default(NODE_DEFAULTS.kind),
@@ -74,6 +91,7 @@ export const nodeSchema = z.object({
   icon: z.string().default(NODE_DEFAULTS.icon),
   position: vec2Schema,
   size: sizeSchema,
+  ports: portsSchema.optional(),
   parent: idSchema.nullable().default(NODE_DEFAULTS.parent),
   locked: z.boolean().default(NODE_DEFAULTS.locked),
   data: metadataSchema.optional(),
@@ -85,6 +103,11 @@ export const edgeSchema = z.object({
   target: idSchema,
   sourceSide: z.enum(SIDES).default(EDGE_DEFAULTS.sourceSide),
   targetSide: z.enum(SIDES).default(EDGE_DEFAULTS.targetSide),
+  // Which point on that side, 1-based. A file may name one the node no longer
+  // offers — a side that has since been narrowed — and the renderer falls back
+  // to the last point that does exist rather than refusing to open the diagram.
+  sourcePort: portCountSchema.default(EDGE_DEFAULTS.sourcePort),
+  targetPort: portCountSchema.default(EDGE_DEFAULTS.targetPort),
   label: z.string().default(EDGE_DEFAULTS.label),
   route: z.enum(ROUTES).default(EDGE_DEFAULTS.route),
   line: z.enum(LINE_STYLES).default(EDGE_DEFAULTS.line),

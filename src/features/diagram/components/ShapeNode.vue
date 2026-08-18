@@ -5,17 +5,20 @@ import { Handle, Position } from '@vue-flow/core'
 import { NodeResizer } from '@vue-flow/node-resizer'
 import { Lock } from '@lucide/vue'
 import type { NodeData } from '@/features/diagram/composables/useDiagram'
-import { DEFAULT_NODE_SIZE } from '@/model'
+import type { PortSide } from '@/model'
+import { DEFAULT_NODE_SIZE, PORT_SIDES, nodePorts } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, shapeElements } from '@/features/diagram/lib/shapes'
 import { fitNodeSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
 
 const props = defineProps<NodeProps<NodeData>>()
 
 const { canvas, commit, endCoalesce, setNodesLocked } = useDiagram()
+const { connecting, from: connectFrom, to: connectTo } = useConnectionTarget()
 
 /** The badge is the only way back: a locked node cannot be selected. */
 function unlock() {
@@ -74,12 +77,66 @@ const fit = computed(() =>
   }),
 )
 
-const HANDLES = [
-  { id: 'top', position: Position.Top },
-  { id: 'right', position: Position.Right },
-  { id: 'bottom', position: Position.Bottom },
-  { id: 'left', position: Position.Left },
-] as const
+const HANDLE_POSITION: Record<PortSide, Position> = {
+  top: Position.Top,
+  right: Position.Right,
+  bottom: Position.Bottom,
+  left: Position.Left,
+}
+
+/**
+ * The node's connection points, in the order they are drawn.
+ *
+ * A side offers one point unless the node says otherwise, and the extras are
+ * spread evenly along it — the same fractions `edge-path` anchors on, because a
+ * dot has to sit exactly where the connection it starts will meet the node. Vue
+ * Flow pins each handle to the middle of its own side, so the offset is written
+ * over that one axis and its centring transform does the rest.
+ *
+ * The id carries both halves — `right:3` — and that is all `onConnect` needs to
+ * write the connection down (see `DiagramCanvas`).
+ */
+/**
+ * The point on this node a release would connect to, while a drag is looking for
+ * one. Named rather than left to CSS: the canvas cannot mark it with a class of
+ * its own without also marking the drops that would be refused (see
+ * `useConnectionTarget`).
+ */
+const dropHandle = computed(() =>
+  connectTo.value?.nodeId === props.id ? connectTo.value.id : null,
+)
+
+/** The point the drag came out of, if it came out of this node. */
+const fromHandle = computed(() =>
+  connectFrom.value?.nodeId === props.id ? connectFrom.value.id : null,
+)
+
+const handles = computed(() => {
+  const ports = nodePorts(props.data.ports)
+  return PORT_SIDES.flatMap((side) => {
+    const count = ports[side]
+    const horizontal = side === 'top' || side === 'bottom'
+    const along = horizontal ? 'left' : 'top'
+    // A crowded side cannot keep pointer-sized targets: six of them down one
+    // flank of a default node would overlap two deep, and the one under the
+    // cursor would not be the one that got grabbed. Both the grab zone and the
+    // dot shrink to the room actually available, down to a floor that is still
+    // worth aiming at.
+    const pitch = (horizontal ? width.value : height.value) / (count + 1)
+    const grab = Math.round(Math.min(24, Math.max(12, pitch)))
+    const dot = Math.round(Math.min(10, Math.max(6, pitch * 0.55)))
+
+    return Array.from({ length: count }, (_, i) => ({
+      id: `${side}:${i + 1}`,
+      position: HANDLE_POSITION[side],
+      style: {
+        [along]: `${((i + 1) / (count + 1)) * 100}%`,
+        '--bg-handle': `${grab}px`,
+        '--bg-dot': `${dot}px`,
+      },
+    }))
+  })
+})
 </script>
 
 <template>
@@ -104,7 +161,11 @@ const HANDLES = [
 
   <div
     class="bg-node group"
-    :class="{ 'bg-node--selected': selected, 'bg-node--locked': data.locked }"
+    :class="{
+      'bg-node--selected': selected,
+      'bg-node--locked': data.locked,
+      'bg-node--connecting': connecting,
+    }"
   >
     <svg
       class="pointer-events-none absolute inset-0"
@@ -185,23 +246,26 @@ const HANDLES = [
     </button>
 
     <!--
-      Each side carries a target handle beneath a source handle so a connection
-      can be started from, or dropped onto, any of the four sides.
+      One dot per connection point — one a side, until a side is given more — and
+      every one of them a *source* handle. The canvas runs in loose mode, so a
+      source handle is dropped onto exactly as readily as it is dragged from —
+      and with no target handle anywhere to start a drag on, a connection can no
+      longer come out pointing back the way it was drawn (see `onConnect` in
+      `DiagramCanvas`).
     -->
-    <template v-for="handle in HANDLES" :key="handle.id">
-      <Handle
-        :id="handle.id"
-        type="target"
-        :position="handle.position"
-        class="bg-node__handle bg-node__handle--target"
-      />
-      <Handle
-        :id="handle.id"
-        type="source"
-        :position="handle.position"
-        class="bg-node__handle"
-      />
-    </template>
+    <Handle
+      v-for="handle in handles"
+      :id="handle.id"
+      :key="handle.id"
+      type="source"
+      :position="handle.position"
+      :style="handle.style"
+      class="bg-node__handle"
+      :class="{
+        'bg-node__handle--drop': handle.id === dropHandle,
+        'bg-node__handle--from': handle.id === fromHandle,
+      }"
+    />
   </div>
 </template>
 
@@ -240,10 +304,30 @@ const HANDLES = [
   opacity: 1;
 }
 
-/* Handles stay out of the way until the node is hovered or selected. */
+/*
+ * The handle element is an invisible disc more than twice the size of the dot
+ * drawn inside it: it is the thing being grabbed and dropped on, so it is sized
+ * for a pointer rather than for the eye. Vue Flow centres a handle on its own
+ * side whatever its size, so the point a connection actually meets the node is
+ * unchanged — only the target got easier to hit.
+ */
 .bg-node :deep(.bg-node__handle) {
-  width: 10px;
-  height: 10px;
+  width: var(--bg-handle, 24px);
+  height: var(--bg-handle, 24px);
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+/* The dot itself stays out of the way until the node is hovered or selected. */
+.bg-node :deep(.bg-node__handle)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--bg-dot, 10px);
+  height: var(--bg-dot, 10px);
+  margin: calc(var(--bg-dot, 10px) / -2) 0 0 calc(var(--bg-dot, 10px) / -2);
   border-radius: 9999px;
   border: 1.6px solid var(--bg-selection);
   background: var(--bg-canvas);
@@ -251,22 +335,71 @@ const HANDLES = [
   transition: opacity 120ms ease;
 }
 
-.bg-node:hover :deep(.bg-node__handle),
-.bg-node--selected :deep(.bg-node__handle) {
+.bg-node:hover :deep(.bg-node__handle)::after,
+.bg-node--selected :deep(.bg-node__handle)::after {
   opacity: 1;
+}
+
+/*
+ * While a connection is being dragged, every point on the canvas it could land
+ * on comes up faintly — the drop targets are the question being asked, and half
+ * of them are on nodes the pointer is nowhere near. Faintly, because all of them
+ * at full strength turns a busy diagram into a field of dots.
+ */
+.bg-node--connecting :deep(.bg-node__handle)::after {
+  opacity: 0.4;
+}
+
+/* The two ends of the connection about to be made: where it left, where it lands. */
+.bg-node :deep(.bg-node__handle--from)::after,
+.bg-node :deep(.bg-node__handle--drop)::after {
+  opacity: 1;
+  border-color: var(--bg-connect);
+  background: var(--bg-connect);
+}
+
+/*
+ * And a ring off the one it lands on. The dots are small by the time a side
+ * carries six of them, and a colour change alone is easy to miss mid-drag —
+ * movement is what the eye finds without being pointed at it.
+ */
+.bg-node :deep(.bg-node__handle--drop)::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--bg-dot, 10px);
+  height: var(--bg-dot, 10px);
+  margin: calc(var(--bg-dot, 10px) / -2) 0 0 calc(var(--bg-dot, 10px) / -2);
+  border-radius: 9999px;
+  border: 2px solid var(--bg-connect);
+  /* The ring grows past the handle it belongs to; it must not take the drop. */
+  pointer-events: none;
+  animation: bg-connect-pulse 900ms ease-out infinite;
+}
+
+@keyframes bg-connect-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+/* The colour still says it; only the movement goes. */
+@media (prefers-reduced-motion: reduce) {
+  .bg-node :deep(.bg-node__handle--drop)::before {
+    animation: none;
+    transform: scale(2);
+    opacity: 0.5;
+  }
 }
 
 /* Nothing can be connected to a locked node, so its dots stay away. */
 .bg-node--locked :deep(.bg-node__handle) {
   display: none;
-}
-
-/* The target handle is a larger invisible drop zone behind the visible dot. */
-.bg-node :deep(.bg-node__handle--target) {
-  width: 22px;
-  height: 22px;
-  border-color: transparent;
-  background: transparent;
-  opacity: 1;
 }
 </style>

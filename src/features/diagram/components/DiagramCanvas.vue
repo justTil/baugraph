@@ -4,23 +4,38 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { Connection, EdgeMouseEvent, NodeDragEvent, NodeMouseEvent } from '@vue-flow/core'
+import type {
+  Connection,
+  EdgeMouseEvent,
+  GraphNode,
+  NodeDragEvent,
+  NodeMouseEvent,
+} from '@vue-flow/core'
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import type { ColorKey, Side } from '@/model'
+import { Check } from '@lucide/vue'
+import type { ColorKey, PortSide, Side } from '@/model'
+import { PORT_SIDES } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
 import { usePanel } from '@/features/workspace/composables/usePanel'
+import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile'
+import { useSavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
+import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
 import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
 import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
 import type { MenuTarget } from '@/features/diagram/components/CanvasContextMenu.vue'
 import CanvasContextMenu from '@/features/diagram/components/CanvasContextMenu.vue'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
+import type { AlignGuide } from '@/features/diagram/lib/align-snap'
+import { alignSnap } from '@/features/diagram/lib/align-snap'
+import type { Box } from '@/features/diagram/lib/edge-path'
 import { DEFAULT_PALETTE_ITEM, type PaletteItem } from '@/features/diagram/data/palette'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 
@@ -33,6 +48,7 @@ const {
   nodes,
   edges,
   canvas,
+  dirty,
   selectedNodes,
   commit,
   endCoalesce,
@@ -55,6 +71,7 @@ const {
   fitView,
   screenToFlowCoordinate,
   findNode,
+  viewport,
   vueFlowRef,
   addSelectedNodes,
   addSelectedEdges,
@@ -63,6 +80,7 @@ const {
   getEdges,
 } = useCanvas()
 const { place, placeAtScreen } = usePlacement()
+const { to: connectTo } = useConnectionTarget()
 const { installFlowRuntime, stopFlowRuntime } = useFlows()
 // Other views can share the screen with the canvas, so the window-level
 // shortcuts below only belong to it while it is the dock's focused panel.
@@ -73,7 +91,7 @@ const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
 const theme = computed(() => diagramTheme(canvas.theme))
 
-/** The last palette item used, repeated by double-click and drag-to-empty. */
+/** The last palette item used, repeated by a double-click on empty canvas. */
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
 
 /** Minimap swatches echo each node's own colour instead of a flat grey. */
@@ -87,48 +105,64 @@ function minimapNodeColor(node: { data?: { color?: ColorKey }; type?: string }) 
 
 /* ------------------------------------------------------------ connections */
 
-const HANDLE_SIDES: Record<string, Side> = {
-  top: 'top',
-  right: 'right',
-  bottom: 'bottom',
-  left: 'left',
-}
-
-/** Set by `onConnect` so `onConnectEnd` knows the drag landed on a node. */
-let connectionMade = false
-let pendingSource: { node: string; side: Side } | null = null
-
-function onConnectStart({ nodeId, handleId }: { nodeId?: string | null; handleId?: string | null }) {
-  connectionMade = false
-  pendingSource = nodeId
-    ? { node: nodeId, side: HANDLE_SIDES[handleId ?? ''] ?? 'auto' }
-    : null
-}
-
-function onConnect(connection: Connection) {
-  connectionMade = true
-  commit()
-  endCoalesce()
-  addEdge(connection.source, connection.target, {
-    sourceSide: HANDLE_SIDES[connection.sourceHandle ?? ''] ?? 'auto',
-    targetSide: HANDLE_SIDES[connection.targetHandle ?? ''] ?? 'auto',
-  })
+/**
+ * Splits a handle id — `right:3` — back into the side and the connection point
+ * on it that the drag actually touched. Anything unrecognised is `auto`, which
+ * is what a connection to a node with no dots of its own (a zone) comes out as.
+ */
+function endpointOf(handleId: string | null | undefined): { side: Side; port: number } {
+  const [side, port] = (handleId ?? '').split(':')
+  if (!PORT_SIDES.includes(side as PortSide)) return { side: 'auto', port: 1 }
+  return { side: side as Side, port: Number(port) || 1 }
 }
 
 /**
- * Dropping a connection on empty canvas creates the next node and wires it up in
- * one gesture — the fastest way to sketch a chain of services.
+ * How far from a connection dot a drag may be released and still land on it.
+ * Well past the dot's own hit area, so most of a node is within reach of one of
+ * its connection points and connecting takes no aiming — Vue Flow picks the
+ * nearest. A node with several points down one side has them closer together
+ * than this, and the nearest is still the one under the cursor.
  */
-function onConnectEnd(event?: MouseEvent | TouchEvent) {
-  const source = pendingSource
-  pendingSource = null
-  if (connectionMade || !source || !event) return
+const CONNECTION_RADIUS = 40
 
-  const point = 'changedTouches' in event ? event.changedTouches[0] : event
-  if (!point) return
+/**
+ * The line trailing the cursor while a connection is drawn.
+ *
+ * Dashed and neutral while it is still looking for somewhere to go; solid and
+ * green the moment releasing would actually connect something. It is the same
+ * answer the dot on the node lights up on, so the line and the node can never
+ * tell the user two different things.
+ */
+const connectionLineStyle = computed(() =>
+  connectTo.value
+    ? { stroke: theme.value.connect, strokeWidth: 2.2 }
+    : { stroke: theme.value.selection, strokeWidth: 1.8, strokeDasharray: '5 4' },
+)
 
-  const node = placeAtScreen(lastItem.value, { x: point.clientX, y: point.clientY })
-  if (node) addEdge(source.node, node.id, { sourceSide: source.side })
+/**
+ * Records a connection the user has just drawn, in the direction they drew it.
+ *
+ * Every handle on a node is a *source* handle (see `ShapeNode`), which is what
+ * keeps that promise: Vue Flow reads a connection's direction from the handle
+ * the drag *started* on, and a drag started on a target handle arrives here
+ * with its two ends swapped — the arrow then points back out of the node the
+ * user was connecting *to*. With no target handles there is nothing to start
+ * such a drag on.
+ *
+ * A drag released anywhere else is simply abandoned; it used to leave a new node
+ * behind, which made every mis-aimed connection something to undo.
+ */
+function onConnect(connection: Connection) {
+  commit()
+  endCoalesce()
+  const from = endpointOf(connection.sourceHandle)
+  const to = endpointOf(connection.targetHandle)
+  addEdge(connection.source, connection.target, {
+    sourceSide: from.side,
+    sourcePort: from.port,
+    targetSide: to.side,
+    targetPort: to.port,
+  })
 }
 
 /* ------------------------------------------------------- palette drag/drop */
@@ -309,12 +343,94 @@ function onNodeDragStart() {
 }
 
 /**
+ * Lines the drag is currently held against. Drawn over the canvas while a drag
+ * lasts and cleared when it ends.
+ */
+const guides = ref<AlignGuide[]>([])
+
+/**
+ * Whether ⌥ is down. Held, it suspends both the grid and the alignment guides
+ * for the length of a drag — the way out for the one placement that is meant to
+ * sit where nothing else does, without having to turn snapping off and back on.
+ */
+const altHeld = ref(false)
+
+/**
+ * A node's absolute box.
+ *
+ * Deliberately built from `position` and the parent's offset rather than from
+ * `computedPosition`: the latter is refreshed after the render tick, so during a
+ * drag it is a frame behind the position Vue Flow has just written. The parent
+ * is not the node being dragged — Vue Flow drags a zone's contents through the
+ * zone — so its own computed position is current.
+ */
+function boxOf(node: GraphNode): Box {
+  const parent = node.parentNode ? findNode(node.parentNode) : undefined
+  return {
+    x: node.position.x + (parent?.computedPosition.x ?? 0),
+    y: node.position.y + (parent?.computedPosition.y ?? 0),
+    width: node.dimensions.width,
+    height: node.dimensions.height,
+  }
+}
+
+/** True while `node` sits inside one of the nodes being dragged. */
+function insideDrag(node: GraphNode, dragged: Set<string>): boolean {
+  let parent = node.parentNode
+  while (parent) {
+    if (dragged.has(parent)) return true
+    parent = findNode(parent)?.parentNode
+  }
+  return false
+}
+
+/**
+ * Pulls a drag onto the alignments it is nearly holding.
+ *
+ * The grid can only quantise corners, so two nodes of unequal height can never
+ * share a centre line on it — which is why a connector between them came out
+ * with a kink however carefully they were placed, and why switching the grid off
+ * was no answer either. Alignment with the nodes already on the canvas takes
+ * precedence over the grid whenever it is within reach; ⌥ suspends it for a
+ * placement that is meant to sit off.
+ */
+function alignDrag({ event, node, nodes: dragged }: NodeDragEvent) {
+  // A selection drag reports its members in `nodes`; a single drag in `node`.
+  const moving = dragged?.length ? dragged : node ? [node] : []
+  const free = altHeld.value || (event as MouseEvent | undefined)?.altKey === true
+  if (!moving.length || !canvas.snap || free) {
+    guides.value = []
+    return
+  }
+
+  const ids = new Set(moving.map((n) => n.id))
+  const others = getNodes.value.filter(
+    (n) => !ids.has(n.id) && n.dimensions.width > 0 && !insideDrag(n, ids),
+  )
+  // Held constant on screen rather than in canvas units, so the pull starts
+  // where it looks like it should at any zoom — but never inside a grid step,
+  // or the grid would win back every alignment it just gave up.
+  const tolerance = Math.max(canvas.snapSize * 0.8, 7 / viewport.value.zoom)
+  const snap = alignSnap(moving.map(boxOf), others.map(boxOf), tolerance)
+
+  guides.value = snap.guides
+  if (!snap.dx && !snap.dy) return
+  for (const n of moving) {
+    n.position = { x: n.position.x + snap.dx, y: n.position.y + snap.dy }
+  }
+}
+
+/**
  * Dropping a node onto a zone puts it in that zone; dragging it clear of one
  * takes it out again. Both are decided by where the node's centre landed, and
  * both are written straight into the document as `parent`.
  */
-function onNodeDragStop({ node, nodes: dragged }: NodeDragEvent) {
-  // A selection drag reports its members in `nodes`; a single drag in `node`.
+function onNodeDragStop(event: NodeDragEvent) {
+  // The last alignment is re-applied here rather than trusted to survive: the
+  // drag's closing update is what the pointer said, not what the guides showed.
+  alignDrag(event)
+  guides.value = []
+  const { node, nodes: dragged } = event
   const moved = dragged?.length ? dragged : node ? [node] : []
   if (moved.length) regroup(moved.map((n) => n.id))
 }
@@ -409,8 +525,20 @@ function onKeyDown(event: KeyboardEvent) {
   }
 }
 
+/** ⌥ can go down and up mid-drag, so its state is tracked rather than sampled. */
+function onModifier(event: KeyboardEvent) {
+  altHeld.value = event.altKey
+}
+
+function onBlur() {
+  altHeld.value = false
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keydown', onModifier)
+  window.addEventListener('keyup', onModifier)
+  window.addEventListener('blur', onBlur)
   // The flow tweens belong to the canvas: nothing outside it can see a message
   // move, and the watchers they hang off are scoped to this component so they
   // go away with it.
@@ -419,8 +547,36 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('keydown', onModifier)
+  window.removeEventListener('keyup', onModifier)
+  window.removeEventListener('blur', onBlur)
   stopFlowRuntime()
 })
+
+/* ------------------------------------------------------------ save status */
+
+/** Long enough to be read without turning into something to be dismissed. */
+const SAVED_NOTICE_MS = 2600
+
+/**
+ * The confirmation for a save that has just happened.
+ *
+ * Held here rather than read straight off the document so it can be taken down
+ * again: the save itself is a moment, and the canvas is where the user is
+ * looking when they press ⌘S. What stays up instead is the unsaved marker in
+ * the same corner, which is the state rather than the event.
+ */
+const savedNotice = useSavedNotice(documentId)
+const saved = ref<SavedNotice | null>(null)
+let savedTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(savedNotice, (notice) => {
+  clearTimeout(savedTimer)
+  saved.value = notice
+  if (notice) savedTimer = setTimeout(() => (saved.value = null), SAVED_NOTICE_MS)
+})
+
+onBeforeUnmount(() => clearTimeout(savedTimer))
 
 /**
  * Re-fit whenever a document is loaded from disk or storage — but only once Vue
@@ -457,6 +613,7 @@ watch(isVisible, (visible) => {
         :style="{
           '--bg-canvas': theme.bg,
           '--bg-selection': theme.selection,
+          '--bg-connect': theme.connect,
           background: theme.bg,
         }"
         @dragover="onDragOver"
@@ -476,7 +633,8 @@ watch(isVisible, (visible) => {
           :node-types="nodeTypes"
           :edge-types="edgeTypes"
           :connection-mode="ConnectionMode.Loose"
-          :snap-to-grid="canvas.snap"
+          :connection-radius="CONNECTION_RADIUS"
+          :snap-to-grid="canvas.snap && !altHeld"
           :snap-grid="[canvas.snapSize, canvas.snapSize]"
           :min-zoom="0.15"
           :max-zoom="4"
@@ -488,16 +646,11 @@ watch(isVisible, (visible) => {
           :selection-key-code="'Shift'"
           :elevate-edges-on-select="true"
           :elevate-nodes-on-select="false"
-          :connection-line-style="{
-            stroke: theme.selection,
-            strokeWidth: 1.8,
-            strokeDasharray: '5 4',
-          }"
+          :connection-line-style="connectionLineStyle"
           :default-edge-options="{ type: 'diagram' }"
-          @connect-start="onConnectStart"
           @connect="onConnect"
-          @connect-end="onConnectEnd"
           @node-drag-start="onNodeDragStart"
+          @node-drag="alignDrag"
           @node-drag-stop="onNodeDragStop"
           @selection-drag-start="onNodeDragStart"
           @selection-drag-stop="onNodeDragStop"
@@ -522,6 +675,27 @@ watch(isVisible, (visible) => {
           />
         </VueFlow>
 
+        <!-- Alignment guides; only up while a drag is held against something. -->
+        <svg
+          v-if="guides.length"
+          class="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible"
+        >
+          <g :transform="`translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`">
+            <line
+              v-for="guide in guides"
+              :key="`${guide.axis}:${guide.position}`"
+              :x1="guide.axis === 'x' ? guide.position : guide.from"
+              :y1="guide.axis === 'x' ? guide.from : guide.position"
+              :x2="guide.axis === 'x' ? guide.position : guide.to"
+              :y2="guide.axis === 'x' ? guide.to : guide.position"
+              :stroke="theme.selection"
+              stroke-width="1"
+              stroke-dasharray="5 4"
+              vector-effect="non-scaling-stroke"
+            />
+          </g>
+        </svg>
+
         <!-- Inline label editor, positioned over the node or connection being renamed. -->
         <input
           v-if="editing"
@@ -543,12 +717,44 @@ watch(isVisible, (visible) => {
           @blur="commitEditor(true)"
         />
 
-        <p
-          v-if="!nodes.length"
-          class="text-muted-foreground pointer-events-none absolute bottom-4 left-4 font-mono text-xs"
+        <!--
+          The corner the editor answers for the file in: whether the diagram is
+          ahead of it, and — for a moment after ⌘S — that it no longer is. The
+          two never show together, because saving is what ends the first.
+        -->
+        <div
+          class="pointer-events-none absolute bottom-4 left-4 z-20 flex max-w-[min(22rem,calc(100%-2rem))] flex-col gap-2"
         >
-          drag a node from the palette · drag a node's dot to connect · right-click for actions
-        </p>
+          <Transition
+            mode="out-in"
+            enter-active-class="transition duration-150 ease-out"
+            enter-from-class="translate-y-1 opacity-0"
+            leave-active-class="transition duration-200 ease-in"
+            leave-to-class="translate-y-1 opacity-0"
+          >
+            <!-- An edit made while the confirmation is still up retires it early. -->
+            <Alert v-if="saved && !dirty" variant="success" class="w-auto shadow-lg">
+              <Check />
+              <AlertTitle>Saved</AlertTitle>
+              <AlertDescription>
+                {{ saved.fileName ?? 'Downloaded the source file' }}
+              </AlertDescription>
+            </Alert>
+
+            <p
+              v-else-if="dirty"
+              class="text-destructive flex items-center gap-1.5 font-mono text-xs"
+            >
+              <span class="bg-destructive size-1.5 shrink-0 rounded-full" aria-hidden="true" />
+              Unsaved changes
+            </p>
+          </Transition>
+
+          <p v-if="!nodes.length" class="text-muted-foreground font-mono text-xs">
+            drag a node from the palette · drag a node's dot onto another to connect ·
+            right-click for actions
+          </p>
+        </div>
       </div>
     </ContextMenuTrigger>
 

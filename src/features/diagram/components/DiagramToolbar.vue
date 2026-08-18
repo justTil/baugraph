@@ -212,7 +212,7 @@ const editingTitle = ref(false)
                assistive tech, which reads the tooltip instead. -->
           <span
             v-if="dirty"
-            class="bg-foreground/60 ml-1.5 size-1.5 rounded-full"
+            class="bg-destructive ml-1.5 size-1.5 rounded-full"
             aria-hidden="true"
           />
         </Button>

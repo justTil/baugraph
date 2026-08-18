@@ -4,8 +4,9 @@ import type {
   DiagramEdge,
   DiagramNode,
   MessageFlow,
+  NodePorts,
 } from '@/model/types'
-import { FORMAT_VERSION } from '@/model/types'
+import { FORMAT_VERSION, MAX_PORTS, PORT_SIDES } from '@/model/types'
 
 /**
  * Starting box size for a node, and the floor a new one is never smaller than —
@@ -41,9 +42,32 @@ export const NODE_DEFAULTS = {
   locked: false,
 } as const satisfies Partial<DiagramNode>
 
+/** What every side offers before any connection point is added to it. */
+export const DEFAULT_PORTS: NodePorts = { top: 1, right: 1, bottom: 1, left: 1 }
+
+/**
+ * Fills in the sides a node left unsaid, so the rest of the app can read a count
+ * off any side without asking whether the file mentioned it. Values are clamped
+ * rather than trusted: a hand-written `0` would leave a side with nowhere to
+ * attach to at all.
+ */
+export function nodePorts(ports?: Partial<NodePorts>): NodePorts {
+  const out = { ...DEFAULT_PORTS }
+  if (!ports) return out
+  for (const side of PORT_SIDES) {
+    const count = ports[side]
+    if (typeof count === 'number' && Number.isFinite(count)) {
+      out[side] = Math.min(MAX_PORTS, Math.max(1, Math.round(count)))
+    }
+  }
+  return out
+}
+
 export const EDGE_DEFAULTS = {
   sourceSide: 'auto',
   targetSide: 'auto',
+  sourcePort: 1,
+  targetPort: 1,
   label: '',
   route: 'orthogonal',
   line: 'solid',

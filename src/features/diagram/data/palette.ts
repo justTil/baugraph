@@ -124,5 +124,5 @@ export function paletteItemSize(item: PaletteItem) {
   }
 }
 
-/** Node type used when repeating the last one (double-click, drop on empty canvas). */
+/** Node type used when repeating the last one (double-click on empty canvas). */
 export const DEFAULT_PALETTE_ITEM: PaletteItem = itemFromType(nodeType('service')!)

@@ -53,6 +53,19 @@ export type BorderWidth = (typeof BORDER_WIDTHS)[number]
 export const SIDES = ['auto', 'top', 'right', 'bottom', 'left'] as const
 export type Side = (typeof SIDES)[number]
 
+/**
+ * Sides a connection point can sit on — `SIDES` without `auto`, which names a
+ * decision the renderer makes rather than a place on the node.
+ */
+export const PORT_SIDES = ['top', 'right', 'bottom', 'left'] as const
+export type PortSide = (typeof PORT_SIDES)[number]
+
+/** Most connection points one side of a node may carry. */
+export const MAX_PORTS = 6
+
+/** How many connection points each side of a node offers. */
+export type NodePorts = Record<PortSide, number>
+
 export const ROUTES = ['orthogonal', 'curved', 'straight'] as const
 export type Route = (typeof ROUTES)[number]
 
@@ -125,6 +138,18 @@ export interface DiagramNode {
    */
   parent?: string | null
   /**
+   * How many connection points a side offers, for the sides that carry more than
+   * the single one every node starts with. Up to `MAX_PORTS` each, and each side
+   * is counted on its own — six down one flank and one everywhere else is the
+   * shape a fan-out actually has.
+   *
+   * The *count* is all that is stored: points are spread evenly along the side
+   * they sit on, so nothing has to record where each one ended up and they
+   * redistribute by themselves when the node is resized. A side at one is
+   * omitted, and so is the whole key when no side was added to.
+   */
+  ports?: Partial<NodePorts>
+  /**
    * Locked nodes cannot be selected, moved, resized or connected in the editor
    * until they are unlocked again. Purely an editing aid — it changes nothing
    * about how the node renders or exports.
@@ -140,6 +165,15 @@ export interface DiagramEdge {
   target: string
   sourceSide: Side
   targetSide: Side
+  /**
+   * Which connection point on `sourceSide` this end attaches to, counted from
+   * the top or from the left and starting at 1. Omitted means the first, which
+   * is the only one a side has until points are added to it. Ignored while the
+   * side is `auto` — that end has not been placed by hand at all.
+   */
+  sourcePort?: number
+  /** Which connection point on `targetSide` this end attaches to. See `sourcePort`. */
+  targetPort?: number
   label?: string
   route: Route
   line: LineStyle

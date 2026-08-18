@@ -12,6 +12,7 @@ const open = defineModel<boolean>('open', { required: true })
 
 const SHORTCUTS: [string, string][] = [
   ['Shift + drag', 'rubber-band select'],
+  ['⌥ + drag', 'ignore the grid and the alignment guides'],
   ['Space / middle-drag', 'pan the canvas'],
   ['⌘ + scroll, pinch', 'zoom (plain scroll pans)'],
   ['F', 'fit diagram to window'],
@@ -50,9 +51,14 @@ const SHORTCUTS: [string, string][] = [
             centre. Double-click empty canvas to repeat the last node type.
           </p>
           <p>
-            Hover a node to reveal its four connection dots. Drag a dot onto another node to
-            connect them, or onto empty canvas to create the next node
-            <em>and</em> the connection in one gesture.
+            Hover a node to reveal its connection dots. Drag a dot onto another node to
+            connect them — neither end needs aiming, and the connection runs the way you drew
+            it. Released over empty canvas, a connection is simply dropped.
+          </p>
+          <p>
+            A side carries one dot until you give it more: up to six a side, set per side under
+            <em>Connection points</em> in a node's inspector, and spread evenly along it. A
+            connection can be moved between them from its own inspector.
           </p>
           <p>
             Double-click a node to rename it inline. Icon, colour, shape, routing, arrowheads and
