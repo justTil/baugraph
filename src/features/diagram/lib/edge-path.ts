@@ -192,6 +192,15 @@ const CLEARANCE = 14
 /** Retried with when the full margin leaves no way through a crowded patch. */
 const TIGHT_CLEARANCE = 5
 
+/**
+ * Clearance around the two nodes a connection joins.
+ *
+ * Kept narrow: a connector may hug the node it comes out of — it is attached to
+ * it — where it must stand well clear of one it merely passes. Wide enough that
+ * a rounded corner cannot bite into the box behind it.
+ */
+const END_CLEARANCE = 6
+
 /** How far outside the boxes it connects the search may roam. */
 const SEARCH_MARGIN = 90
 
@@ -383,6 +392,7 @@ function detour(
   sa: Anchor,
   ta: Anchor,
   boxes: Box[],
+  ends: Box[],
   clearance: number,
 ): Vec[] | null {
   const stub = 22
@@ -390,17 +400,27 @@ function detour(
   const t1 = { x: t.x + ta.normal.x * stub, y: t.y + ta.normal.y * stub }
 
   // The ground the search may use: what it connects, whatever stands in the
-  // way, and enough room to get past it.
+  // way, and enough room to get past it. The endpoint boxes go in whole — an
+  // anchor sits on the face of one, so the search has to be able to see round
+  // the rest of it.
   let region = boundsOf([s, t, s1, t1])
+  for (const box of ends) region = union(region, box)
   for (const box of boxes) {
     if (overlaps(inflate(region, SEARCH_MARGIN), box)) region = union(region, box)
   }
   region = inflate(region, SEARCH_MARGIN)
 
-  const walls = boxes.filter((b) => overlaps(region, b)).map((b) => inflate(b, clearance))
-  if (!walls.length) return null
-  // A stub buried in a neighbour leaves nowhere to set off from.
-  if (polylineBlocked([s, s1], walls) || polylineBlocked([t1, t], walls)) return null
+  const walls = [
+    ...boxes.filter((b) => overlaps(region, b)).map((b) => inflate(b, clearance)),
+    ...ends.map((b) => inflate(b, END_CLEARANCE)),
+  ]
+  // A stub buried in a neighbour leaves nowhere to set off from. Measured from
+  // clear of the connection's own nodes: a stub starts inside their collar by
+  // definition, which is not the same as being blocked by them.
+  const guard = END_CLEARANCE + 2
+  const sFree = { x: s.x + sa.normal.x * guard, y: s.y + sa.normal.y * guard }
+  const tFree = { x: t.x + ta.normal.x * guard, y: t.y + ta.normal.y * guard }
+  if (polylineBlocked([sFree, s1], walls) || polylineBlocked([tFree, t1], walls)) return null
 
   const xHi = region.x + region.width
   const yHi = region.y + region.height
@@ -481,8 +501,18 @@ function detour(
 }
 
 /** Tries for a detour with proper clearance, then for any detour at all. */
-function detourRoute(s: Vec, t: Vec, sa: Anchor, ta: Anchor, walls: Box[]): Vec[] | null {
-  return detour(s, t, sa, ta, walls, CLEARANCE) ?? detour(s, t, sa, ta, walls, TIGHT_CLEARANCE)
+function detourRoute(
+  s: Vec,
+  t: Vec,
+  sa: Anchor,
+  ta: Anchor,
+  boxes: Box[],
+  ends: Box[],
+): Vec[] | null {
+  return (
+    detour(s, t, sa, ta, boxes, ends, CLEARANCE) ??
+    detour(s, t, sa, ta, boxes, ends, TIGHT_CLEARANCE)
+  )
 }
 
 /** Geometry for a connector drawn as a polyline with its corners rounded off. */
@@ -570,13 +600,20 @@ export function edgeGeometry(
 
   // A box sitting on top of an endpoint is not something a detour can help
   // with — there is no way out of it — so it is not treated as one.
-  const walls = (obstacles ?? []).filter(
+  const others = (obstacles ?? []).filter(
     (b) => b !== source && b !== target && !contains(b, s) && !contains(b, t),
   )
+  /*
+   * The two nodes the connection joins count as obstacles everywhere except at
+   * the anchors themselves. Left out, a connector whose ends face away from
+   * each other — two nodes stacked vertically but joined side to side, say —
+   * runs its middle leg straight back through the node it just came out of.
+   */
+  const walls = [...others, source, target]
 
   if (route === 'straight') {
-    if (walls.length && polylineBlocked([s, t], walls)) {
-      const around = detourRoute(s, t, sa, ta, walls)
+    if (polylineBlocked([s, t], walls)) {
+      const around = detourRoute(s, t, sa, ta, others, [source, target])
       if (around) return fromPolyline(around, DETOUR_RADIUS.straight)
     }
     const dx = t.x - s.x
@@ -596,8 +633,8 @@ export function edgeGeometry(
     const reach = clamp(Math.hypot(t.x - s.x, t.y - s.y) * 0.42, 34, 150)
     const c1 = { x: s.x + sa.normal.x * reach, y: s.y + sa.normal.y * reach }
     const c2 = { x: t.x + ta.normal.x * reach, y: t.y + ta.normal.y * reach }
-    if (walls.length && polylineBlocked(bezierSamples(s, c1, c2, t), walls)) {
-      const around = detourRoute(s, t, sa, ta, walls)
+    if (polylineBlocked(bezierSamples(s, c1, c2, t), walls)) {
+      const around = detourRoute(s, t, sa, ta, others, [source, target])
       // Rounded generously: a curve that has to divert should still read as one.
       if (around) return fromPolyline(around, DETOUR_RADIUS.curved)
     }
@@ -617,8 +654,8 @@ export function edgeGeometry(
 
   /* orthogonal */
   const points = orthogonalPoints(s, t, sa, ta)
-  if (walls.length && polylineBlocked(points, walls)) {
-    const around = detourRoute(s, t, sa, ta, walls)
+  if (polylineBlocked(points, walls)) {
+    const around = detourRoute(s, t, sa, ta, others, [source, target])
     if (around) return fromPolyline(around, DETOUR_RADIUS.orthogonal)
   }
   return fromPolyline(points, DETOUR_RADIUS.orthogonal)
