@@ -1,11 +1,11 @@
 import { createApp, h } from 'vue'
-import type { DiagramDocument, DiagramNode } from '@/model'
+import type { DiagramDocument, DiagramNode, MessageFlow } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
 import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
-import type { FlowEdge } from '@/features/diagram/lib/flow-graph'
-import { edgeStyle, fadeOf, flowPlan } from '@/features/diagram/lib/flow-graph'
+import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
+import { edgeStyle, fadeOf, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import {
   COLOR_HEX,
@@ -318,34 +318,128 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
+/** Length of one dash-and-gap of a moving line, in canvas units. */
+const DASH_PATTERN = 22
+
 /**
- * How long each connection is drawn, which only a browser can say. Measured
- * through one throwaway `<path>` rather than one per connection — the export
- * already runs in a document, and this keeps it to a single insertion.
+ * The measurements only a browser can make: how long a connection is drawn, and
+ * whereabouts along it a given fraction of that falls.
+ *
+ * One hidden `<svg>` holding one `<path>` per connection, kept for as long as
+ * the export runs. A GIF asks the same paths the same questions sixty times
+ * over, and re-parsing a `d` attribute for every one of those is the difference
+ * between an export that stutters and one that does not.
  */
-function pathLengths(paths: Map<string, string>): Map<string, number> {
-  const out = new Map<string, number>()
-  if (typeof document === 'undefined' || !paths.size) return out
+export interface PathSampler {
+  length(edge: string): number
+  /** Where `progress` along a connection falls, and which way it is heading. */
+  at(edge: string, progress: number): { x: number; y: number; angle: number } | null
+  dispose(): void
+}
 
-  const svg = document.createElementNS(SVG_NS, 'svg')
-  svg.setAttribute('width', '0')
-  svg.setAttribute('height', '0')
-  svg.setAttribute('style', 'position:absolute;visibility:hidden')
-  const probe = document.createElementNS(SVG_NS, 'path')
-  svg.append(probe)
-  document.body.append(svg)
+function pathSampler(geometries: Map<string, EdgeGeometry>): PathSampler {
+  const elements = new Map<string, SVGPathElement>()
+  const lengths = new Map<string, number>()
+  let host: SVGSVGElement | null = null
 
-  for (const [id, d] of paths) {
-    probe.setAttribute('d', d)
-    try {
-      out.set(id, probe.getTotalLength())
-    } catch {
-      out.set(id, 0)
+  if (typeof document !== 'undefined' && geometries.size) {
+    host = document.createElementNS(SVG_NS, 'svg')
+    host.setAttribute('width', '0')
+    host.setAttribute('height', '0')
+    host.setAttribute('style', 'position:absolute;visibility:hidden')
+    for (const [id, geometry] of geometries) {
+      const path = document.createElementNS(SVG_NS, 'path')
+      path.setAttribute('d', geometry.path)
+      host.append(path)
+      elements.set(id, path)
+    }
+    document.body.append(host)
+    for (const [id, path] of elements) {
+      try {
+        lengths.set(id, path.getTotalLength())
+      } catch {
+        lengths.set(id, 0)
+      }
     }
   }
 
-  svg.remove()
-  return out
+  return {
+    length: (edge) => lengths.get(edge) ?? 0,
+
+    at(edge, progress) {
+      const path = elements.get(edge)
+      const total = lengths.get(edge) ?? 0
+      if (!path || !total) return null
+
+      const distance = total * Math.min(1, Math.max(0, progress))
+      // Sampled backwards once there is no road left ahead, so a message sitting
+      // on the last point of a connection still knows which way it was heading.
+      const step = distance + 1 <= total ? 1 : -1
+      let point: DOMPoint
+      let ahead: DOMPoint
+      try {
+        point = path.getPointAtLength(distance)
+        ahead = path.getPointAtLength(distance + step)
+      } catch {
+        return null
+      }
+
+      // Turned to face the way it is going, but never past vertical — the same
+      // rule the canvas follows, and for the same reason: none of the glyphs
+      // carry their own direction, so an upside-down envelope reads as a bug.
+      let angle =
+        (Math.atan2(step * (ahead.y - point.y), step * (ahead.x - point.x)) * 180) / Math.PI
+      if (angle > 90) angle -= 180
+      else if (angle < -90) angle += 180
+      return { x: point.x, y: point.y, angle }
+    },
+
+    dispose() {
+      host?.remove()
+      host = null
+      elements.clear()
+    },
+  }
+}
+
+/** A flow and the traversal it works out to, once the lines have been measured. */
+interface PlannedFlow {
+  flow: MessageFlow
+  plan: FlowPlan
+}
+
+function flowPlans(doc: DiagramDocument, lengthOf: (edge: string) => number): PlannedFlow[] {
+  const byId = new Map<string, FlowEdge>(doc.edges.map((e) => [e.id, e]))
+  return (doc.flows ?? [])
+    .filter((flow) => flow.enabled)
+    .map((flow) => ({ flow, plan: flowPlan(flow, byId, lengthOf) }))
+    .filter(({ plan }) => plan.branches.length && plan.duration > 0)
+}
+
+/** A pulse never rides thinner than the connection it travels. */
+function dashWidths(doc: DiagramDocument): Map<string, number> {
+  return new Map(doc.edges.map((e) => [e.id, Math.max(2.4, edgeStrokeWidth(e.width))]))
+}
+
+/**
+ * The longest a set of flows can run before every one of them is back where it
+ * started — which is exactly how long an exported animation has to be to loop
+ * without a visible seam.
+ */
+const MAX_LOOP = 12
+
+function loopSeconds(plans: PlannedFlow[]): number {
+  const cycles = plans.map(({ plan }) => plan.duration).filter((d) => d > 0)
+  if (!cycles.length) return 0
+  const longest = Math.max(...cycles)
+
+  // A whole number of every flow's pass, if one of those is short enough to sit
+  // through; otherwise the longest pass, which at least reads as complete.
+  for (let k = 1; longest * k <= MAX_LOOP; k++) {
+    const total = longest * k
+    if (cycles.every((c) => Math.abs(total / c - Math.round(total / c)) < 0.02)) return total
+  }
+  return Math.min(longest, MAX_LOOP)
 }
 
 /**
@@ -399,32 +493,15 @@ function tokenMarkup(shape: string, color: string, bg: string): string {
  * canvas, by going in one side and coming out the other.
  */
 function renderFlows(
-  doc: DiagramDocument,
+  plans: PlannedFlow[],
   geometries: Map<string, EdgeGeometry>,
+  widths: Map<string, number>,
   bg: string,
 ): string {
-  const flows = doc.flows ?? []
-  if (!flows.length) return ''
-
-  const byId = new Map<string, FlowEdge>(doc.edges.map((e) => [e.id, e]))
-  /** A pulse never rides thinner than the connection it travels. */
-  const dashWidths = new Map(
-    doc.edges.map((e) => [e.id, Math.max(2.4, edgeStrokeWidth(e.width))]),
-  )
-  const lengths = pathLengths(
-    new Map([...geometries].map(([id, geometry]) => [id, geometry.path])),
-  )
-  const lengthOf = (id: string) => lengths.get(id) ?? 0
-
   const parts: string[] = []
 
-  for (const flow of flows) {
-    if (!flow.enabled) continue
-    const plan = flowPlan(flow, byId, lengthOf)
-    if (!plan.branches.length || plan.duration <= 0) continue
-
+  for (const { flow, plan } of plans) {
     const cycle = plan.duration
-    if (cycle <= 0) continue
     const repeat = flow.loop ? 'indefinite' : '1'
     const freeze = flow.loop ? '' : ' fill="freeze"'
 
@@ -435,9 +512,9 @@ function renderFlows(
         const look = edgeStyle(flow, id)
         parts.push(
           `<path d="${geometry.path}" fill="none" stroke="${COLOR_HEX[look.color]}" ` +
-            `stroke-width="${dashWidths.get(id) ?? 2.4}" stroke-linecap="round" stroke-dasharray="6 16">` +
-            `<animate attributeName="stroke-dashoffset" values="0;-22" ` +
-            `dur="${(22 / Math.max(look.speed, 1)).toFixed(3)}s" repeatCount="indefinite"/>` +
+            `stroke-width="${widths.get(id) ?? 2.4}" stroke-linecap="round" stroke-dasharray="6 16">` +
+            `<animate attributeName="stroke-dashoffset" values="0;-${DASH_PATTERN}" ` +
+            `dur="${(DASH_PATTERN / Math.max(look.speed, 1)).toFixed(3)}s" repeatCount="indefinite"/>` +
             `</path>`,
         )
       }
@@ -521,6 +598,69 @@ function renderFlows(
   return parts.join('')
 }
 
+/**
+ * The flows as they stand at `time` seconds in — one still frame of the same
+ * animation.
+ *
+ * SMIL is a description of movement, and a raster format wants a photograph of
+ * it, so this places every message itself. It asks the plan the very question
+ * the canvas asks sixty times a second — `tokenAt` — which is what stops a GIF
+ * and the editor disagreeing about where a message had got to.
+ */
+function renderFlowsAt(
+  plans: PlannedFlow[],
+  geometries: Map<string, EdgeGeometry>,
+  widths: Map<string, number>,
+  sampler: PathSampler,
+  bg: string,
+  time: number,
+): string {
+  const parts: string[] = []
+
+  for (const { flow, plan } of plans) {
+    if (flow.motion !== 'token') {
+      for (const id of plan.edges) {
+        const geometry = geometries.get(id)
+        if (!geometry) continue
+        const look = edgeStyle(flow, id)
+        // Decreasing the offset walks the pattern forwards along the path, one
+        // whole pattern per cycle — the same motion the canvas's CSS gives it.
+        const offset = -((time * Math.max(look.speed, 1)) % DASH_PATTERN)
+        parts.push(
+          `<path d="${geometry.path}" fill="none" stroke="${COLOR_HEX[look.color]}" ` +
+            `stroke-width="${widths.get(id) ?? 2.4}" stroke-linecap="round" ` +
+            `stroke-dasharray="6 16" stroke-dashoffset="${round2(offset)}"/>`,
+        )
+      }
+    }
+
+    if (flow.motion === 'dash') continue
+
+    // A flow that repeats is somewhere in its pass; one that does not has run
+    // its course by the end of it, and `tokenAt` says so by returning nothing.
+    const clock = flow.loop ? ((time % plan.duration) + plan.duration) % plan.duration : time
+
+    for (const branch of plan.branches) {
+      for (let token = 0; token < plan.tokens; token++) {
+        const position = tokenAt(branch, clock + token * plan.offset)
+        if (!position) continue
+        const point = sampler.at(position.edge, position.progress)
+        if (!point) continue
+        const look = edgeStyle(flow, position.edge)
+        parts.push(
+          `<g transform="translate(${round2(point.x)},${round2(point.y)}) ` +
+            `rotate(${point.angle.toFixed(1)})" opacity="${position.opacity.toFixed(3)}">` +
+            `${tokenMarkup(look.token, COLOR_HEX[look.color], bg)}</g>`,
+        )
+      }
+    }
+  }
+
+  return parts.join('')
+}
+
+/* ----------------------------------------------------------------- render */
+
 export interface SvgOptions {
   /** Omits the background rectangle. */
   transparent?: boolean
@@ -531,9 +671,34 @@ export interface SvgOptions {
    * picture of the diagram.
    */
   animate?: boolean
+  /**
+   * Draws the flows frozen at this many seconds in, instead of as SMIL. This is
+   * what a GIF is made of, and what a still preview of a moving diagram shows.
+   */
+  time?: number
 }
 
-export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}): string {
+/**
+ * One document, ready to be drawn over and over at different moments.
+ *
+ * Everything that does not move — the boxes, the lines, the labels, the routing
+ * — is worked out once and kept as a string, and so is the hidden `<svg>` the
+ * messages are placed against. A frame is then the two halves of that with the
+ * flows of one instant between them, which is what makes exporting sixty frames
+ * cost roughly what exporting one does.
+ *
+ * Callers must `dispose()`, or the sampler's scratch element stays in the page.
+ */
+export interface DocumentFrames {
+  bounds: Box
+  /** Seconds one full pass of every flow takes; `0` when nothing moves. */
+  duration: number
+  /** The document at `time` seconds, or as a self-animating SVG without one. */
+  frame(time?: number): string
+  dispose(): void
+}
+
+export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): DocumentFrames {
   const theme = diagramTheme(doc.canvas.theme)
   const bounds = contentBounds(doc, options.padding ?? EXPORT_PADDING)
   const boxes = absoluteBoxes(doc)
@@ -594,11 +759,6 @@ export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}
     })
     .join('')
 
-  // Between the connections and the nodes, exactly as on the canvas: a message
-  // rides over the line it travels and slips behind the node it arrives at.
-  const flows =
-    options.animate === false ? '' : renderFlows(doc, geometries, theme.bg)
-
   const shapes = doc.nodes
     .filter((n) => n.kind !== 'zone')
     .map((n) => renderShape(n, boxes.get(n.id)!, nodePaint(n, theme)))
@@ -608,17 +768,47 @@ export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}
     ? ''
     : `<rect x="${bounds.x}" y="${bounds.y}" width="${bounds.width}" height="${bounds.height}" fill="${theme.bg}"/>`
 
-  return (
+  const sampler = pathSampler(geometries)
+  // Planned even when the flows are not being drawn: `duration` is a fact about
+  // the diagram, and a caller asking for a still frame still wants to be told
+  // there is something here that moves.
+  const plans = flowPlans(doc, sampler.length)
+  const widths = dashWidths(doc)
+
+  const open =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(bounds.width)}" ` +
     `height="${Math.round(bounds.height)}" ` +
     `viewBox="${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}">` +
     `<title>${escapeXml(doc.meta.title)}</title>` +
-    `<style>text{font-family:${SANS}}</style>` +
-    background +
-    zones +
-    edges +
-    flows +
-    shapes +
-    `</svg>`
-  )
+    `<style>text{font-family:${SANS}}</style>`
+
+  return {
+    bounds,
+    duration: loopSeconds(plans),
+
+    frame(time = options.time) {
+      // Between the connections and the nodes, exactly as on the canvas: a
+      // message rides over the line it travels and slips behind the node it
+      // arrives at.
+      const flows =
+        options.animate === false || !plans.length
+          ? ''
+          : time === undefined
+            ? renderFlows(plans, geometries, widths, theme.bg)
+            : renderFlowsAt(plans, geometries, widths, sampler, theme.bg, time)
+
+      return open + background + zones + edges + flows + shapes + `</svg>`
+    },
+
+    dispose: sampler.dispose,
+  }
+}
+
+export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}): string {
+  const frames = documentFrames(doc, options)
+  try {
+    return frames.frame(options.time)
+  } finally {
+    frames.dispose()
+  }
 }

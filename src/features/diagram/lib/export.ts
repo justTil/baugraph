@@ -1,6 +1,7 @@
 import type { DiagramDocument } from '@/model'
 import { stringify } from '@/model'
-import { contentBounds, renderDocumentSvg } from '@/features/diagram/lib/render-svg'
+import { contentBounds, documentFrames, renderDocumentSvg } from '@/features/diagram/lib/render-svg'
+import { gifPalette, gifWriter } from '@/features/diagram/lib/gif'
 import { diagramTheme } from '@/features/diagram/lib/theme'
 
 /** Filename stem derived from the diagram title. */
@@ -122,41 +123,150 @@ export function exportJson(doc: DiagramDocument) {
   )
 }
 
-export function exportSvg(doc: DiagramDocument, { transparent = false } = {}) {
+export function exportSvg(doc: DiagramDocument, { transparent = false, animate = true } = {}) {
   download(
     `${slug(doc)}.svg`,
-    new Blob([renderDocumentSvg(doc, { transparent })], { type: 'image/svg+xml' }),
+    new Blob([renderDocumentSvg(doc, { transparent, animate })], { type: 'image/svg+xml' }),
   )
 }
 
-export async function exportPng(doc: DiagramDocument, scale = 2) {
-  const svg = renderDocumentSvg(doc, { animate: false })
-  const bounds = contentBounds(doc)
-
+/**
+ * Loads an SVG string as an image the canvas can draw.
+ *
+ * Through a data URI rather than a blob URL: a blob URL would have to be revoked
+ * at exactly the right moment, and a GIF makes hundreds of these.
+ */
+function svgImage(svg: string): Promise<HTMLImageElement> {
   // btoa() only handles latin-1, so encode UTF-8 bytes first.
   const bytes = new TextEncoder().encode(svg)
   const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join('')
-  const source = `data:image/svg+xml;base64,${btoa(binary)}`
 
   const image = new Image()
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve()
+  return new Promise((resolve, reject) => {
+    image.onload = () => resolve(image)
     image.onerror = () => reject(new Error('The diagram could not be rasterised.'))
-    image.src = source
+    image.src = `data:image/svg+xml;base64,${btoa(binary)}`
   })
+}
 
+function context(width: number, height: number): CanvasRenderingContext2D {
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(bounds.width * scale)
-  canvas.height = Math.round(bounds.height * scale)
-  const ctx = canvas.getContext('2d')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('Canvas 2D is unavailable in this browser.')
-  ctx.fillStyle = diagramTheme(doc.canvas.theme).bg
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  return ctx
+}
+
+export async function exportPng(doc: DiagramDocument, scale = 2, { transparent = false } = {}) {
+  const image = await svgImage(renderDocumentSvg(doc, { animate: false, transparent }))
+  const bounds = contentBounds(doc)
+
+  const ctx = context(Math.round(bounds.width * scale), Math.round(bounds.height * scale))
+  const { canvas } = ctx
+  if (!transparent) {
+    ctx.fillStyle = diagramTheme(doc.canvas.theme).bg
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
   ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
   if (!blob) throw new Error('PNG encoding failed.')
   download(`${slug(doc)}@${scale}x.png`, blob)
+}
+
+/* -------------------------------------------------------------------- gif */
+
+/** Enough moments of the animation to have seen every colour it uses. */
+const PALETTE_SAMPLES = 6
+
+/** A ceiling on how much work one export can be, whatever it is asked for. */
+const MAX_FRAMES = 240
+
+/**
+ * What a GIF of a flow lasting `duration` will actually come out as.
+ *
+ * A GIF holds each frame for a whole number of hundredths of a second, so the
+ * frame rate is settled by that first and the frame count follows from it —
+ * otherwise the animation plays back at a slightly different speed than the one
+ * its frames were drawn for. The dialog quotes these numbers before the export
+ * runs, so they are worked out here rather than twice.
+ */
+export function gifShape(duration: number, fps: number) {
+  const delay = Math.max(2, Math.round(100 / Math.min(50, Math.max(5, fps))))
+  const frames = Math.max(2, Math.min(MAX_FRAMES, Math.round((duration * 100) / delay)))
+  return { delay, frames, fps: 100 / delay, seconds: (frames * delay) / 100 }
+}
+
+export interface GifExportOptions {
+  fps?: number
+  scale?: number
+  /** Called with 0 → 1 as the frames are drawn; a GIF takes long enough to say so. */
+  onProgress?: (done: number) => void
+}
+
+/**
+ * The diagram as an animated GIF.
+ *
+ * An SVG already animates, and does it at any size — but a GIF is what a chat
+ * window, a pull request and a slide deck will actually play, which is where a
+ * diagram of a system in motion is worth having.
+ *
+ * The frames are the same renderer frozen at successive moments, rasterised
+ * through the browser and handed to the encoder one at a time. `n / count`
+ * rather than `n / (count - 1)`, so the last frame lands one step *before* the
+ * start rather than on top of it and the loop has no stutter in it.
+ */
+export async function exportGif(doc: DiagramDocument, options: GifExportOptions = {}) {
+  const { scale = 1, onProgress } = options
+  const frames = documentFrames(doc)
+
+  try {
+    if (frames.duration <= 0) {
+      throw new Error('This diagram has no flows to animate. Add one, or export a PNG.')
+    }
+
+    const { delay, frames: count } = gifShape(frames.duration, options.fps ?? 20)
+
+    const width = Math.max(1, Math.round(frames.bounds.width * scale))
+    const height = Math.max(1, Math.round(frames.bounds.height * scale))
+    const ctx = context(width, height)
+    const bg = diagramTheme(doc.canvas.theme).bg
+
+    const shoot = async (index: number): Promise<Uint8ClampedArray> => {
+      const image = await svgImage(frames.frame((index / count) * frames.duration))
+      ctx.fillStyle = bg
+      ctx.fillRect(0, 0, width, height)
+      ctx.drawImage(image, 0, 0, width, height)
+      return ctx.getImageData(0, 0, width, height).data
+    }
+
+    // The palette comes from moments spread across the pass — the messages are
+    // somewhere different in each, so between them they cover every colour the
+    // animation puts on screen. They are kept rather than redrawn later.
+    const sampled = new Map<number, Uint8ClampedArray>()
+    const step = Math.max(1, Math.floor(count / PALETTE_SAMPLES))
+    for (let i = 0; i < count; i += step) sampled.set(i, await shoot(i))
+    onProgress?.(0)
+
+    const writer = gifWriter({
+      width,
+      height,
+      palette: gifPalette([...sampled.values()]),
+      delay,
+    })
+
+    for (let i = 0; i < count; i++) {
+      writer.add(sampled.get(i) ?? (await shoot(i)))
+      // Released as it goes: a hundred frames of pixels is hundreds of megabytes.
+      sampled.delete(i)
+      onProgress?.((i + 1) / count)
+    }
+
+    download(`${slug(doc)}.gif`, new Blob([writer.finish()], { type: 'image/gif' }))
+  } finally {
+    frames.dispose()
+  }
 }
 
 /** Reads a `.baugraph.json` (or legacy export) chosen from a file input. */
