@@ -52,8 +52,8 @@ const SHORTCUTS: [string, string][] = [
           </p>
           <p>
             Hover a node to reveal its four connection dots. Drag a dot onto another node to
-            connect them, or onto empty canvas to create the next node
-            <em>and</em> the connection in one gesture.
+            connect them — neither end needs aiming, and the connection runs the way you drew
+            it. Released over empty canvas, a connection is simply dropped.
           </p>
           <p>
             Double-click a node to rename it inline. Icon, colour, shape, routing, arrowheads and

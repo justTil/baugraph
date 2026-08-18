@@ -30,9 +30,12 @@ Then open http://localhost:5173.
 
 Drag a node from the palette in the sidebar onto the canvas, or click one to drop it
 in the centre. Hover a node to reveal its four connection dots — drag a dot onto
-another node to connect them, or onto empty canvas to create the next node *and* the
-connection in one gesture. Double-click a node to rename it inline; everything else
-(icon, colour, shape, routing, arrowheads, line style) lives in the inspector.
+another node to connect them. Neither end takes any aiming: a dot's grab zone is
+far wider than the dot, and a drag released anywhere near another node's side
+lands on it. The connection always runs the way it was drawn, from the node the
+drag started on to the node it ended on; release it over empty canvas and nothing
+is created. Double-click a node to rename it inline; everything else (icon,
+colour, shape, routing, arrowheads, line style) lives in the inspector.
 
 ### What a node is, and what it runs on
 
@@ -66,6 +69,8 @@ box only ever grows to fit.
 
 To set one by hand, select the node and drag a side — the whole edge is the
 handle, so width, the thing a diagram gets tidied with most, takes no aiming.
+Pulling a zone's left or top edge in moves only that edge: what is inside the
+zone stays exactly where it is on the canvas.
 `⇧⌘F` hands the decision back: it sizes the selection to its own text, wraps a
 selected zone around its contents, and with nothing selected does the lot, which
 is how an older diagram full of clipped captions gets fixed in one keystroke.

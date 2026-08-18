@@ -185,23 +185,20 @@ const HANDLES = [
     </button>
 
     <!--
-      Each side carries a target handle beneath a source handle so a connection
-      can be started from, or dropped onto, any of the four sides.
+      One dot per side, and every one of them a *source* handle. The canvas runs
+      in loose mode, so a source handle is dropped onto exactly as readily as it
+      is dragged from — and with no target handle anywhere to start a drag on,
+      a connection can no longer come out pointing back the way it was drawn
+      (see `onConnect` in `DiagramCanvas`).
     -->
-    <template v-for="handle in HANDLES" :key="handle.id">
-      <Handle
-        :id="handle.id"
-        type="target"
-        :position="handle.position"
-        class="bg-node__handle bg-node__handle--target"
-      />
-      <Handle
-        :id="handle.id"
-        type="source"
-        :position="handle.position"
-        class="bg-node__handle"
-      />
-    </template>
+    <Handle
+      v-for="handle in HANDLES"
+      :id="handle.id"
+      :key="handle.id"
+      type="source"
+      :position="handle.position"
+      class="bg-node__handle"
+    />
   </div>
 </template>
 
@@ -240,10 +237,30 @@ const HANDLES = [
   opacity: 1;
 }
 
-/* Handles stay out of the way until the node is hovered or selected. */
+/*
+ * The handle element is an invisible disc more than twice the size of the dot
+ * drawn inside it: it is the thing being grabbed and dropped on, so it is sized
+ * for a pointer rather than for the eye. Vue Flow centres a handle on its own
+ * side whatever its size, so the point a connection actually meets the node is
+ * unchanged — only the target got easier to hit.
+ */
 .bg-node :deep(.bg-node__handle) {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+/* The dot itself stays out of the way until the node is hovered or selected. */
+.bg-node :deep(.bg-node__handle)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 10px;
   height: 10px;
+  margin: -5px 0 0 -5px;
   border-radius: 9999px;
   border: 1.6px solid var(--bg-selection);
   background: var(--bg-canvas);
@@ -251,22 +268,13 @@ const HANDLES = [
   transition: opacity 120ms ease;
 }
 
-.bg-node:hover :deep(.bg-node__handle),
-.bg-node--selected :deep(.bg-node__handle) {
+.bg-node:hover :deep(.bg-node__handle)::after,
+.bg-node--selected :deep(.bg-node__handle)::after {
   opacity: 1;
 }
 
 /* Nothing can be connected to a locked node, so its dots stay away. */
 .bg-node--locked :deep(.bg-node__handle) {
   display: none;
-}
-
-/* The target handle is a larger invisible drop zone behind the visible dot. */
-.bg-node :deep(.bg-node__handle--target) {
-  width: 22px;
-  height: 22px;
-  border-color: transparent;
-  background: transparent;
-  opacity: 1;
 }
 </style>

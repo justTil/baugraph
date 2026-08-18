@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { NodeProps } from '@vue-flow/core'
+import type { OnResize } from '@vue-flow/node-resizer'
 import { NodeResizer } from '@vue-flow/node-resizer'
 import { Lock } from '@lucide/vue'
 import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { DEFAULT_ZONE_SIZE } from '@/model'
 import { roundedRect } from '@/features/diagram/lib/shapes'
 import { fitZoneMinSize } from '@/features/diagram/lib/auto-size'
@@ -14,6 +16,7 @@ import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 const props = defineProps<NodeProps<NodeData>>()
 
 const { canvas, commit, endCoalesce, setNodesLocked } = useDiagram()
+const { findNode, getNodes } = useCanvas()
 
 /**
  * Locking a zone is the usual way to work inside one: the frame stops answering
@@ -49,6 +52,48 @@ const caption = computed(() => nodeCaption(props.data))
 
 /** A zone is never pulled in over the header it carries. */
 const min = computed(() => fitZoneMinSize(props.data))
+
+/* ---------------------------------------------------------------- resizing */
+
+/**
+ * Where the zone's own corner was when the last resize step ended.
+ *
+ * Dragging the left or top edge does not only change the zone's size — it moves
+ * the zone's origin, and a member's position is stored relative to that origin.
+ * Left alone, pulling the left edge in therefore drags the entire contents along
+ * with it, so the far side of the zone closes in on them and the one edge the
+ * user grabbed is the only thing that appears to stay put. Pushing the members
+ * back by whatever the origin moved holds them exactly where they were on the
+ * canvas, and the dragged edge becomes the only thing that moves.
+ *
+ * Only direct members need the correction: a zone nested inside this one carries
+ * its own contents with it.
+ */
+let origin: { x: number; y: number } | null = null
+
+function onResizeStart() {
+  commit()
+  endCoalesce()
+  const node = findNode(props.id)
+  origin = node ? { x: node.position.x, y: node.position.y } : null
+}
+
+function onResize({ params }: OnResize) {
+  if (!origin) return
+  const dx = params.x - origin.x
+  const dy = params.y - origin.y
+  origin = { x: params.x, y: params.y }
+  if (!dx && !dy) return
+
+  for (const member of getNodes.value) {
+    if (member.parentNode !== props.id) continue
+    member.position = { x: member.position.x - dx, y: member.position.y - dy }
+  }
+}
+
+function onResizeEnd() {
+  origin = null
+}
 </script>
 
 <template>
@@ -63,7 +108,9 @@ const min = computed(() => fitZoneMinSize(props.data))
       borderRadius: '3px',
       borderWidth: '1.5px',
     }"
-    @resize-start="commit()"
+    @resize-start="onResizeStart"
+    @resize="onResize"
+    @resize-end="onResizeEnd"
   />
 
   <div class="bg-zone">

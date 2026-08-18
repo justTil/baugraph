@@ -14,12 +14,16 @@ import type {
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
+import { Check } from '@lucide/vue'
 import type { ColorKey, Side } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
 import { usePanel } from '@/features/workspace/composables/usePanel'
+import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile'
+import { useSavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
 import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
@@ -42,6 +46,7 @@ const {
   nodes,
   edges,
   canvas,
+  dirty,
   selectedNodes,
   commit,
   endCoalesce,
@@ -83,7 +88,7 @@ const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
 const theme = computed(() => diagramTheme(canvas.theme))
 
-/** The last palette item used, repeated by double-click and drag-to-empty. */
+/** The last palette item used, repeated by a double-click on empty canvas. */
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
 
 /** Minimap swatches echo each node's own colour instead of a flat grey. */
@@ -104,41 +109,33 @@ const HANDLE_SIDES: Record<string, Side> = {
   left: 'left',
 }
 
-/** Set by `onConnect` so `onConnectEnd` knows the drag landed on a node. */
-let connectionMade = false
-let pendingSource: { node: string; side: Side } | null = null
+/**
+ * How far from a connection dot a drag may be released and still land on it.
+ * Well past the dot's own hit area, so most of a node is within reach of one of
+ * its four sides and connecting takes no aiming — Vue Flow picks the nearest.
+ */
+const CONNECTION_RADIUS = 40
 
-function onConnectStart({ nodeId, handleId }: { nodeId?: string | null; handleId?: string | null }) {
-  connectionMade = false
-  pendingSource = nodeId
-    ? { node: nodeId, side: HANDLE_SIDES[handleId ?? ''] ?? 'auto' }
-    : null
-}
-
+/**
+ * Records a connection the user has just drawn, in the direction they drew it.
+ *
+ * Every handle on a node is a *source* handle (see `ShapeNode`), which is what
+ * keeps that promise: Vue Flow reads a connection's direction from the handle
+ * the drag *started* on, and a drag started on a target handle arrives here
+ * with its two ends swapped — the arrow then points back out of the node the
+ * user was connecting *to*. With no target handles there is nothing to start
+ * such a drag on.
+ *
+ * A drag released anywhere else is simply abandoned; it used to leave a new node
+ * behind, which made every mis-aimed connection something to undo.
+ */
 function onConnect(connection: Connection) {
-  connectionMade = true
   commit()
   endCoalesce()
   addEdge(connection.source, connection.target, {
     sourceSide: HANDLE_SIDES[connection.sourceHandle ?? ''] ?? 'auto',
     targetSide: HANDLE_SIDES[connection.targetHandle ?? ''] ?? 'auto',
   })
-}
-
-/**
- * Dropping a connection on empty canvas creates the next node and wires it up in
- * one gesture — the fastest way to sketch a chain of services.
- */
-function onConnectEnd(event?: MouseEvent | TouchEvent) {
-  const source = pendingSource
-  pendingSource = null
-  if (connectionMade || !source || !event) return
-
-  const point = 'changedTouches' in event ? event.changedTouches[0] : event
-  if (!point) return
-
-  const node = placeAtScreen(lastItem.value, { x: point.clientX, y: point.clientY })
-  if (node) addEdge(source.node, node.id, { sourceSide: source.side })
 }
 
 /* ------------------------------------------------------- palette drag/drop */
@@ -529,6 +526,31 @@ onBeforeUnmount(() => {
   stopFlowRuntime()
 })
 
+/* ------------------------------------------------------------ save status */
+
+/** Long enough to be read without turning into something to be dismissed. */
+const SAVED_NOTICE_MS = 2600
+
+/**
+ * The confirmation for a save that has just happened.
+ *
+ * Held here rather than read straight off the document so it can be taken down
+ * again: the save itself is a moment, and the canvas is where the user is
+ * looking when they press ⌘S. What stays up instead is the unsaved marker in
+ * the same corner, which is the state rather than the event.
+ */
+const savedNotice = useSavedNotice(documentId)
+const saved = ref<SavedNotice | null>(null)
+let savedTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(savedNotice, (notice) => {
+  clearTimeout(savedTimer)
+  saved.value = notice
+  if (notice) savedTimer = setTimeout(() => (saved.value = null), SAVED_NOTICE_MS)
+})
+
+onBeforeUnmount(() => clearTimeout(savedTimer))
+
 /**
  * Re-fit whenever a document is loaded from disk or storage — but only once Vue
  * Flow has measured the nodes it was just handed, because fitting around boxes
@@ -583,6 +605,7 @@ watch(isVisible, (visible) => {
           :node-types="nodeTypes"
           :edge-types="edgeTypes"
           :connection-mode="ConnectionMode.Loose"
+          :connection-radius="CONNECTION_RADIUS"
           :snap-to-grid="canvas.snap && !altHeld"
           :snap-grid="[canvas.snapSize, canvas.snapSize]"
           :min-zoom="0.15"
@@ -601,9 +624,7 @@ watch(isVisible, (visible) => {
             strokeDasharray: '5 4',
           }"
           :default-edge-options="{ type: 'diagram' }"
-          @connect-start="onConnectStart"
           @connect="onConnect"
-          @connect-end="onConnectEnd"
           @node-drag-start="onNodeDragStart"
           @node-drag="alignDrag"
           @node-drag-stop="onNodeDragStop"
@@ -672,12 +693,44 @@ watch(isVisible, (visible) => {
           @blur="commitEditor(true)"
         />
 
-        <p
-          v-if="!nodes.length"
-          class="text-muted-foreground pointer-events-none absolute bottom-4 left-4 font-mono text-xs"
+        <!--
+          The corner the editor answers for the file in: whether the diagram is
+          ahead of it, and — for a moment after ⌘S — that it no longer is. The
+          two never show together, because saving is what ends the first.
+        -->
+        <div
+          class="pointer-events-none absolute bottom-4 left-4 z-20 flex max-w-[min(22rem,calc(100%-2rem))] flex-col gap-2"
         >
-          drag a node from the palette · drag a node's dot to connect · right-click for actions
-        </p>
+          <Transition
+            mode="out-in"
+            enter-active-class="transition duration-150 ease-out"
+            enter-from-class="translate-y-1 opacity-0"
+            leave-active-class="transition duration-200 ease-in"
+            leave-to-class="translate-y-1 opacity-0"
+          >
+            <!-- An edit made while the confirmation is still up retires it early. -->
+            <Alert v-if="saved && !dirty" class="w-auto shadow-lg">
+              <Check />
+              <AlertTitle>Saved</AlertTitle>
+              <AlertDescription>
+                {{ saved.fileName ?? 'Downloaded the source file' }}
+              </AlertDescription>
+            </Alert>
+
+            <p
+              v-else-if="dirty"
+              class="text-muted-foreground flex items-center gap-1.5 font-mono text-xs"
+            >
+              <span class="bg-foreground/60 size-1.5 shrink-0 rounded-full" aria-hidden="true" />
+              Unsaved changes
+            </p>
+          </Transition>
+
+          <p v-if="!nodes.length" class="text-muted-foreground font-mono text-xs">
+            drag a node from the palette · drag a node's dot onto another to connect ·
+            right-click for actions
+          </p>
+        </div>
       </div>
     </ContextMenuTrigger>
 
