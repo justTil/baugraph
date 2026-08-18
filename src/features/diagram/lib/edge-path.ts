@@ -1,4 +1,5 @@
-import type { Route, Side } from '@/model'
+import type { NodePorts, PortSide, Route, Side } from '@/model'
+import { nodePorts } from '@/model'
 import { EDGE_PX } from '@/features/diagram/lib/theme'
 
 /**
@@ -41,26 +42,68 @@ interface Anchor {
   normal: Vec
 }
 
-function anchor(box: Box, side: Exclude<Side, 'auto'>): Anchor {
+/**
+ * Where along its side the `port`-th of `count` connection points sits, as a
+ * fraction of that side's length.
+ *
+ * Evenly spread, which is what lets a node store the *count* alone: one point
+ * lands at the middle exactly where it always did, and the whole set slides with
+ * the side as the node is resized. Ports are 1-based, as the file states them,
+ * and an index past the end falls back to the last point that exists — a side
+ * that has since been narrowed leaves connections attached rather than adrift.
+ */
+function portFraction(count: number, port: number): number {
+  const n = Math.max(1, Math.round(count))
+  return clamp(Math.round(port), 1, n) / (n + 1)
+}
+
+function anchor(box: Box, side: PortSide, count = 1, port = 1): Anchor {
   const { x, y, width: w, height: h } = box
+  const f = portFraction(count, port)
   switch (side) {
     case 'top':
-      return { point: { x: x + w / 2, y }, normal: { x: 0, y: -1 } }
+      return { point: { x: x + w * f, y }, normal: { x: 0, y: -1 } }
     case 'bottom':
-      return { point: { x: x + w / 2, y: y + h }, normal: { x: 0, y: 1 } }
+      return { point: { x: x + w * f, y: y + h }, normal: { x: 0, y: 1 } }
     case 'left':
-      return { point: { x, y: y + h / 2 }, normal: { x: -1, y: 0 } }
+      return { point: { x, y: y + h * f }, normal: { x: -1, y: 0 } }
     default:
-      return { point: { x: x + w, y: y + h / 2 }, normal: { x: 1, y: 0 } }
+      return { point: { x: x + w, y: y + h * f }, normal: { x: 1, y: 0 } }
   }
 }
 
 /** Picks the side of `from` that faces `to`. */
-export function autoSide(from: Box, to: Box): Exclude<Side, 'auto'> {
+export function autoSide(from: Box, to: Box): PortSide {
   const dx = to.x + to.width / 2 - (from.x + from.width / 2)
   const dy = to.y + to.height / 2 - (from.y + from.height / 2)
   if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left'
   return dy >= 0 ? 'bottom' : 'top'
+}
+
+/**
+ * On a side carrying several connection points, the one facing `to`.
+ *
+ * `auto` means "wherever this reads best", and that answer has to survive a side
+ * gaining points: picking the nearest keeps a connection short instead of
+ * sending it back to a middle that is no longer where anything attaches.
+ */
+function autoPort(box: Box, side: PortSide, count: number, to: Box): number {
+  if (count < 2) return 1
+  const horizontal = side === 'top' || side === 'bottom'
+  const origin = horizontal ? box.x : box.y
+  const span = horizontal ? box.width : box.height
+  const facing = horizontal ? to.x + to.width / 2 : to.y + to.height / 2
+
+  let best = 1
+  let bestGap = Infinity
+  for (let port = 1; port <= count; port++) {
+    const gap = Math.abs(origin + span * portFraction(count, port) - facing)
+    if (gap < bestGap) {
+      bestGap = gap
+      best = port
+    }
+  }
+  return best
 }
 
 /** Rounds the corners of a polyline. */
@@ -569,6 +612,16 @@ function orthogonalPoints(s: Vec, t: Vec, sa: Anchor, ta: Anchor): Vec[] {
 export interface EdgeRouteOptions {
   sourceSide: Side
   targetSide: Side
+  /**
+   * Connection points each end offers, per side. Omitted — or omitting a side —
+   * is the single point every side has by default, which is the geometry this
+   * module had before nodes could carry more.
+   */
+  sourcePorts?: Partial<NodePorts>
+  targetPorts?: Partial<NodePorts>
+  /** Which of those points each end attaches to, 1-based. Ignored while its side is `auto`. */
+  sourcePort?: number
+  targetPort?: number
   route: Route
   /**
    * Boxes the connector must not run through — every other node on the canvas.
@@ -584,15 +637,35 @@ export interface EdgeRouteOptions {
 export function edgeGeometry(
   source: Box,
   target: Box,
-  { sourceSide, targetSide, route, obstacles }: EdgeRouteOptions,
+  {
+    sourceSide,
+    targetSide,
+    sourcePorts,
+    targetPorts,
+    sourcePort,
+    targetPort,
+    route,
+    obstacles,
+  }: EdgeRouteOptions,
 ): EdgeGeometry {
   if (source === target || (source.x === target.x && source.y === target.y && source.width === target.width)) {
     return selfLoop(source)
   }
 
-  const sa = anchor(source, sourceSide === 'auto' ? autoSide(source, target) : sourceSide)
-  const ta = anchor(target, targetSide === 'auto' ? autoSide(target, source) : targetSide)
-  align(source, target, sa, ta)
+  const sSide = sourceSide === 'auto' ? autoSide(source, target) : sourceSide
+  const tSide = targetSide === 'auto' ? autoSide(target, source) : targetSide
+  const sCount = nodePorts(sourcePorts)[sSide]
+  const tCount = nodePorts(targetPorts)[tSide]
+  const sPort = sourceSide === 'auto' ? autoPort(source, sSide, sCount, target) : (sourcePort ?? 1)
+  const tPort = targetSide === 'auto' ? autoPort(target, tSide, tCount, source) : (targetPort ?? 1)
+
+  const sa = anchor(source, sSide, sCount, sPort)
+  const ta = anchor(target, tSide, tCount, tPort)
+  // Only ends that have nowhere else to be get pulled onto a shared line. A side
+  // carrying several points was laid out deliberately, and its spacing is finer
+  // than the tolerance below — nudging one end would slide a connection onto a
+  // point its node does not say it uses.
+  if (sCount === 1 && tCount === 1) align(source, target, sa, ta)
 
   const gap = 2
   const s: Vec = { x: sa.point.x + sa.normal.x * gap, y: sa.point.y + sa.normal.y * gap }

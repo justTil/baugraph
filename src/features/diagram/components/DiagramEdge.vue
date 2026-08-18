@@ -3,7 +3,7 @@ import type { CSSProperties } from 'vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { EdgeProps } from '@vue-flow/core'
 import { useVueFlow } from '@vue-flow/core'
-import type { EdgeData } from '@/features/diagram/composables/useDiagram'
+import type { EdgeData, NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
@@ -40,10 +40,17 @@ const obstacles = computed(() =>
     .map(boxOf),
 )
 
+/** A node's connection points, as its data carries them. Zones have none of their own. */
+const portsOf = (node: EdgeProps['sourceNode']) => (node.data as NodeData | undefined)?.ports
+
 const geometry = computed(() =>
   edgeGeometry(boxOf(props.sourceNode), boxOf(props.targetNode), {
     sourceSide: props.data.sourceSide,
     targetSide: props.data.targetSide,
+    sourcePorts: portsOf(props.sourceNode),
+    targetPorts: portsOf(props.targetNode),
+    sourcePort: props.data.sourcePort,
+    targetPort: props.data.targetPort,
     route: props.data.route,
     obstacles: obstacles.value,
   }),

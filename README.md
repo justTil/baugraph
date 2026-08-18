@@ -29,13 +29,30 @@ Then open http://localhost:5173.
 ## Using the editor
 
 Drag a node from the palette in the sidebar onto the canvas, or click one to drop it
-in the centre. Hover a node to reveal its four connection dots — drag a dot onto
-another node to connect them. Neither end takes any aiming: a dot's grab zone is
+in the centre. Hover a node to reveal its connection dots — one to a side, until you
+add more — and drag a dot onto another node to connect them. Neither end takes any aiming: a dot's grab zone is
 far wider than the dot, and a drag released anywhere near another node's side
 lands on it. The connection always runs the way it was drawn, from the node the
 drag started on to the node it ended on; release it over empty canvas and nothing
 is created. Double-click a node to rename it inline; everything else (icon,
 colour, shape, routing, arrowheads, line style) lives in the inspector.
+
+### Connection points
+
+A side starts with one connection point, in the middle, and can be given up to six.
+Set the count per side in the inspector's **Connection points** field: six down the
+right flank and one everywhere else is the shape a fan-out actually has, so a topic
+with six subscribers stops drawing six lines out of a single dot.
+
+Points spread themselves evenly along the side they sit on — three sit at a quarter,
+a half and three quarters of its length — which means nothing has to be dragged into
+place and they stay evenly spread as the node is resized. Drag from the one you want,
+or move a connection between them with the point picker that appears under **From
+side** / **To side** in a connection's inspector. An end left on **Auto** picks the
+nearest point for itself.
+
+Take points away again and anything attached past the end moves onto the last point
+that is left, so a connection never comes adrift from the node it belongs to.
 
 ### What a node is, and what it runs on
 
@@ -257,6 +274,14 @@ Design decisions, all in service of readable diffs:
 - **A child's `position` is relative to its `parent` zone**, so moving a zone touches
   one line instead of every node inside it. `parent` *is* the grouping, and it chains:
   a zone may itself have a parent.
+- **A node's `ports` counts connection points, and nothing else.** Points are spread
+  evenly along the side they sit on, so `"ports": { "right": 4 }` is the whole of
+  what a fan-out stores — no coordinates to go stale when the node is resized, and
+  nothing at all for the sides that were left alone. An edge's `sourcePort` /
+  `targetPort` then names which of them an end uses, counted from the top or the
+  left and starting at 1; both are omitted while the end is on `auto`, which places
+  itself. A port a node no longer offers falls back to the last one that exists
+  rather than failing to open.
 - **`locked` is an editing aid**, written only when true. It keeps a node out of the
   way while you work on its neighbours and has no effect on rendering or export.
 - **A flow names connections, not a timeline.** `edges` is a set of edge ids and

@@ -716,6 +716,7 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
   // through a box would not match what was on screen. Zones are excluded: they
   // are containers the connections legitimately run in and out of.
   const solids = doc.nodes.filter((n) => n.kind !== 'zone')
+  const byId = new Map(doc.nodes.map((n) => [n.id, n]))
   for (const edge of doc.edges) {
     const source = boxes.get(edge.source)
     const target = boxes.get(edge.target)
@@ -728,6 +729,10 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
       edgeGeometry(source, target, {
         sourceSide: edge.sourceSide,
         targetSide: edge.targetSide,
+        sourcePorts: byId.get(edge.source)?.ports,
+        targetPorts: byId.get(edge.target)?.ports,
+        sourcePort: edge.sourcePort,
+        targetPort: edge.targetPort,
         route: edge.route,
         obstacles,
       }),

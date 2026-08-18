@@ -15,6 +15,8 @@ import type {
   LineWidth,
   MessageFlow,
   Metadata,
+  NodePorts,
+  PortSide,
   Route,
   ShapeKey,
   Side,
@@ -25,6 +27,8 @@ import {
   DEFAULT_ZONE_SIZE,
   FLOW_DEFAULTS,
   FORMAT_VERSION,
+  MAX_PORTS,
+  nodePorts,
   edgeId as makeEdgeId,
   flowId as makeFlowId,
   nodeId as makeNodeId,
@@ -53,6 +57,12 @@ export interface NodeData {
   /** Weight of the node's outline. */
   border: BorderWidth
   icon: string
+  /**
+   * Connection points per side, always fully populated here — the file may name
+   * only the sides it added to, but a node on the canvas has to draw a dot for
+   * every side whatever it says.
+   */
+  ports: NodePorts
   /** Mirrors `DiagramNode.locked`; the Vue Flow interaction flags follow it. */
   locked: boolean
   meta?: Metadata
@@ -63,6 +73,9 @@ export interface EdgeData {
   label: string
   sourceSide: Side
   targetSide: Side
+  /** Which connection point on each side, 1-based. See `DiagramEdge.sourcePort`. */
+  sourcePort: number
+  targetPort: number
   route: Route
   line: LineStyle
   /** Weight of the line. */
@@ -184,6 +197,7 @@ function createDiagramStore(documentId: string) {
         color: node.color,
         border: node.border ?? 'regular',
         icon: node.icon ?? '',
+        ports: nodePorts(node.ports),
         locked,
         meta: node.data,
       },
@@ -204,6 +218,8 @@ function createDiagramStore(documentId: string) {
         label: edge.label ?? '',
         sourceSide: edge.sourceSide,
         targetSide: edge.targetSide,
+        sourcePort: edge.sourcePort ?? 1,
+        targetPort: edge.targetPort ?? 1,
         route: edge.route,
         line: edge.line,
         width: edge.width ?? 'regular',
@@ -246,6 +262,7 @@ function createDiagramStore(documentId: string) {
       icon: node.data?.icon ?? '',
       position: { x: node.position.x, y: node.position.y },
       size: sizeOf(node),
+      ports: nodePorts(node.data?.ports),
       parent: node.parentNode ?? null,
       locked: node.data?.locked ?? false,
       data: node.data?.meta,
@@ -259,6 +276,8 @@ function createDiagramStore(documentId: string) {
       target: edge.target,
       sourceSide: edge.data?.sourceSide ?? 'auto',
       targetSide: edge.data?.targetSide ?? 'auto',
+      sourcePort: edge.data?.sourcePort ?? 1,
+      targetPort: edge.data?.targetPort ?? 1,
       label: edge.data?.label ?? '',
       route: edge.data?.route ?? 'orthogonal',
       line: edge.data?.line ?? 'solid',
@@ -601,7 +620,13 @@ function createDiagramStore(documentId: string) {
   function addEdge(
     source: string,
     target: string,
-    sides?: { sourceSide?: Side; targetSide?: Side },
+    ends?: {
+      sourceSide?: Side
+      targetSide?: Side
+      /** Which connection point on that side, 1-based. */
+      sourcePort?: number
+      targetPort?: number
+    },
   ): BgEdge | null {
     if (source === target) return null
     if (edges.value.some((e) => e.source === source && e.target === target)) return null
@@ -609,8 +634,10 @@ function createDiagramStore(documentId: string) {
       id: makeEdgeId(source, target, takenEdgeIds()),
       source,
       target,
-      sourceSide: sides?.sourceSide ?? 'auto',
-      targetSide: sides?.targetSide ?? 'auto',
+      sourceSide: ends?.sourceSide ?? 'auto',
+      targetSide: ends?.targetSide ?? 'auto',
+      sourcePort: ends?.sourcePort ?? 1,
+      targetPort: ends?.targetPort ?? 1,
       label: '',
       route: 'orthogonal',
       line: 'solid',
@@ -988,6 +1015,36 @@ function createDiagramStore(documentId: string) {
   }
 
   /**
+   * Sets how many connection points one side of a node offers.
+   *
+   * Taking points away can leave a connection pointing at one that is no longer
+   * there, so anything attached to that side is pulled back onto the last point
+   * that still exists. The renderer would clamp it anyway; doing it here is what
+   * writes the new place into the file, so what is saved is what is on screen.
+   */
+  function setNodePorts(id: string, side: PortSide, count: number) {
+    const node = nodes.value.find((n) => n.id === id)
+    if (!node) return
+    const ports = nodePorts((node.data as NodeData).ports)
+    const next = Math.min(MAX_PORTS, Math.max(1, Math.round(count)))
+    if (ports[side] === next) return
+
+    updateNodeData(id, { ports: { ...ports, [side]: next } })
+
+    edges.value = edges.value.map((e) => {
+      const data = e.data as EdgeData
+      const patch: Partial<EdgeData> = {}
+      if (e.source === id && data.sourceSide === side && data.sourcePort > next) {
+        patch.sourcePort = next
+      }
+      if (e.target === id && data.targetSide === side && data.targetPort > next) {
+        patch.targetPort = next
+      }
+      return Object.keys(patch).length ? { ...e, data: { ...data, ...patch } } : e
+    })
+  }
+
+  /**
    * Retypes a node — a box that turns out to be a queue, a service that is really
    * a gateway. Styling the user has not touched follows the new type, so the icon
    * and shape keep matching the caption; anything they picked by hand is left
@@ -1150,6 +1207,8 @@ function createDiagramStore(documentId: string) {
               ...(e.data as EdgeData),
               sourceSide: (e.data as EdgeData).targetSide,
               targetSide: (e.data as EdgeData).sourceSide,
+              sourcePort: (e.data as EdgeData).targetPort,
+              targetPort: (e.data as EdgeData).sourcePort,
             },
           }
         : e,
@@ -1321,6 +1380,7 @@ function createDiagramStore(documentId: string) {
     unlockAll,
     updateNodeData,
     updateNodeSize,
+    setNodePorts,
     autoSizeNodes,
     autoSizeSelection,
     fitSizeOf,

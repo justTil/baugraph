@@ -181,6 +181,31 @@
               "height"
             ]
           },
+          "ports": {
+            "type": "object",
+            "properties": {
+              "top": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              },
+              "right": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              },
+              "bottom": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              },
+              "left": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              }
+            }
+          },
           "parent": {
             "default": null,
             "anyOf": [
@@ -259,6 +284,18 @@
               "bottom",
               "left"
             ]
+          },
+          "sourcePort": {
+            "default": 1,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "targetPort": {
+            "default": 1,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
           },
           "label": {
             "default": "",

@@ -5,7 +5,8 @@ import { Handle, Position } from '@vue-flow/core'
 import { NodeResizer } from '@vue-flow/node-resizer'
 import { Lock } from '@lucide/vue'
 import type { NodeData } from '@/features/diagram/composables/useDiagram'
-import { DEFAULT_NODE_SIZE } from '@/model'
+import type { PortSide } from '@/model'
+import { DEFAULT_NODE_SIZE, PORT_SIDES, nodePorts } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, shapeElements } from '@/features/diagram/lib/shapes'
 import { fitNodeSize } from '@/features/diagram/lib/auto-size'
@@ -74,12 +75,51 @@ const fit = computed(() =>
   }),
 )
 
-const HANDLES = [
-  { id: 'top', position: Position.Top },
-  { id: 'right', position: Position.Right },
-  { id: 'bottom', position: Position.Bottom },
-  { id: 'left', position: Position.Left },
-] as const
+const HANDLE_POSITION: Record<PortSide, Position> = {
+  top: Position.Top,
+  right: Position.Right,
+  bottom: Position.Bottom,
+  left: Position.Left,
+}
+
+/**
+ * The node's connection points, in the order they are drawn.
+ *
+ * A side offers one point unless the node says otherwise, and the extras are
+ * spread evenly along it — the same fractions `edge-path` anchors on, because a
+ * dot has to sit exactly where the connection it starts will meet the node. Vue
+ * Flow pins each handle to the middle of its own side, so the offset is written
+ * over that one axis and its centring transform does the rest.
+ *
+ * The id carries both halves — `right:3` — and that is all `onConnect` needs to
+ * write the connection down (see `DiagramCanvas`).
+ */
+const handles = computed(() => {
+  const ports = nodePorts(props.data.ports)
+  return PORT_SIDES.flatMap((side) => {
+    const count = ports[side]
+    const horizontal = side === 'top' || side === 'bottom'
+    const along = horizontal ? 'left' : 'top'
+    // A crowded side cannot keep pointer-sized targets: six of them down one
+    // flank of a default node would overlap two deep, and the one under the
+    // cursor would not be the one that got grabbed. Both the grab zone and the
+    // dot shrink to the room actually available, down to a floor that is still
+    // worth aiming at.
+    const pitch = (horizontal ? width.value : height.value) / (count + 1)
+    const grab = Math.round(Math.min(24, Math.max(12, pitch)))
+    const dot = Math.round(Math.min(10, Math.max(6, pitch * 0.55)))
+
+    return Array.from({ length: count }, (_, i) => ({
+      id: `${side}:${i + 1}`,
+      position: HANDLE_POSITION[side],
+      style: {
+        [along]: `${((i + 1) / (count + 1)) * 100}%`,
+        '--bg-handle': `${grab}px`,
+        '--bg-dot': `${dot}px`,
+      },
+    }))
+  })
+})
 </script>
 
 <template>
@@ -185,18 +225,20 @@ const HANDLES = [
     </button>
 
     <!--
-      One dot per side, and every one of them a *source* handle. The canvas runs
-      in loose mode, so a source handle is dropped onto exactly as readily as it
-      is dragged from — and with no target handle anywhere to start a drag on,
-      a connection can no longer come out pointing back the way it was drawn
-      (see `onConnect` in `DiagramCanvas`).
+      One dot per connection point — one a side, until a side is given more — and
+      every one of them a *source* handle. The canvas runs in loose mode, so a
+      source handle is dropped onto exactly as readily as it is dragged from —
+      and with no target handle anywhere to start a drag on, a connection can no
+      longer come out pointing back the way it was drawn (see `onConnect` in
+      `DiagramCanvas`).
     -->
     <Handle
-      v-for="handle in HANDLES"
+      v-for="handle in handles"
       :id="handle.id"
       :key="handle.id"
       type="source"
       :position="handle.position"
+      :style="handle.style"
       class="bg-node__handle"
     />
   </div>
@@ -245,8 +287,8 @@ const HANDLES = [
  * unchanged — only the target got easier to hit.
  */
 .bg-node :deep(.bg-node__handle) {
-  width: 24px;
-  height: 24px;
+  width: var(--bg-handle, 24px);
+  height: var(--bg-handle, 24px);
   border: none;
   border-radius: 9999px;
   background: transparent;
@@ -258,9 +300,9 @@ const HANDLES = [
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 10px;
-  height: 10px;
-  margin: -5px 0 0 -5px;
+  width: var(--bg-dot, 10px);
+  height: var(--bg-dot, 10px);
+  margin: calc(var(--bg-dot, 10px) / -2) 0 0 calc(var(--bg-dot, 10px) / -2);
   border-radius: 9999px;
   border: 1.6px solid var(--bg-selection);
   background: var(--bg-canvas);

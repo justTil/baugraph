@@ -30,7 +30,8 @@ import IconPicker from '@/features/diagram/components/IconPicker.vue'
 import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 import EdgeFlowSection from '@/features/diagram/components/EdgeFlowSection.vue'
-import { SHAPE_KEYS } from '@/model'
+import type { PortSide, Side } from '@/model'
+import { MAX_PORTS, PORT_SIDES, SHAPE_KEYS, nodePorts } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
 import { TECH_CATEGORIES, categoryFirst, techTerms } from '@/features/diagram/data/tech'
 import { diagramTheme } from '@/features/diagram/lib/theme'
@@ -51,6 +52,7 @@ const {
   endCoalesce,
   updateNodeData,
   updateNodeSize,
+  setNodePorts,
   autoSizeNodes,
   fitSizeOf,
   setNodeType,
@@ -170,6 +172,40 @@ const BORDER_OPTIONS = [
   { value: 'none', label: 'None', title: 'No outline' },
   ...WIDTH_OPTIONS,
 ]
+
+const SIDE_GLYPHS: Record<PortSide, string> = {
+  top: '↑',
+  right: '→',
+  bottom: '↓',
+  left: '←',
+}
+
+const SIDE_LABELS: Record<PortSide, string> = {
+  top: 'Top',
+  right: 'Right',
+  bottom: 'Bottom',
+  left: 'Left',
+}
+
+/** The selected node's connection points, one count per side. */
+const ports = computed(() => nodePorts(node.value?.data.ports))
+
+/**
+ * How many connection points the node at one end of the selected connection
+ * offers on the side that end uses. An end left on `auto` has not picked a side,
+ * and picks its point for itself — so there is nothing to choose between.
+ */
+function pointsOn(nodeId?: string, side?: Side): number {
+  if (!nodeId || !side || side === 'auto') return 1
+  return nodePorts(nodes.value.find((n) => n.id === nodeId)?.data?.ports)[side]
+}
+
+const sourcePoints = computed(() => pointsOn(edge.value?.source, edge.value?.data?.sourceSide))
+const targetPoints = computed(() => pointsOn(edge.value?.target, edge.value?.data?.targetSide))
+
+/** Points are numbered the way the file states them: from the top or the left, starting at 1. */
+const pointOptions = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))
 
 const SIDE_OPTIONS = [
   { value: 'auto', label: 'Auto' },
@@ -324,6 +360,40 @@ function withCommit(fn: () => void) {
             :model-value="node.data.icon"
             @update:model-value="withCommit(() => updateNodeData(node!.id, { icon: $event }))"
           />
+        </section>
+
+        <!--
+          A node fanning out to six subscribers needs six places to leave from,
+          and only on the side they are on. Each side is counted on its own, and
+          the points spread themselves evenly along it.
+        -->
+        <section v-if="node.type !== 'zone'" class="space-y-2 border-b p-3">
+          <Label class="text-xs">Connection points</Label>
+          <div class="grid grid-cols-2 gap-2">
+            <div v-for="side in PORT_SIDES" :key="side" class="relative">
+              <span
+                class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[11px] font-semibold"
+                aria-hidden="true"
+              >{{ SIDE_GLYPHS[side] }}</span>
+              <Input
+                type="number"
+                min="1"
+                :max="MAX_PORTS"
+                step="1"
+                class="h-8 pl-7 text-sm"
+                :title="`${SIDE_LABELS[side]} — up to ${MAX_PORTS} points`"
+                :model-value="ports[side]"
+                @change="
+                  withCommit(() =>
+                    setNodePorts(node!.id, side, Number(($event.target as HTMLInputElement).value)),
+                  )
+                "
+              />
+            </div>
+          </div>
+          <p class="text-muted-foreground text-[11px] leading-snug">
+            Up to {{ MAX_PORTS }} a side, spread evenly along it. Drag from any dot to connect.
+          </p>
         </section>
 
         <section class="space-y-3 border-b p-3">
@@ -517,13 +587,24 @@ function withCommit(fn: () => void) {
           </div>
         </section>
 
+        <!--
+          Moving an end to another side lands it on that side's first point: the
+          one it was on belongs to the side it just left, and may not exist here.
+          The point picker only appears where there is more than one to pick.
+        -->
         <section class="space-y-3 border-b p-3">
           <div class="space-y-1.5">
             <Label class="text-xs">From side</Label>
             <SegmentedField
               :model-value="edge.data!.sourceSide"
               :options="SIDE_OPTIONS"
-              @update:model-value="withCommit(() => updateEdgeData(edge!.id, { sourceSide: $event as never }))"
+              @update:model-value="withCommit(() => updateEdgeData(edge!.id, { sourceSide: $event as never, sourcePort: 1 }))"
+            />
+            <SegmentedField
+              v-if="sourcePoints > 1"
+              :model-value="String(edge.data!.sourcePort)"
+              :options="pointOptions(sourcePoints)"
+              @update:model-value="withCommit(() => updateEdgeData(edge!.id, { sourcePort: Number($event) }))"
             />
           </div>
           <div class="space-y-1.5">
@@ -531,7 +612,13 @@ function withCommit(fn: () => void) {
             <SegmentedField
               :model-value="edge.data!.targetSide"
               :options="SIDE_OPTIONS"
-              @update:model-value="withCommit(() => updateEdgeData(edge!.id, { targetSide: $event as never }))"
+              @update:model-value="withCommit(() => updateEdgeData(edge!.id, { targetSide: $event as never, targetPort: 1 }))"
+            />
+            <SegmentedField
+              v-if="targetPoints > 1"
+              :model-value="String(edge.data!.targetPort)"
+              :options="pointOptions(targetPoints)"
+              @update:model-value="withCommit(() => updateEdgeData(edge!.id, { targetPort: Number($event) }))"
             />
           </div>
         </section>
