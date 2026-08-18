@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { CSSProperties } from 'vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { EdgeProps } from '@vue-flow/core'
 import type { EdgeData } from '@/features/diagram/composables/useDiagram'
@@ -43,6 +44,24 @@ const stroke = computed(() =>
 const lineWidth = computed(() => edgeStrokeWidth(props.data.width))
 const strokeWidth = computed(() => edgeStrokeWidth(props.data.width, props.selected))
 const dash = computed(() => dashArray(props.data.line, lineWidth.value))
+
+/**
+ * The line's paint, as inline style rather than as SVG attributes.
+ *
+ * Vue Flow's own stylesheet pins `.vue-flow__edge-path` to a 1px `#b1b1b7`
+ * line, and a stylesheet rule beats a presentation attribute however specific
+ * the attribute looks — so a connection's colour and weight only take if they
+ * are written where nothing can outrank them. The class stays: it is what the
+ * library's tooling recognises a connection by.
+ */
+const lineStyle = computed<CSSProperties>(() => ({
+  fill: 'none',
+  stroke: stroke.value,
+  strokeWidth: `${strokeWidth.value}px`,
+  strokeDasharray: dash.value,
+  strokeLinecap: props.data.line === 'dotted' ? 'round' : undefined,
+  strokeLinejoin: 'round',
+}))
 
 const showEndArrow = computed(() => props.data.arrows !== 'none')
 const showStartArrow = computed(() => props.data.arrows === 'both')
@@ -120,12 +139,7 @@ const label = computed(() => {
     :id="id"
     ref="pathEl"
     :d="geometry.path"
-    fill="none"
-    :stroke="stroke"
-    :stroke-width="strokeWidth"
-    :stroke-dasharray="dash"
-    :stroke-linecap="data.line === 'dotted' ? 'round' : undefined"
-    stroke-linejoin="round"
+    :style="lineStyle"
     class="vue-flow__edge-path"
   />
 
