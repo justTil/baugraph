@@ -156,14 +156,19 @@ const SHAPE_LABELS: Record<string, string> = {
 }
 
 /**
- * Outline weights, heaviest last, so the row reads as the ramp it is. The values
- * are the model's — what each one is worth in canvas units lives in `theme.ts`.
+ * The one weight ramp, worded the same wherever it appears. What each step is
+ * worth in canvas units lives in `theme.ts`; a connection has no `none`, since
+ * one that is not drawn is one that has been deleted.
  */
-const BORDER_OPTIONS = [
-  { value: 'none', label: 'None', title: 'No outline' },
+const WIDTH_OPTIONS = [
   { value: 'regular', label: 'Regular' },
   { value: 'medium', label: 'Medium' },
   { value: 'thick', label: 'Thick' },
+]
+
+const BORDER_OPTIONS = [
+  { value: 'none', label: 'None', title: 'No outline' },
+  ...WIDTH_OPTIONS,
 ]
 
 const SIDE_OPTIONS = [
@@ -488,6 +493,14 @@ function withCommit(fn: () => void) {
                 { value: 'dotted', label: 'Dotted' },
               ]"
               @update:model-value="withCommit(() => updateEdgeData(edge!.id, { line: $event as never }))"
+            />
+          </div>
+          <div class="space-y-1.5">
+            <Label class="text-xs">Weight</Label>
+            <SegmentedField
+              :model-value="edge.data!.width"
+              :options="WIDTH_OPTIONS"
+              @update:model-value="withCommit(() => updateEdgeData(edge!.id, { width: $event as never }))"
             />
           </div>
           <div class="space-y-1.5">

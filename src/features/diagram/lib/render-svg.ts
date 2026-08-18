@@ -7,7 +7,14 @@ import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/e
 import type { FlowEdge } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, fadeOf, flowPlan } from '@/features/diagram/lib/flow-graph'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
-import { COLOR_HEX, diagramTheme, edgeColor, mix, nodePaint } from '@/features/diagram/lib/theme'
+import {
+  COLOR_HEX,
+  diagramTheme,
+  edgeColor,
+  edgeStrokeWidth,
+  mix,
+  nodePaint,
+} from '@/features/diagram/lib/theme'
 import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
 
 /**
@@ -400,6 +407,10 @@ function renderFlows(
   if (!flows.length) return ''
 
   const byId = new Map<string, FlowEdge>(doc.edges.map((e) => [e.id, e]))
+  /** A pulse never rides thinner than the connection it travels. */
+  const dashWidths = new Map(
+    doc.edges.map((e) => [e.id, Math.max(2.4, edgeStrokeWidth(e.width))]),
+  )
   const lengths = pathLengths(
     new Map([...geometries].map(([id, geometry]) => [id, geometry.path])),
   )
@@ -424,7 +435,7 @@ function renderFlows(
         const look = edgeStyle(flow, id)
         parts.push(
           `<path d="${geometry.path}" fill="none" stroke="${COLOR_HEX[look.color]}" ` +
-            `stroke-width="2.4" stroke-linecap="round" stroke-dasharray="6 16">` +
+            `stroke-width="${dashWidths.get(id) ?? 2.4}" stroke-linecap="round" stroke-dasharray="6 16">` +
             `<animate attributeName="stroke-dashoffset" values="0;-22" ` +
             `dur="${(22 / Math.max(look.speed, 1)).toFixed(3)}s" repeatCount="indefinite"/>` +
             `</path>`,
@@ -554,20 +565,21 @@ export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}
       const geometry = geometries.get(edge.id)
       if (!geometry) return ''
       const color = edgeColor(edge.color, theme)
-      const dash = dashArray(edge.line)
+      const stroke = edgeStrokeWidth(edge.width)
+      const dash = dashArray(edge.line, stroke)
 
       let out =
-        `<path d="${geometry.path}" fill="none" stroke="${color}" stroke-width="1.7" ` +
+        `<path d="${geometry.path}" fill="none" stroke="${color}" stroke-width="${stroke}" ` +
         `stroke-linejoin="round"` +
         (dash ? ` stroke-dasharray="${dash}"` : '') +
         (edge.line === 'dotted' ? ' stroke-linecap="round"' : '') +
         `/>`
 
       if (edge.arrows !== 'none') {
-        out += `<path d="${arrowHeadPath(geometry.end, geometry.endDir)}" fill="${color}"/>`
+        out += `<path d="${arrowHeadPath(geometry.end, geometry.endDir, stroke)}" fill="${color}"/>`
       }
       if (edge.arrows === 'both') {
-        out += `<path d="${arrowHeadPath(geometry.start, geometry.startDir)}" fill="${color}"/>`
+        out += `<path d="${arrowHeadPath(geometry.start, geometry.startDir, stroke)}" fill="${color}"/>`
       }
 
       if (edge.label) {

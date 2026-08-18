@@ -47,6 +47,7 @@ export const EDGE_DEFAULTS = {
   label: '',
   route: 'orthogonal',
   line: 'solid',
+  width: 'regular',
   arrows: 'target',
   color: null,
 } as const satisfies Partial<DiagramEdge>

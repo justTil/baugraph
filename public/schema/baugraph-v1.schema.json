@@ -282,6 +282,15 @@
               "dotted"
             ]
           },
+          "width": {
+            "default": "regular",
+            "type": "string",
+            "enum": [
+              "regular",
+              "medium",
+              "thick"
+            ]
+          },
           "arrows": {
             "default": "target",
             "type": "string",

@@ -59,6 +59,15 @@ export type Route = (typeof ROUTES)[number]
 export const LINE_STYLES = ['solid', 'dashed', 'dotted'] as const
 export type LineStyle = (typeof LINE_STYLES)[number]
 
+/**
+ * How heavily a connection's line is drawn — the same ramp as a node's border,
+ * without `none`: a connection that is not drawn is a connection that has been
+ * deleted. Dash patterns and arrow heads scale with it, so a thick dotted line
+ * still reads as dotted.
+ */
+export const LINE_WIDTHS = ['regular', 'medium', 'thick'] as const
+export type LineWidth = (typeof LINE_WIDTHS)[number]
+
 export const ARROW_MODES = ['target', 'both', 'none'] as const
 export type ArrowMode = (typeof ARROW_MODES)[number]
 
@@ -134,6 +143,8 @@ export interface DiagramEdge {
   label?: string
   route: Route
   line: LineStyle
+  /** Weight of the line. Omitted means `regular`. */
+  width?: LineWidth
   arrows: ArrowMode
   /** `null` = follow the theme's neutral edge colour. */
   color?: ColorKey | null

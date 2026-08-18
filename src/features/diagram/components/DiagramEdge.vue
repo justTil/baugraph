@@ -6,7 +6,7 @@ import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
-import { COLOR_HEX, diagramTheme, edgeColor, mix } from '@/features/diagram/lib/theme'
+import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
 import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
@@ -35,8 +35,14 @@ const geometry = computed(() =>
 const stroke = computed(() =>
   props.selected ? theme.value.selection : edgeColor(props.data.color, theme.value),
 )
-const strokeWidth = computed(() => (props.selected ? 2.4 : 1.7))
-const dash = computed(() => dashArray(props.data.line))
+/**
+ * The line's own weight, and the one it is drawn at. Only the drawn stroke picks
+ * up the selection bump — the dash pattern and the arrowheads stay put, so
+ * clicking a connection does not make it twitch.
+ */
+const lineWidth = computed(() => edgeStrokeWidth(props.data.width))
+const strokeWidth = computed(() => edgeStrokeWidth(props.data.width, props.selected))
+const dash = computed(() => dashArray(props.data.line, lineWidth.value))
 
 const showEndArrow = computed(() => props.data.arrows !== 'none')
 const showStartArrow = computed(() => props.data.arrows === 'both')
@@ -125,17 +131,17 @@ const label = computed(() => {
 
   <path
     v-if="showEndArrow"
-    :d="arrowHeadPath(geometry.end, geometry.endDir)"
+    :d="arrowHeadPath(geometry.end, geometry.endDir, lineWidth)"
     :fill="stroke"
   />
   <path
     v-if="showStartArrow"
-    :d="arrowHeadPath(geometry.start, geometry.startDir)"
+    :d="arrowHeadPath(geometry.start, geometry.startDir, lineWidth)"
     :fill="stroke"
   />
 
   <!-- Messages travelling this connection, and any moving line under them. -->
-  <FlowTokens :edge-id="id" :path="geometry.path" />
+  <FlowTokens :edge-id="id" :path="geometry.path" :line-width="lineWidth" />
 
   <template v-if="label">
     <rect

@@ -1,4 +1,4 @@
-import type { BorderWidth, ColorKey, DiagramNode } from '@/model'
+import type { BorderWidth, ColorKey, DiagramNode, LineWidth } from '@/model'
 import { COLOR_KEYS } from '@/model'
 
 /**
@@ -123,6 +123,27 @@ export function nodePaint(
     ink: theme.ink,
     muted: theme.muted,
   }
+}
+
+/**
+ * What each line weight is worth in canvas units. `regular` is the 1.7 every
+ * connection was drawn with before the setting existed.
+ */
+export const EDGE_PX: Record<LineWidth, number> = {
+  regular: 1.7,
+  medium: 2.8,
+  thick: 4.2,
+}
+
+/**
+ * Selection adds a constant rather than a factor: the point is that the line has
+ * been picked, and a heavy line does not need to double to say so.
+ */
+const SELECTED_EXTRA = 0.7
+
+/** Resolves a connection's line weight, thickened while it is selected. */
+export function edgeStrokeWidth(width: LineWidth | undefined, selected = false): number {
+  return (EDGE_PX[width ?? 'regular'] ?? EDGE_PX.regular) + (selected ? SELECTED_EXTRA : 0)
 }
 
 /** Resolves an edge's colour, falling back to the theme's neutral. */

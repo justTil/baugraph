@@ -1,4 +1,5 @@
 import type { Route, Side } from '@/model'
+import { EDGE_PX } from '@/features/diagram/lib/theme'
 
 /**
  * Edge routing.
@@ -235,7 +236,13 @@ export function edgeGeometry(
 }
 
 /** Triangular arrowhead pointing along `dir`, with its tip at `point`. */
-export function arrowHeadPath(point: Vec, dir: Vec, length = 10, halfWidth = 4.6): string {
+export function arrowHeadPath(point: Vec, dir: Vec, stroke = EDGE_PX.regular): string {
+  // The head follows the line's weight, but not one-for-one: a thick connection
+  // wants a bigger arrow to keep its point, not one two and a half times the
+  // size of everything else on the diagram.
+  const scale = 1 + Math.max(0, stroke - EDGE_PX.regular) * 0.22
+  const length = 10 * scale
+  const halfWidth = 4.6 * scale
   const n = { x: -dir.y, y: dir.x }
   const base = { x: point.x - dir.x * length, y: point.y - dir.y * length }
   return (
@@ -245,9 +252,19 @@ export function arrowHeadPath(point: Vec, dir: Vec, length = 10, halfWidth = 4.6
   )
 }
 
-/** Dash pattern for a line style, or `undefined` for solid. */
-export function dashArray(line: 'solid' | 'dashed' | 'dotted'): string | undefined {
-  if (line === 'dashed') return '8 5'
-  if (line === 'dotted') return '1.5 4.5'
-  return undefined
+/**
+ * Dash pattern for a line style, or `undefined` for solid.
+ *
+ * The pattern scales with the line's weight. Left fixed, a thick dotted line
+ * closes up into a solid one — the dots grow with the stroke while the gaps
+ * between them do not.
+ */
+export function dashArray(
+  line: 'solid' | 'dashed' | 'dotted',
+  stroke = EDGE_PX.regular,
+): string | undefined {
+  const f = stroke / EDGE_PX.regular
+  const pattern = line === 'dashed' ? [8, 5] : line === 'dotted' ? [1.5, 4.5] : null
+  if (!pattern) return undefined
+  return pattern.map((n) => Math.round(n * f * 100) / 100).join(' ')
 }

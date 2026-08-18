@@ -12,6 +12,7 @@ import type {
   DiagramNode,
   FlowEdgeStyle,
   LineStyle,
+  LineWidth,
   MessageFlow,
   Metadata,
   Route,
@@ -64,6 +65,8 @@ export interface EdgeData {
   targetSide: Side
   route: Route
   line: LineStyle
+  /** Weight of the line. */
+  width: LineWidth
   arrows: ArrowMode
   color: ColorKey | null
   meta?: Metadata
@@ -203,6 +206,7 @@ function createDiagramStore(documentId: string) {
         targetSide: edge.targetSide,
         route: edge.route,
         line: edge.line,
+        width: edge.width ?? 'regular',
         arrows: edge.arrows,
         color: edge.color ?? null,
         meta: edge.data,
@@ -258,6 +262,7 @@ function createDiagramStore(documentId: string) {
       label: edge.data?.label ?? '',
       route: edge.data?.route ?? 'orthogonal',
       line: edge.data?.line ?? 'solid',
+      width: edge.data?.width ?? 'regular',
       arrows: edge.data?.arrows ?? 'target',
       color: edge.data?.color ?? null,
       data: edge.data?.meta,

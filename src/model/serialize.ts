@@ -72,6 +72,7 @@ const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'label',
   'route',
   'line',
+  'width',
   'arrows',
   'color',
   'data',
