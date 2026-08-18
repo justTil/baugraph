@@ -2,15 +2,21 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useActiveDiagram } from '@/features/diagram/composables/useDiagram'
+import { useDocuments } from '@/features/diagram/composables/useDocuments'
+import { discardAllDocuments } from '@/features/diagram/composables/useEditorTabs'
 import { SCHEMA_URL } from '@/model'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 
-const { canvas, clearPersisted } = useDiagram()
+// The settings sit in their own tab, so "the diagram" means whichever editor
+// the user last worked in - and there may be none open at all.
+const diagram = useActiveDiagram()
+const { documents } = useDocuments()
 
-function forgetLocalCopy() {
-  if (!window.confirm('Remove the autosaved diagram from this browser?')) return
-  clearPersisted()
+function forgetLocalCopies() {
+  if (!window.confirm(`Remove all ${documents.value.length} autosaved diagrams from this browser?`))
+    return
+  discardAllDocuments()
 }
 </script>
 
@@ -19,32 +25,39 @@ function forgetLocalCopy() {
     <Card>
       <CardHeader>
         <CardTitle>Canvas</CardTitle>
-        <CardDescription>Stored with the diagram, not with the browser.</CardDescription>
+        <CardDescription>
+          Stored with the diagram, not with the browser — these apply to
+          <span class="text-foreground font-medium">{{ diagram?.meta.title ?? 'no open diagram' }}</span
+          >.
+        </CardDescription>
       </CardHeader>
-      <CardContent class="space-y-4">
+      <CardContent v-if="diagram" class="space-y-4">
         <div class="space-y-2">
           <Label>Theme</Label>
           <SegmentedField
-            :model-value="canvas.theme"
+            :model-value="diagram.canvas.theme"
             :options="[
               { value: 'light', label: 'Light' },
               { value: 'dark', label: 'Dark' },
             ]"
-            @update:model-value="canvas.theme = $event as 'light' | 'dark'"
+            @update:model-value="diagram.canvas.theme = $event as 'light' | 'dark'"
           />
         </div>
         <div class="space-y-2">
           <Label>Grid pitch</Label>
           <SegmentedField
-            :model-value="String(canvas.snapSize)"
+            :model-value="String(diagram.canvas.snapSize)"
             :options="[
               { value: '5', label: '5' },
               { value: '10', label: '10' },
               { value: '20', label: '20' },
             ]"
-            @update:model-value="canvas.snapSize = Number($event)"
+            @update:model-value="diagram.canvas.snapSize = Number($event)"
           />
         </div>
+      </CardContent>
+      <CardContent v-else class="text-muted-foreground text-sm">
+        Open a diagram to change how its canvas is drawn.
       </CardContent>
     </Card>
 
@@ -70,12 +83,23 @@ function forgetLocalCopy() {
       <CardHeader>
         <CardTitle>Local autosave</CardTitle>
         <CardDescription>
-          The current diagram is kept in this browser so a reload does not lose work.
+          Every open diagram is kept in this browser, so a reload does not lose work.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <Button variant="outline" size="sm" @click="forgetLocalCopy">
-          Clear autosaved copy
+      <CardContent class="space-y-3 text-sm">
+        <ul v-if="documents.length" class="text-muted-foreground space-y-1">
+          <li v-for="entry in documents" :key="entry.id" class="font-mono text-xs">
+            {{ entry.title }}
+          </li>
+        </ul>
+        <p v-else class="text-muted-foreground">Nothing stored yet.</p>
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="!documents.length"
+          @click="forgetLocalCopies"
+        >
+          Clear autosaved copies
         </Button>
       </CardContent>
     </Card>

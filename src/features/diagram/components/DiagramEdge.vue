@@ -1,23 +1,19 @@
 <script setup lang="ts">
+import type { CSSProperties } from 'vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { EdgeProps } from '@vue-flow/core'
 import type { EdgeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
-import {
-  invalidateEdgePath,
-  registerEdgePath,
-  unregisterEdgePath,
-  useFlows,
-} from '@/features/diagram/composables/useFlows'
+import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
-import { COLOR_HEX, diagramTheme, edgeColor, mix } from '@/features/diagram/lib/theme'
+import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
 import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
 const { canvas } = useDiagram()
-const { highlightOf } = useFlows()
+const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 
 const theme = computed(() => diagramTheme(canvas.theme))
 
@@ -40,8 +36,32 @@ const geometry = computed(() =>
 const stroke = computed(() =>
   props.selected ? theme.value.selection : edgeColor(props.data.color, theme.value),
 )
-const strokeWidth = computed(() => (props.selected ? 2.4 : 1.7))
-const dash = computed(() => dashArray(props.data.line))
+/**
+ * The line's own weight, and the one it is drawn at. Only the drawn stroke picks
+ * up the selection bump — the dash pattern and the arrowheads stay put, so
+ * clicking a connection does not make it twitch.
+ */
+const lineWidth = computed(() => edgeStrokeWidth(props.data.width))
+const strokeWidth = computed(() => edgeStrokeWidth(props.data.width, props.selected))
+const dash = computed(() => dashArray(props.data.line, lineWidth.value))
+
+/**
+ * The line's paint, as inline style rather than as SVG attributes.
+ *
+ * Vue Flow's own stylesheet pins `.vue-flow__edge-path` to a 1px `#b1b1b7`
+ * line, and a stylesheet rule beats a presentation attribute however specific
+ * the attribute looks — so a connection's colour and weight only take if they
+ * are written where nothing can outrank them. The class stays: it is what the
+ * library's tooling recognises a connection by.
+ */
+const lineStyle = computed<CSSProperties>(() => ({
+  fill: 'none',
+  stroke: stroke.value,
+  strokeWidth: `${strokeWidth.value}px`,
+  strokeDasharray: dash.value,
+  strokeLinecap: props.data.line === 'dotted' ? 'round' : undefined,
+  strokeLinejoin: 'round',
+}))
 
 const showEndArrow = computed(() => props.data.arrows !== 'none')
 const showStartArrow = computed(() => props.data.arrows === 'both')
@@ -119,28 +139,23 @@ const label = computed(() => {
     :id="id"
     ref="pathEl"
     :d="geometry.path"
-    fill="none"
-    :stroke="stroke"
-    :stroke-width="strokeWidth"
-    :stroke-dasharray="dash"
-    :stroke-linecap="data.line === 'dotted' ? 'round' : undefined"
-    stroke-linejoin="round"
+    :style="lineStyle"
     class="vue-flow__edge-path"
   />
 
   <path
     v-if="showEndArrow"
-    :d="arrowHeadPath(geometry.end, geometry.endDir)"
+    :d="arrowHeadPath(geometry.end, geometry.endDir, lineWidth)"
     :fill="stroke"
   />
   <path
     v-if="showStartArrow"
-    :d="arrowHeadPath(geometry.start, geometry.startDir)"
+    :d="arrowHeadPath(geometry.start, geometry.startDir, lineWidth)"
     :fill="stroke"
   />
 
   <!-- Messages travelling this connection, and any moving line under them. -->
-  <FlowTokens :edge-id="id" :path="geometry.path" />
+  <FlowTokens :edge-id="id" :path="geometry.path" :line-width="lineWidth" />
 
   <template v-if="label">
     <rect

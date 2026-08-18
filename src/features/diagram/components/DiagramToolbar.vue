@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   Grid3x3,
   Magnet,
   Maximize,
   Moon,
   Pause,
+  Pencil,
   Play,
   Redo2,
   Sun,
@@ -22,12 +23,25 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
+import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
 
 const emit = defineEmits<{
-  (e: 'new' | 'open' | 'export' | 'help'): void
+  (e: 'new' | 'open' | 'save' | 'export' | 'help'): void
 }>()
 
-const { meta, canvas, flows, canUndo, canRedo, undo, redo, commit, endCoalesce } = useDiagram()
+const { documentId, meta, canvas, flows, canUndo, canRedo, dirty, undo, redo, commit, endCoalesce } =
+  useDiagram()
+const { canOverwriteFiles, fileName } = useDocumentFile(documentId)
+
+/** What ⌘S will do, so the button can say it before it is pressed. */
+const saveHint = computed(() => {
+  const target = !canOverwriteFiles
+    ? 'Download the source file'
+    : fileName.value
+      ? `Save to ${fileName.value}`
+      : 'Save to a file…'
+  return dirty.value ? `${target} — unsaved changes (⌘S)` : `${target} (⌘S)`
+})
 const { paused, openFlowEditor } = useFlows()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
 
@@ -36,18 +50,42 @@ const zoomLabel = computed(() => `${Math.round(viewport.value.zoom * 100)}%`)
 function onTitleInput() {
   commit('meta.title')
 }
+
+/**
+ * Bound rather than left to `group-focus-within`: the pointer is still over the
+ * field after a click, and Tailwind's variant order lets the hover rule win.
+ */
+const editingTitle = ref(false)
 </script>
 
 <template>
-  <Input
-    :model-value="meta.title"
-    class="h-8 w-56 shrink-0 border-transparent text-sm font-medium shadow-none hover:border-input focus-visible:border-input"
-    placeholder="Untitled diagram"
-    spellcheck="false"
-    @update:model-value="meta.title = String($event)"
-    @input="onTitleInput"
-    @blur="endCoalesce()"
-  />
+  <!--
+    The title reads as a heading, so nothing about it says "type here". The
+    pencil is the affordance: visible at rest, brighter under the pointer, and
+    out of the way once the field has focus and the caret says it all.
+  -->
+  <Tooltip>
+    <TooltipTrigger as-child>
+      <div class="group/title relative shrink-0">
+        <Input
+          :model-value="meta.title"
+          class="hover:border-input focus-visible:border-input h-8 w-56 border-transparent pr-8 text-sm font-medium shadow-none"
+          placeholder="Untitled diagram"
+          spellcheck="false"
+          aria-label="Diagram name"
+          @update:model-value="meta.title = String($event)"
+          @input="onTitleInput"
+          @focus="editingTitle = true"
+          @blur="editingTitle = false, endCoalesce()"
+        />
+        <Pencil
+          v-show="!editingTitle"
+          class="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-3.5 -translate-y-1/2 opacity-50 transition-opacity group-hover/title:opacity-100"
+        />
+      </div>
+    </TooltipTrigger>
+    <TooltipContent>Rename this diagram</TooltipContent>
+  </Tooltip>
 
   <Separator orientation="vertical" class="mx-1 h-4" />
 
@@ -165,6 +203,22 @@ function onTitleInput() {
 
     <Button variant="ghost" size="sm" class="h-8" @click="emit('new')">New</Button>
     <Button variant="ghost" size="sm" class="h-8" @click="emit('open')">Open</Button>
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="sm" class="h-8" @click="emit('save')">
+          Save
+          <!-- A dot rather than an asterisk in the title: the file is behind,
+               the diagram itself is safe in the browser either way. Hidden from
+               assistive tech, which reads the tooltip instead. -->
+          <span
+            v-if="dirty"
+            class="bg-foreground/60 ml-1.5 size-1.5 rounded-full"
+            aria-hidden="true"
+          />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{{ saveHint }}</TooltipContent>
+    </Tooltip>
     <Button variant="outline" size="sm" class="h-8" @click="emit('export')">Export</Button>
     <Button variant="ghost" size="icon" class="size-8" title="Help (?)" @click="emit('help')">
       ?

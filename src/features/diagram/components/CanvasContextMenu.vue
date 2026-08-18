@@ -47,6 +47,7 @@ import {
   SendToBack,
   Shapes,
   Spline,
+  Square,
   StretchHorizontal,
   StretchVertical,
   Terminal,
@@ -77,7 +78,15 @@ import { NODE_TYPE_GROUPS } from '@/features/diagram/data/node-types'
 import { TECH_CATEGORIES } from '@/features/diagram/data/tech'
 import { COLOR_HEX, COLOR_SWATCHES, diagramTheme } from '@/features/diagram/lib/theme'
 import { exportJson } from '@/features/diagram/lib/export'
-import { ARROW_MODES, LINE_STYLES, ROUTES, SHAPE_KEYS, stringify } from '@/model'
+import {
+  ARROW_MODES,
+  BORDER_WIDTHS,
+  LINE_STYLES,
+  LINE_WIDTHS,
+  ROUTES,
+  SHAPE_KEYS,
+  stringify,
+} from '@/model'
 
 const props = defineProps<{ target: MenuTarget | null }>()
 
@@ -186,6 +195,14 @@ const SHAPE_LABELS: Record<string, string> = {
   note: 'Note',
 }
 
+/** Shared by a node's border and a connection's line: one ramp, one wording. */
+const BORDER_LABELS: Record<string, string> = {
+  none: 'None',
+  regular: 'Regular',
+  medium: 'Medium',
+  thick: 'Thick',
+}
+
 const ROUTE_LABELS: Record<string, string> = {
   orthogonal: 'Orthogonal',
   curved: 'Curved',
@@ -224,6 +241,14 @@ function paintNodes(color: string) {
   act(() => {
     const targets = mode.value === 'node' && node.value ? [node.value] : selectedNodes.value
     targets.forEach((n) => updateNodeData(n.id, { color: color as never }))
+  })
+}
+
+/** Outline weight, applied across a selection the way the colour above is. */
+function borderNodes(border: string) {
+  act(() => {
+    const targets = mode.value === 'node' && node.value ? [node.value] : selectedNodes.value
+    targets.forEach((n) => updateNodeData(n.id, { border: border as never }))
   })
 }
 
@@ -391,6 +416,25 @@ function copySelectionIds() {
         </ContextMenuSubContent>
       </ContextMenuSub>
 
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Square />
+          Border
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          <ContextMenuRadioGroup :model-value="node.data?.border">
+            <ContextMenuRadioItem
+              v-for="border in BORDER_WIDTHS"
+              :key="border"
+              :value="border"
+              @select="borderNodes(border)"
+            >
+              {{ BORDER_LABELS[border] }}
+            </ContextMenuRadioItem>
+          </ContextMenuRadioGroup>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+
       <ContextMenuSub v-if="!isZone">
         <ContextMenuSubTrigger>
           <Shapes />
@@ -503,7 +547,7 @@ function copySelectionIds() {
       </ContextMenuItem>
       <ContextMenuItem @select="animate([edge!.id])">
         <Waypoints />
-        Animate a message along this
+        Create new message flow
       </ContextMenuItem>
 
       <ContextMenuSeparator />
@@ -541,6 +585,25 @@ function copySelectionIds() {
               @select="act(() => updateEdgeData(edge!.id, { line }))"
             >
               {{ LINE_LABELS[line] }}
+            </ContextMenuRadioItem>
+          </ContextMenuRadioGroup>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Square />
+          Weight
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          <ContextMenuRadioGroup :model-value="edge.data?.width">
+            <ContextMenuRadioItem
+              v-for="width in LINE_WIDTHS"
+              :key="width"
+              :value="width"
+              @select="act(() => updateEdgeData(edge!.id, { width }))"
+            >
+              {{ BORDER_LABELS[width] }}
             </ContextMenuRadioItem>
           </ContextMenuRadioGroup>
         </ContextMenuSubContent>

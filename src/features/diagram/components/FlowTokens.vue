@@ -2,11 +2,7 @@
 import type { ComponentPublicInstance } from 'vue'
 import { computed, onBeforeUnmount } from 'vue'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
-import {
-  registerToken,
-  unregisterToken,
-  useFlows,
-} from '@/features/diagram/composables/useFlows'
+import { useFlows } from '@/features/diagram/composables/useFlows'
 import { COLOR_HEX, diagramTheme } from '@/features/diagram/lib/theme'
 
 /**
@@ -25,12 +21,16 @@ const props = defineProps<{
   edgeId: string
   /** The connection's path data, for the moving line to trace. */
   path: string
+  /** Weight of the connection, so the pulse is never thinner than its line. */
+  lineWidth: number
 }>()
 
 const { canvas } = useDiagram()
-const { tokensFor, dashesFor, running } = useFlows()
+const { tokensFor, dashesFor, running, registerToken, unregisterToken } = useFlows()
 
 const theme = computed(() => diagramTheme(canvas.theme))
+/** A pulse never rides thinner than the connection it travels. */
+const dashWidth = computed(() => Math.max(2.4, props.lineWidth))
 const tokens = computed(() => tokensFor(props.edgeId))
 const dashes = computed(() => dashesFor(props.edgeId))
 
@@ -73,7 +73,7 @@ onBeforeUnmount(() => {
     :d="path"
     fill="none"
     :stroke="COLOR_HEX[dash.color]"
-    stroke-width="2.4"
+    :stroke-width="dashWidth"
     stroke-linecap="round"
     stroke-dasharray="6 16"
     class="bg-flow-dash pointer-events-none"

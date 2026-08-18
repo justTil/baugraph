@@ -1,13 +1,20 @@
 import { createApp, h } from 'vue'
 import type { DiagramDocument, DiagramNode } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
-import { STACKED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
+import { CENTERED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
 import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
 import type { FlowEdge } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, fadeOf, flowPlan } from '@/features/diagram/lib/flow-graph'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
-import { COLOR_HEX, diagramTheme, edgeColor, mix, nodePaint } from '@/features/diagram/lib/theme'
+import {
+  COLOR_HEX,
+  diagramTheme,
+  edgeColor,
+  edgeStrokeWidth,
+  mix,
+  nodePaint,
+} from '@/features/diagram/lib/theme'
 import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
 
 /**
@@ -46,6 +53,8 @@ function iconInnerMarkup(id: string): string {
 }
 
 const ICON_SIZE = 20
+/** The canvas's `gap-2.5` between an icon and the text beside it. */
+const ICON_GAP = 10
 
 function iconGroup(id: string, x: number, y: number, color: string): string {
   const inner = iconInnerMarkup(id)
@@ -121,6 +130,20 @@ interface TextLine {
 const lineHeight = (line: TextLine) => line.size + 4
 
 const blockHeight = (lines: TextLine[]) => lines.reduce((total, l) => total + lineHeight(l), 0)
+
+/**
+ * How wide the text actually runs, so a centred block can be measured off
+ * against the icon standing beside it rather than against the whole box.
+ */
+const blockWidth = (lines: TextLine[]) =>
+  lines.reduce(
+    (widest, line) =>
+      Math.max(
+        widest,
+        line.runs.reduce((sum, run) => sum + measureText(run.text, line.size, run.weight), 0),
+      ),
+    0,
+  )
 
 /**
  * The three lines a node can carry: its name, the fixed type/technology caption,
@@ -207,10 +230,19 @@ function renderTextBlock(
 const round2 = (n: number) => Math.round(n * 100) / 100
 
 function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
-  const frame = roundedRect(box.x, box.y, box.width, box.height, 12)
-  let out =
-    `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
-    `stroke-width="1.5" stroke-dasharray="7 5"/>`
+  // Held half a stroke inside the box, exactly as `ZoneNode` draws it.
+  const inset = paint.strokeWidth / 2
+  const frame = roundedRect(
+    box.x + inset,
+    box.y + inset,
+    Math.max(1, box.width - paint.strokeWidth),
+    Math.max(1, box.height - paint.strokeWidth),
+    12,
+  )
+  let out = paint.strokeWidth
+    ? `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
+      `stroke-width="${paint.strokeWidth}" stroke-dasharray="7 5"/>`
+    : `<path d="${frame}" fill="${paint.fill}"/>`
 
   const available = box.width - 26
   const label = fitText((node.label || '').toUpperCase(), available, 12, 700)
@@ -227,7 +259,16 @@ function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePa
 function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
   const parts: string[] = []
 
-  for (const element of shapeElements(node.shape, box.width, box.height)) {
+  // A weightless outline is left off entirely rather than written as `0`, so a
+  // borderless node exports as the single filled path it looks like.
+  const outline = paint.strokeWidth
+    ? ` stroke="${paint.stroke}" stroke-width="${paint.strokeWidth}" stroke-linejoin="round"`
+    : ''
+
+  for (const element of shapeElements(node.shape, box.width, box.height, paint.strokeWidth)) {
+    // Trim — a cylinder's rim, a queue's ticks — is stroke only, so without one
+    // there is nothing to draw.
+    if (element.role === 'detail' && !outline) continue
     const attrs = Object.entries(element.attrs)
       .map(([key, value]) => {
         // Element geometry is node-local; shift it into canvas space.
@@ -239,34 +280,35 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
     const transform =
       element.tag === 'path' ? ` transform="translate(${box.x},${box.y})"` : ''
     const fill = element.role === 'body' ? paint.fill : 'none'
-    parts.push(
-      `<${element.tag} ${attrs}${transform} fill="${fill}" stroke="${paint.stroke}" stroke-width="1.5"/>`,
-    )
+    parts.push(`<${element.tag} ${attrs}${transform} fill="${fill}"${outline}/>`)
   }
 
   const hasIcon = !!node.icon && !!iconInnerMarkup(node.icon)
-  const stacked = STACKED_SHAPES.has(node.shape) || !hasIcon
+  const centered = CENTERED_SHAPES.has(node.shape) || !hasIcon
   const inset = contentInset(node.shape, box.height)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2 + inset.top / 2
 
   const lines = nodeTextLines(node, paint)
   const text = blockHeight(lines)
+  const top = cy - text / 2
+  const iconBlock = hasIcon ? ICON_SIZE + ICON_GAP : 0
 
-  if (stacked) {
-    // Icon above the text, the pair centred together.
-    const gap = hasIcon ? 6 : 0
-    const iconBlock = hasIcon ? ICON_SIZE + gap : 0
-    const top = cy - (iconBlock + text) / 2
-    if (hasIcon) parts.push(iconGroup(node.icon!, cx - ICON_SIZE / 2, top, paint.accent))
-    const available =
-      node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right
-    parts.push(renderTextBlock(lines, cx, top + iconBlock, available, 'middle'))
+  if (centered) {
+    // Icon then text, the pair centred as one block: a tapering outline leaves
+    // no room at the left edge for the content row every other shape uses.
+    const room =
+      (node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right) - iconBlock
+    const available = Math.max(24, room)
+    const width = Math.min(available, blockWidth(lines))
+    const left = cx - (iconBlock + width) / 2
+    if (hasIcon) parts.push(iconGroup(node.icon!, left, cy - ICON_SIZE / 2, paint.accent))
+    parts.push(renderTextBlock(lines, left + iconBlock + width / 2, top, available, 'middle'))
   } else {
     parts.push(iconGroup(node.icon!, box.x + 12, cy - ICON_SIZE / 2, paint.accent))
-    const textX = box.x + 12 + ICON_SIZE + 12
+    const textX = box.x + 12 + iconBlock
     const available = box.x + box.width - inset.right - 12 - textX
-    parts.push(renderTextBlock(lines, textX, cy - text / 2, available, 'start'))
+    parts.push(renderTextBlock(lines, textX, top, available, 'start'))
   }
 
   return parts.join('')
@@ -365,6 +407,10 @@ function renderFlows(
   if (!flows.length) return ''
 
   const byId = new Map<string, FlowEdge>(doc.edges.map((e) => [e.id, e]))
+  /** A pulse never rides thinner than the connection it travels. */
+  const dashWidths = new Map(
+    doc.edges.map((e) => [e.id, Math.max(2.4, edgeStrokeWidth(e.width))]),
+  )
   const lengths = pathLengths(
     new Map([...geometries].map(([id, geometry]) => [id, geometry.path])),
   )
@@ -389,7 +435,7 @@ function renderFlows(
         const look = edgeStyle(flow, id)
         parts.push(
           `<path d="${geometry.path}" fill="none" stroke="${COLOR_HEX[look.color]}" ` +
-            `stroke-width="2.4" stroke-linecap="round" stroke-dasharray="6 16">` +
+            `stroke-width="${dashWidths.get(id) ?? 2.4}" stroke-linecap="round" stroke-dasharray="6 16">` +
             `<animate attributeName="stroke-dashoffset" values="0;-22" ` +
             `dur="${(22 / Math.max(look.speed, 1)).toFixed(3)}s" repeatCount="indefinite"/>` +
             `</path>`,
@@ -519,20 +565,21 @@ export function renderDocumentSvg(doc: DiagramDocument, options: SvgOptions = {}
       const geometry = geometries.get(edge.id)
       if (!geometry) return ''
       const color = edgeColor(edge.color, theme)
-      const dash = dashArray(edge.line)
+      const stroke = edgeStrokeWidth(edge.width)
+      const dash = dashArray(edge.line, stroke)
 
       let out =
-        `<path d="${geometry.path}" fill="none" stroke="${color}" stroke-width="1.7" ` +
+        `<path d="${geometry.path}" fill="none" stroke="${color}" stroke-width="${stroke}" ` +
         `stroke-linejoin="round"` +
         (dash ? ` stroke-dasharray="${dash}"` : '') +
         (edge.line === 'dotted' ? ' stroke-linecap="round"' : '') +
         `/>`
 
       if (edge.arrows !== 'none') {
-        out += `<path d="${arrowHeadPath(geometry.end, geometry.endDir)}" fill="${color}"/>`
+        out += `<path d="${arrowHeadPath(geometry.end, geometry.endDir, stroke)}" fill="${color}"/>`
       }
       if (edge.arrows === 'both') {
-        out += `<path d="${arrowHeadPath(geometry.start, geometry.startDir)}" fill="${color}"/>`
+        out += `<path d="${arrowHeadPath(geometry.start, geometry.startDir, stroke)}" fill="${color}"/>`
       }
 
       if (edge.label) {

@@ -121,6 +121,12 @@ const sharedTech = computed(() => {
   return values.size === 1 ? [...values][0] : null
 })
 
+/** The outline weight a whole selection shares; `null` when they disagree. */
+const sharedBorder = computed(() => {
+  const values = new Set(selectedNodes.value.map((n) => n.data.border))
+  return values.size === 1 ? [...values][0] : null
+})
+
 /** The technology catalogue, with the category this node's type suggests first. */
 const techGroups = computed(() =>
   categoryFirst(
@@ -148,6 +154,22 @@ const SHAPE_LABELS: Record<string, string> = {
   circle: 'Circle',
   note: 'Note',
 }
+
+/**
+ * The one weight ramp, worded the same wherever it appears. What each step is
+ * worth in canvas units lives in `theme.ts`; a connection has no `none`, since
+ * one that is not drawn is one that has been deleted.
+ */
+const WIDTH_OPTIONS = [
+  { value: 'regular', label: 'Regular' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'thick', label: 'Thick' },
+]
+
+const BORDER_OPTIONS = [
+  { value: 'none', label: 'None', title: 'No outline' },
+  ...WIDTH_OPTIONS,
+]
 
 const SIDE_OPTIONS = [
   { value: 'auto', label: 'Auto' },
@@ -261,12 +283,22 @@ function withCommit(fn: () => void) {
           </div>
         </section>
 
-        <section class="space-y-2 border-b p-3">
-          <Label class="text-xs">Colour</Label>
-          <ColorSwatches
-            :model-value="node.data.color"
-            @update:model-value="withCommit(() => updateNodeData(node!.id, { color: $event! }))"
-          />
+        <section class="space-y-3 border-b p-3">
+          <div class="space-y-2">
+            <Label class="text-xs">Colour</Label>
+            <ColorSwatches
+              :model-value="node.data.color"
+              @update:model-value="withCommit(() => updateNodeData(node!.id, { color: $event! }))"
+            />
+          </div>
+          <div class="space-y-1.5">
+            <Label class="text-xs">Border</Label>
+            <SegmentedField
+              :model-value="node.data.border"
+              :options="BORDER_OPTIONS"
+              @update:model-value="withCommit(() => updateNodeData(node!.id, { border: $event as never }))"
+            />
+          </div>
         </section>
 
         <section v-if="node.type !== 'zone'" class="space-y-2 border-b p-3">
@@ -464,6 +496,14 @@ function withCommit(fn: () => void) {
             />
           </div>
           <div class="space-y-1.5">
+            <Label class="text-xs">Weight</Label>
+            <SegmentedField
+              :model-value="edge.data!.width"
+              :options="WIDTH_OPTIONS"
+              @update:model-value="withCommit(() => updateEdgeData(edge!.id, { width: $event as never }))"
+            />
+          </div>
+          <div class="space-y-1.5">
             <Label class="text-xs">Arrows</Label>
             <SegmentedField
               :model-value="edge.data!.arrows"
@@ -585,16 +625,30 @@ function withCommit(fn: () => void) {
           </Button>
         </section>
 
-        <section v-if="selectedNodes.length" class="space-y-2 border-b p-3">
-          <Label class="text-xs">Colour</Label>
-          <ColorSwatches
-            :model-value="undefined"
-            @update:model-value="
-              withCommit(() =>
-                selectedNodes.forEach((n) => updateNodeData(n.id, { color: $event! })),
-              )
-            "
-          />
+        <section v-if="selectedNodes.length" class="space-y-3 border-b p-3">
+          <div class="space-y-2">
+            <Label class="text-xs">Colour</Label>
+            <ColorSwatches
+              :model-value="undefined"
+              @update:model-value="
+                withCommit(() =>
+                  selectedNodes.forEach((n) => updateNodeData(n.id, { color: $event! })),
+                )
+              "
+            />
+          </div>
+          <div class="space-y-1.5">
+            <Label class="text-xs">Border</Label>
+            <SegmentedField
+              :model-value="sharedBorder ?? ''"
+              :options="BORDER_OPTIONS"
+              @update:model-value="
+                withCommit(() =>
+                  selectedNodes.forEach((n) => updateNodeData(n.id, { border: $event as never })),
+                )
+              "
+            />
+          </div>
         </section>
 
         <section v-if="selectedNodes.length" class="space-y-2 border-b p-3">
@@ -684,7 +738,7 @@ function withCommit(fn: () => void) {
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘D</kbd></dt>
             <dd>duplicate</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘S</kbd></dt>
-            <dd>download JSON</dd>
+            <dd>save to file</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌫</kbd></dt>
             <dd>delete</dd>
           </dl>

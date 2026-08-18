@@ -34,6 +34,7 @@ export const NODE_DEFAULTS = {
   tech: '',
   shape: 'rect',
   color: 'slate',
+  border: 'regular',
   sublabel: '',
   icon: '',
   parent: null,
@@ -46,6 +47,7 @@ export const EDGE_DEFAULTS = {
   label: '',
   route: 'orthogonal',
   line: 'solid',
+  width: 'regular',
   arrows: 'target',
   color: null,
 } as const satisfies Partial<DiagramEdge>

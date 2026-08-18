@@ -135,6 +135,16 @@
               "pink"
             ]
           },
+          "border": {
+            "default": "regular",
+            "type": "string",
+            "enum": [
+              "none",
+              "regular",
+              "medium",
+              "thick"
+            ]
+          },
           "icon": {
             "default": "",
             "type": "string"
@@ -270,6 +280,15 @@
               "solid",
               "dashed",
               "dotted"
+            ]
+          },
+          "width": {
+            "default": "regular",
+            "type": "string",
+            "enum": [
+              "regular",
+              "medium",
+              "thick"
             ]
           },
           "arrows": {

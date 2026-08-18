@@ -13,6 +13,96 @@ export function slug(doc: DiagramDocument): string {
   )
 }
 
+/**
+ * Whether this browser can write back to a file the user picked.
+ *
+ * Chromium can; Firefox and Safari cannot, and there every save is a fresh
+ * download that the browser de-duplicates by appending "(1)", "(2)", … There is
+ * no way around that from a page, so those browsers keep the old behaviour.
+ */
+export const canOverwriteFiles = typeof window !== 'undefined' && 'showSaveFilePicker' in window
+
+/** The picker filter for the source format. */
+const JSON_FILE_TYPE: FilePickerAcceptType = {
+  description: 'Baugraph diagram',
+  accept: { 'application/json': ['.json'] },
+}
+
+/** Thrown by the pickers when the user backs out; not an error worth showing. */
+function isAbort(cause: unknown): boolean {
+  return cause instanceof DOMException && cause.name === 'AbortError'
+}
+
+/**
+ * Makes sure a remembered handle may still be written to. A handle recalled in
+ * a new session starts unauthorised, and the grant has to be asked for from a
+ * user gesture — which every caller here is.
+ */
+async function writable(handle: FileSystemFileHandle): Promise<boolean> {
+  // Not every source of handles has a permission model; one that does not is
+  // one that never withholds access.
+  if (!handle.queryPermission) return true
+  const options: FileSystemHandlePermissionDescriptor = { mode: 'readwrite' }
+  if ((await handle.queryPermission(options)) === 'granted') return true
+  return (await handle.requestPermission?.(options)) === 'granted'
+}
+
+/** Overwrites `handle` in place. `false` means the grant was refused. */
+export async function writeJson(
+  handle: FileSystemFileHandle,
+  doc: DiagramDocument,
+): Promise<boolean> {
+  if (!(await writable(handle))) return false
+  const stream = await handle.createWritable()
+  await stream.write(stringify(doc))
+  await stream.close()
+  return true
+}
+
+/**
+ * Asks for a destination and writes the diagram to it. Returns the handle so
+ * the caller can keep saving to the same file, or null if the user backed out.
+ */
+export async function writeJsonAs(doc: DiagramDocument): Promise<FileSystemFileHandle | null> {
+  if (!window.showSaveFilePicker) return null
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: `${slug(doc)}.baugraph.json`,
+      types: [JSON_FILE_TYPE],
+      // Reopens in the directory the last diagram was saved to.
+      id: 'baugraph-diagram',
+    })
+    return (await writeJson(handle, doc)) ? handle : null
+  } catch (cause) {
+    if (isAbort(cause)) return null
+    throw cause
+  }
+}
+
+/** Picks a file to open, keeping the handle so saving can write back to it. */
+export async function pickJson(): Promise<{ text: string; handle: FileSystemFileHandle } | null> {
+  if (!window.showOpenFilePicker) return null
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [JSON_FILE_TYPE],
+      id: 'baugraph-diagram',
+    })
+    if (!handle) return null
+    return { text: await (await handle.getFile()).text(), handle }
+  } catch (cause) {
+    if (isAbort(cause)) return null
+    throw cause
+  }
+}
+
+/** The handle behind a dropped file, where the browser exposes one. */
+export async function droppedHandle(
+  item: DataTransferItem | undefined,
+): Promise<FileSystemFileHandle | null> {
+  const handle = await item?.getAsFileSystemHandle?.().catch(() => null)
+  return handle?.kind === 'file' ? (handle as FileSystemFileHandle) : null
+}
+
 function download(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

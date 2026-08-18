@@ -11,11 +11,9 @@ import { MiniMap } from '@vue-flow/minimap'
 import type { ColorKey, Side } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
-import {
-  installFlowRuntime,
-  stopFlowRuntime,
-} from '@/features/diagram/composables/useFlows'
-import { useCanvas, CANVAS_ID } from '@/features/diagram/composables/useCanvas'
+import { useFlows } from '@/features/diagram/composables/useFlows'
+import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
+import { usePanel } from '@/features/workspace/composables/usePanel'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
 import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
@@ -31,6 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const {
+  documentId,
   nodes,
   edges,
   canvas,
@@ -64,6 +63,10 @@ const {
   getEdges,
 } = useCanvas()
 const { place, placeAtScreen } = usePlacement()
+const { installFlowRuntime, stopFlowRuntime } = useFlows()
+// Other views can share the screen with the canvas, so the window-level
+// shortcuts below only belong to it while it is the dock's focused panel.
+const { isActive, isVisible } = usePanel()
 
 const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
 const edgeTypes = { diagram: markRaw(DiagramEdge) }
@@ -125,7 +128,7 @@ function onConnectEnd(event?: MouseEvent | TouchEvent) {
   if (!point) return
 
   const node = placeAtScreen(lastItem.value, { x: point.clientX, y: point.clientY })
-  addEdge(source.node, node.id, { sourceSide: source.side })
+  if (node) addEdge(source.node, node.id, { sourceSide: source.side })
 }
 
 /* ------------------------------------------------------- palette drag/drop */
@@ -329,7 +332,7 @@ function isTyping(target: EventTarget | null): boolean {
 
 function onKeyDown(event: KeyboardEvent) {
   // The context menu handles its own keys; ⌫ while it is open must not delete.
-  if (menuOpen.value || isTyping(event.target)) return
+  if (!isActive.value || menuOpen.value || isTyping(event.target)) return
   const meta = event.metaKey || event.ctrlKey
 
   if (meta) {
@@ -429,6 +432,9 @@ const fitPending = ref(false)
 
 function fitLoaded() {
   if (!fitPending.value) return
+  // A panel hidden behind another tab has no size to fit against; the watcher
+  // below settles the debt the moment it is shown.
+  if (!isVisible.value) return
   fitPending.value = false
   fitView({ padding: 0.2 })
 }
@@ -436,6 +442,10 @@ function fitLoaded() {
 watch(fitRequest, () => {
   fitPending.value = true
   setTimeout(fitLoaded, 300)
+})
+
+watch(isVisible, (visible) => {
+  if (visible) nextTick(fitLoaded)
 })
 </script>
 
@@ -460,7 +470,7 @@ watch(fitRequest, () => {
           the z bands in `useDiagram`.
         -->
         <VueFlow
-          :id="CANVAS_ID"
+          :id="canvasId(documentId)"
           v-model:nodes="nodes"
           v-model:edges="edges"
           :node-types="nodeTypes"

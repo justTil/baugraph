@@ -17,7 +17,7 @@ import {
 import { useNavigation } from '@/composables/useNavigation'
 import PalettePanel from '@/features/diagram/components/PalettePanel.vue'
 
-const { groups, isActive, setActiveItem, activeItemId } = useNavigation()
+const { groups, isActive, isOpen, isVisible, setActiveItem } = useNavigation()
 </script>
 
 <template>
@@ -60,6 +60,15 @@ const { groups, isActive, setActiveItem, activeItemId } = useNavigation()
               >
                 <component :is="item.icon" v-if="item.icon" />
                 <span>{{ item.label }}</span>
+                <!--
+                  A view can sit in a background tab or a split alongside the
+                  focused one, which `is-active` alone cannot say.
+                -->
+                <span
+                  v-if="isOpen(item.id) && !isActive(item.id)"
+                  class="bg-sidebar-foreground/40 ml-auto size-1.5 shrink-0 rounded-full"
+                  aria-hidden="true"
+                />
               </SidebarMenuButton>
               <SidebarMenuBadge v-if="item.badge">
                 {{ item.badge }}
@@ -70,7 +79,7 @@ const { groups, isActive, setActiveItem, activeItemId } = useNavigation()
       </SidebarGroup>
 
       <!-- The palette is only meaningful while the editor is on screen. -->
-      <template v-if="activeItemId === 'editor'">
+      <template v-if="isVisible('editor')">
         <SidebarSeparator />
         <PalettePanel />
       </template>

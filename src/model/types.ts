@@ -41,6 +41,14 @@ export const SHAPE_KEYS = [
 ] as const
 export type ShapeKey = (typeof SHAPE_KEYS)[number]
 
+/**
+ * How heavily a node's outline is drawn. Semantic rather than a raw number, so a
+ * file states the intent — `thick` — and the renderer decides what that is worth
+ * in canvas units (see `features/diagram/lib/theme.ts`).
+ */
+export const BORDER_WIDTHS = ['none', 'regular', 'medium', 'thick'] as const
+export type BorderWidth = (typeof BORDER_WIDTHS)[number]
+
 /** Which edge of a node a connection attaches to. `auto` picks the nearest. */
 export const SIDES = ['auto', 'top', 'right', 'bottom', 'left'] as const
 export type Side = (typeof SIDES)[number]
@@ -50,6 +58,15 @@ export type Route = (typeof ROUTES)[number]
 
 export const LINE_STYLES = ['solid', 'dashed', 'dotted'] as const
 export type LineStyle = (typeof LINE_STYLES)[number]
+
+/**
+ * How heavily a connection's line is drawn — the same ramp as a node's border,
+ * without `none`: a connection that is not drawn is a connection that has been
+ * deleted. Dash patterns and arrow heads scale with it, so a thick dotted line
+ * still reads as dotted.
+ */
+export const LINE_WIDTHS = ['regular', 'medium', 'thick'] as const
+export type LineWidth = (typeof LINE_WIDTHS)[number]
 
 export const ARROW_MODES = ['target', 'both', 'none'] as const
 export type ArrowMode = (typeof ARROW_MODES)[number]
@@ -91,6 +108,8 @@ export interface DiagramNode {
   sublabel?: string
   shape: ShapeKey
   color: ColorKey
+  /** Weight of the node's outline. Omitted means `regular`. */
+  border?: BorderWidth
   /** Icon id from the Lucide registry (kebab-case, e.g. `door-open`). Empty = none. */
   icon?: string
   /**
@@ -124,6 +143,8 @@ export interface DiagramEdge {
   label?: string
   route: Route
   line: LineStyle
+  /** Weight of the line. Omitted means `regular`. */
+  width?: LineWidth
   arrows: ArrowMode
   /** `null` = follow the theme's neutral edge colour. */
   color?: ColorKey | null

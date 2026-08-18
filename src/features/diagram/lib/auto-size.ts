@@ -1,7 +1,7 @@
 import type { ShapeKey } from '@/model'
 import type { CaptionSource } from '@/features/diagram/lib/node-caption'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
-import { CYLINDER_CAP_MAX, STACKED_SHAPES, contentInset } from '@/features/diagram/lib/shapes'
+import { CYLINDER_CAP_MAX, contentInset } from '@/features/diagram/lib/shapes'
 import { measureText } from '@/features/diagram/lib/text'
 
 /**
@@ -26,9 +26,8 @@ const SUBLABEL_SIZE = 11
 const LEADING = 4
 
 const ICON_SIZE = 20
-/** Icon-to-text gap: `gap-2.5` beside the text, `gap-1.5` stacked above it. */
+/** The `gap-2.5` between an icon and the text it sits beside. */
 const ICON_GAP_X = 10
-const ICON_GAP_Y = 6
 
 /** The `px-3` on the content row, and the breathing room above and below it. */
 const PAD_X = 12
@@ -118,20 +117,16 @@ function clamp(size: FitSize, shape: ShapeKey): FitSize {
 export function fitNodeSize(node: FitSource): FitSize {
   const shape = node.shape ?? 'rect'
   const hasIcon = !!node.icon
-  const stacked = STACKED_SHAPES.has(shape) || !hasIcon
   const text = textBlock(node)
 
-  // The icon sits above the text on shapes with little usable width at the
-  // edges, and beside it everywhere else — exactly as `ShapeNode` lays it out.
-  const content = stacked
+  // The icon always sits beside the text — centred with it on a tapering shape,
+  // against the left padding elsewhere — exactly as `ShapeNode` lays it out.
+  const content = hasIcon
     ? {
-        width: Math.max(text.width, hasIcon ? ICON_SIZE : 0),
-        height: text.height + (hasIcon ? ICON_SIZE + ICON_GAP_Y : 0),
-      }
-    : {
         width: ICON_SIZE + ICON_GAP_X + text.width,
         height: Math.max(text.height, ICON_SIZE),
       }
+    : text
 
   // Trim drawn inside the box — a queue's ticks, a note's fold — is width the
   // text cannot use.
