@@ -16,6 +16,8 @@ import {
   nodePaint,
 } from '@/features/diagram/lib/theme'
 import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
+import type { FrameOptions } from '@/features/diagram/lib/frame'
+import { frameLayout, frameParts, framed } from '@/features/diagram/lib/frame'
 
 /**
  * Standalone SVG renderer used for export.
@@ -676,7 +678,16 @@ export interface SvgOptions {
    * what a GIF is made of, and what a still preview of a moving diagram shows.
    */
   time?: number
+  /**
+   * Dresses the export as a desktop window on a backdrop. Off by default: the
+   * plain picture is the right one to embed, and this is for the times the file
+   * is going somewhere it has to look like a screenshot.
+   */
+  frame?: FrameOptions
 }
+
+/** Distinguishes one render's gradient and clip ids from another's on the page. */
+let renderCount = 0
 
 /**
  * One document, ready to be drawn over and over at different moments.
@@ -778,9 +789,15 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
     .map((n) => renderShape(n, boxes.get(n.id)!, nodePaint(n, theme)))
     .join('')
 
-  const background = options.transparent
-    ? ''
-    : `<rect x="${bounds.x}" y="${bounds.y}" width="${bounds.width}" height="${bounds.height}" fill="${theme.bg}"/>`
+  // A window has to have something in it, so the dressed export keeps its
+  // background whatever `transparent` says.
+  const dressed = framed(options.frame) ? options.frame : null
+  const layout = dressed ? frameLayout(bounds, dressed) : null
+
+  const background =
+    options.transparent && !dressed
+      ? ''
+      : `<rect x="${bounds.x}" y="${bounds.y}" width="${bounds.width}" height="${bounds.height}" fill="${theme.bg}"/>`
 
   const sampler = pathSampler(geometries)
   // Planned even when the flows are not being drawn: `duration` is a fact about
@@ -789,15 +806,29 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
   const plans = flowPlans(doc, sampler.length)
   const widths = dashWidths(doc)
 
+  // What the file measures: the dressing sits outside the diagram, so a framed
+  // export is bigger than its content and every caller sizing a canvas off this
+  // — the PNG, the GIF, the preview — follows along without being told.
+  const box: Box = layout
+    ? { x: 0, y: 0, width: layout.width, height: layout.height }
+    : bounds
+
+  const parts =
+    dressed && layout ? frameParts(bounds, layout, dressed, theme, String(++renderCount)) : null
+
   const open =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(bounds.width)}" ` +
-    `height="${Math.round(bounds.height)}" ` +
-    `viewBox="${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(box.width)}" ` +
+    `height="${Math.round(box.height)}" ` +
+    `viewBox="${box.x} ${box.y} ${box.width} ${box.height}">` +
     `<title>${escapeXml(doc.meta.title)}</title>` +
-    `<style>text{font-family:${SANS}}</style>`
+    `<style>text{font-family:${SANS}}</style>` +
+    (parts?.behind ?? '') +
+    (layout ? `<g transform="translate(${round2(layout.x - bounds.x)},${round2(layout.y - bounds.y)})">` : '')
+
+  const close = (layout ? '</g>' : '') + (parts?.ahead ?? '') + '</svg>'
 
   return {
-    bounds,
+    bounds: box,
     duration: loopSeconds(plans),
 
     frame(time = options.time) {
@@ -811,7 +842,7 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
             ? renderFlows(plans, geometries, widths, theme.bg)
             : renderFlowsAt(plans, geometries, widths, sampler, theme.bg, time)
 
-      return open + background + zones + edges + flows + shapes + `</svg>`
+      return open + background + zones + edges + flows + shapes + close
     },
 
     dispose: sampler.dispose,
