@@ -36,7 +36,12 @@ export interface EdgeGeometry {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 /** The point and outward normal where a connector meets one side of a box. */
-function anchor(box: Box, side: Exclude<Side, 'auto'>): { point: Vec; normal: Vec } {
+interface Anchor {
+  point: Vec
+  normal: Vec
+}
+
+function anchor(box: Box, side: Exclude<Side, 'auto'>): Anchor {
   const { x, y, width: w, height: h } = box
   switch (side) {
     case 'top':
@@ -135,6 +140,44 @@ function selfLoop(box: Box): EdgeGeometry {
   }
 }
 
+/**
+ * How far apart two facing anchors may sit before the connector keeps the offset.
+ *
+ * Two nodes of different heights almost never share a centre line: a couple of
+ * pixels is enough for a curved connector to visibly S-bend, or an orthogonal
+ * one to grow a jog nobody asked for. Within this much, both ends are pulled
+ * onto one shared line and the connector comes out straight — the design that
+ * was intended, without demanding the impossible of the grid.
+ */
+const ALIGN_TOLERANCE = 14
+
+/**
+ * Pulls two facing anchors onto a shared line when they are nearly aligned.
+ *
+ * Only ends that face along the same axis qualify (left/right against
+ * left/right, top/bottom against top/bottom); the shared line is the average of
+ * the two, clamped so neither anchor leaves the side it sits on.
+ */
+function align(source: Box, target: Box, sa: Anchor, ta: Anchor): void {
+  const horizontal = sa.normal.x !== 0 && ta.normal.x !== 0
+  const vertical = sa.normal.y !== 0 && ta.normal.y !== 0
+  if (!horizontal && !vertical) return
+
+  const axis = horizontal ? 'y' : 'x'
+  const offset = ta.point[axis] - sa.point[axis]
+  if (offset === 0 || Math.abs(offset) > ALIGN_TOLERANCE) return
+
+  const lo = horizontal ? Math.max(source.y, target.y) : Math.max(source.x, target.x)
+  const hi = horizontal
+    ? Math.min(source.y + source.height, target.y + target.height)
+    : Math.min(source.x + source.width, target.x + target.width)
+  if (hi <= lo) return
+
+  const shared = clamp((sa.point[axis] + ta.point[axis]) / 2, lo, hi)
+  sa.point[axis] = shared
+  ta.point[axis] = shared
+}
+
 export interface EdgeRouteOptions {
   sourceSide: Side
   targetSide: Side
@@ -152,6 +195,7 @@ export function edgeGeometry(
 
   const sa = anchor(source, sourceSide === 'auto' ? autoSide(source, target) : sourceSide)
   const ta = anchor(target, targetSide === 'auto' ? autoSide(target, source) : targetSide)
+  align(source, target, sa, ta)
 
   const gap = 2
   const s: Vec = { x: sa.point.x + sa.normal.x * gap, y: sa.point.y + sa.normal.y * gap }

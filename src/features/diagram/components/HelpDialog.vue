@@ -12,6 +12,7 @@ const open = defineModel<boolean>('open', { required: true })
 
 const SHORTCUTS: [string, string][] = [
   ['Shift + drag', 'rubber-band select'],
+  ['⌥ + drag', 'ignore the grid and the alignment guides'],
   ['Space / middle-drag', 'pan the canvas'],
   ['⌘ + scroll, pinch', 'zoom (plain scroll pans)'],
   ['F', 'fit diagram to window'],

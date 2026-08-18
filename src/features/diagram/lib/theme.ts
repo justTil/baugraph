@@ -41,7 +41,7 @@ export function diagramTheme(mode: 'light' | 'dark'): DiagramTheme {
     ink: dark ? '#e8eaed' : '#141414',
     muted: dark ? '#949aa2' : '#767676',
     line: dark ? '#2c3138' : '#dcdcdc',
-    grid: dark ? '#242930' : '#e4e4e4',
+    grid: dark ? '#39414c' : '#c4c9d0',
     edge: dark ? '#8b939d' : '#6a7280',
     selection: dark ? '#5b9dff' : '#2f6fdb',
   }

@@ -4,7 +4,13 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { Connection, EdgeMouseEvent, NodeDragEvent, NodeMouseEvent } from '@vue-flow/core'
+import type {
+  Connection,
+  EdgeMouseEvent,
+  GraphNode,
+  NodeDragEvent,
+  NodeMouseEvent,
+} from '@vue-flow/core'
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
@@ -21,6 +27,9 @@ import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
 import type { MenuTarget } from '@/features/diagram/components/CanvasContextMenu.vue'
 import CanvasContextMenu from '@/features/diagram/components/CanvasContextMenu.vue'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
+import type { AlignGuide } from '@/features/diagram/lib/align-snap'
+import { alignSnap } from '@/features/diagram/lib/align-snap'
+import type { Box } from '@/features/diagram/lib/edge-path'
 import { DEFAULT_PALETTE_ITEM, type PaletteItem } from '@/features/diagram/data/palette'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 
@@ -55,6 +64,7 @@ const {
   fitView,
   screenToFlowCoordinate,
   findNode,
+  viewport,
   vueFlowRef,
   addSelectedNodes,
   addSelectedEdges,
@@ -309,12 +319,94 @@ function onNodeDragStart() {
 }
 
 /**
+ * Lines the drag is currently held against. Drawn over the canvas while a drag
+ * lasts and cleared when it ends.
+ */
+const guides = ref<AlignGuide[]>([])
+
+/**
+ * Whether ⌥ is down. Held, it suspends both the grid and the alignment guides
+ * for the length of a drag — the way out for the one placement that is meant to
+ * sit where nothing else does, without having to turn snapping off and back on.
+ */
+const altHeld = ref(false)
+
+/**
+ * A node's absolute box.
+ *
+ * Deliberately built from `position` and the parent's offset rather than from
+ * `computedPosition`: the latter is refreshed after the render tick, so during a
+ * drag it is a frame behind the position Vue Flow has just written. The parent
+ * is not the node being dragged — Vue Flow drags a zone's contents through the
+ * zone — so its own computed position is current.
+ */
+function boxOf(node: GraphNode): Box {
+  const parent = node.parentNode ? findNode(node.parentNode) : undefined
+  return {
+    x: node.position.x + (parent?.computedPosition.x ?? 0),
+    y: node.position.y + (parent?.computedPosition.y ?? 0),
+    width: node.dimensions.width,
+    height: node.dimensions.height,
+  }
+}
+
+/** True while `node` sits inside one of the nodes being dragged. */
+function insideDrag(node: GraphNode, dragged: Set<string>): boolean {
+  let parent = node.parentNode
+  while (parent) {
+    if (dragged.has(parent)) return true
+    parent = findNode(parent)?.parentNode
+  }
+  return false
+}
+
+/**
+ * Pulls a drag onto the alignments it is nearly holding.
+ *
+ * The grid can only quantise corners, so two nodes of unequal height can never
+ * share a centre line on it — which is why a connector between them came out
+ * with a kink however carefully they were placed, and why switching the grid off
+ * was no answer either. Alignment with the nodes already on the canvas takes
+ * precedence over the grid whenever it is within reach; ⌥ suspends it for a
+ * placement that is meant to sit off.
+ */
+function alignDrag({ event, node, nodes: dragged }: NodeDragEvent) {
+  // A selection drag reports its members in `nodes`; a single drag in `node`.
+  const moving = dragged?.length ? dragged : node ? [node] : []
+  const free = altHeld.value || (event as MouseEvent | undefined)?.altKey === true
+  if (!moving.length || !canvas.snap || free) {
+    guides.value = []
+    return
+  }
+
+  const ids = new Set(moving.map((n) => n.id))
+  const others = getNodes.value.filter(
+    (n) => !ids.has(n.id) && n.dimensions.width > 0 && !insideDrag(n, ids),
+  )
+  // Held constant on screen rather than in canvas units, so the pull starts
+  // where it looks like it should at any zoom — but never inside a grid step,
+  // or the grid would win back every alignment it just gave up.
+  const tolerance = Math.max(canvas.snapSize * 0.8, 7 / viewport.value.zoom)
+  const snap = alignSnap(moving.map(boxOf), others.map(boxOf), tolerance)
+
+  guides.value = snap.guides
+  if (!snap.dx && !snap.dy) return
+  for (const n of moving) {
+    n.position = { x: n.position.x + snap.dx, y: n.position.y + snap.dy }
+  }
+}
+
+/**
  * Dropping a node onto a zone puts it in that zone; dragging it clear of one
  * takes it out again. Both are decided by where the node's centre landed, and
  * both are written straight into the document as `parent`.
  */
-function onNodeDragStop({ node, nodes: dragged }: NodeDragEvent) {
-  // A selection drag reports its members in `nodes`; a single drag in `node`.
+function onNodeDragStop(event: NodeDragEvent) {
+  // The last alignment is re-applied here rather than trusted to survive: the
+  // drag's closing update is what the pointer said, not what the guides showed.
+  alignDrag(event)
+  guides.value = []
+  const { node, nodes: dragged } = event
   const moved = dragged?.length ? dragged : node ? [node] : []
   if (moved.length) regroup(moved.map((n) => n.id))
 }
@@ -409,8 +501,20 @@ function onKeyDown(event: KeyboardEvent) {
   }
 }
 
+/** ⌥ can go down and up mid-drag, so its state is tracked rather than sampled. */
+function onModifier(event: KeyboardEvent) {
+  altHeld.value = event.altKey
+}
+
+function onBlur() {
+  altHeld.value = false
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keydown', onModifier)
+  window.addEventListener('keyup', onModifier)
+  window.addEventListener('blur', onBlur)
   // The flow tweens belong to the canvas: nothing outside it can see a message
   // move, and the watchers they hang off are scoped to this component so they
   // go away with it.
@@ -419,6 +523,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('keydown', onModifier)
+  window.removeEventListener('keyup', onModifier)
+  window.removeEventListener('blur', onBlur)
   stopFlowRuntime()
 })
 
@@ -476,7 +583,7 @@ watch(isVisible, (visible) => {
           :node-types="nodeTypes"
           :edge-types="edgeTypes"
           :connection-mode="ConnectionMode.Loose"
-          :snap-to-grid="canvas.snap"
+          :snap-to-grid="canvas.snap && !altHeld"
           :snap-grid="[canvas.snapSize, canvas.snapSize]"
           :min-zoom="0.15"
           :max-zoom="4"
@@ -498,6 +605,7 @@ watch(isVisible, (visible) => {
           @connect="onConnect"
           @connect-end="onConnectEnd"
           @node-drag-start="onNodeDragStart"
+          @node-drag="alignDrag"
           @node-drag-stop="onNodeDragStop"
           @selection-drag-start="onNodeDragStart"
           @selection-drag-stop="onNodeDragStop"
@@ -521,6 +629,27 @@ watch(isVisible, (visible) => {
             class="!right-3 !bottom-3 !rounded-md !border"
           />
         </VueFlow>
+
+        <!-- Alignment guides; only up while a drag is held against something. -->
+        <svg
+          v-if="guides.length"
+          class="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible"
+        >
+          <g :transform="`translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`">
+            <line
+              v-for="guide in guides"
+              :key="`${guide.axis}:${guide.position}`"
+              :x1="guide.axis === 'x' ? guide.position : guide.from"
+              :y1="guide.axis === 'x' ? guide.from : guide.position"
+              :x2="guide.axis === 'x' ? guide.position : guide.to"
+              :y2="guide.axis === 'x' ? guide.to : guide.position"
+              :stroke="theme.selection"
+              stroke-width="1"
+              stroke-dasharray="5 4"
+              vector-effect="non-scaling-stroke"
+            />
+          </g>
+        </svg>
 
         <!-- Inline label editor, positioned over the node or connection being renamed. -->
         <input
