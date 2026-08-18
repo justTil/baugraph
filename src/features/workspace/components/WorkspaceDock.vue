@@ -4,6 +4,7 @@ import type { DockviewIDisposable, DockviewReadyEvent, VueComponent } from 'dock
 import { DockviewVue } from 'dockview-vue'
 import { markRaw, onBeforeUnmount } from 'vue'
 import { PANEL_COMPONENT, registerDock } from '@/features/workspace/composables/useWorkspace'
+import { workspacePolicy } from '@/config/workspace'
 import { dockTheme } from '@/features/workspace/lib/theme'
 import WorkspacePanel from '@/features/workspace/components/WorkspacePanel.vue'
 import WorkspaceTab from '@/features/workspace/components/WorkspaceTab.vue'
@@ -23,7 +24,7 @@ const watermarkComponent = renderer(WorkspaceWatermark)
 let subscriptions: DockviewIDisposable[] = []
 
 function onReady(event: DockviewReadyEvent) {
-  subscriptions = registerDock(event.api)
+  subscriptions = registerDock(event.api, workspacePolicy)
 }
 
 onBeforeUnmount(() => subscriptions.forEach((s) => s.dispose()))

@@ -3,12 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { EdgeProps } from '@vue-flow/core'
 import type { EdgeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
-import {
-  invalidateEdgePath,
-  registerEdgePath,
-  unregisterEdgePath,
-  useFlows,
-} from '@/features/diagram/composables/useFlows'
+import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
 import { COLOR_HEX, diagramTheme, edgeColor, mix } from '@/features/diagram/lib/theme'
@@ -17,7 +12,7 @@ import { measureText } from '@/features/diagram/lib/text'
 const props = defineProps<EdgeProps<EdgeData>>()
 
 const { canvas } = useDiagram()
-const { highlightOf } = useFlows()
+const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 
 const theme = computed(() => diagramTheme(canvas.theme))
 

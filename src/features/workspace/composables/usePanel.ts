@@ -1,4 +1,5 @@
 import type { DockviewApi, DockviewPanelApi } from 'dockview-vue'
+import type { PanelParams } from '@/features/workspace/composables/useWorkspace'
 import type { InjectionKey, Ref } from 'vue'
 import { computed, inject } from 'vue'
 
@@ -11,6 +12,8 @@ import { computed, inject } from 'vue'
  */
 export interface PanelContext {
   viewId: string
+  /** Everything the panel was opened with, including its document if it has one. */
+  params: PanelParams
   /** The selected tab of its group, i.e. actually painted. */
   isVisible: Ref<boolean>
   /** Visible *and* the dock's focused panel. At most one panel at a time. */

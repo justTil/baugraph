@@ -11,11 +11,8 @@ import { MiniMap } from '@vue-flow/minimap'
 import type { ColorKey, Side } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
-import {
-  installFlowRuntime,
-  stopFlowRuntime,
-} from '@/features/diagram/composables/useFlows'
-import { useCanvas, CANVAS_ID } from '@/features/diagram/composables/useCanvas'
+import { useFlows } from '@/features/diagram/composables/useFlows'
+import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
 import { usePanel } from '@/features/workspace/composables/usePanel'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
@@ -32,6 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const {
+  documentId,
   nodes,
   edges,
   canvas,
@@ -65,6 +63,7 @@ const {
   getEdges,
 } = useCanvas()
 const { place, placeAtScreen } = usePlacement()
+const { installFlowRuntime, stopFlowRuntime } = useFlows()
 // Other views can share the screen with the canvas, so the window-level
 // shortcuts below only belong to it while it is the dock's focused panel.
 const { isActive, isVisible } = usePanel()
@@ -129,7 +128,7 @@ function onConnectEnd(event?: MouseEvent | TouchEvent) {
   if (!point) return
 
   const node = placeAtScreen(lastItem.value, { x: point.clientX, y: point.clientY })
-  addEdge(source.node, node.id, { sourceSide: source.side })
+  if (node) addEdge(source.node, node.id, { sourceSide: source.side })
 }
 
 /* ------------------------------------------------------- palette drag/drop */
@@ -471,7 +470,7 @@ watch(isVisible, (visible) => {
           the z bands in `useDiagram`.
         -->
         <VueFlow
-          :id="CANVAS_ID"
+          :id="canvasId(documentId)"
           v-model:nodes="nodes"
           v-model:edges="edges"
           :node-types="nodeTypes"

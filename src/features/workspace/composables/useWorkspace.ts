@@ -5,7 +5,7 @@ import type {
   SerializedDockview,
 } from 'dockview-vue'
 import { computed, ref, shallowRef } from 'vue'
-import { defaultNavItemId, navItem } from '@/config/navigation'
+import { navItem } from '@/config/navigation'
 import { views } from '@/config/views'
 
 /**
@@ -18,12 +18,27 @@ export const PANEL_COMPONENT = 'view'
 /** Params carried by every panel; also what gets written to the saved layout. */
 export interface PanelParams {
   viewId: string
+  /** Set on panels that hold one document of a multi-document view. */
+  documentId?: string
+}
+
+/**
+ * The app-specific half of the dock: what to show when there is nothing to
+ * restore, and whether a restored panel still has something to render. Kept as
+ * a hook so the workspace stays ignorant of what a document is; supplied by
+ * `@/config/workspace`.
+ */
+export interface WorkspacePolicy {
+  defaultLayout: () => void
+  canRestore: (params: PanelParams) => boolean
 }
 
 const STORAGE_KEY = 'baugraph:workspace:v1'
 
 /** `shallowRef` deliberately: the dockview api must not be made reactive. */
 const dock = shallowRef<DockviewApi | null>(null)
+
+let policy: WorkspacePolicy = { defaultLayout: () => {}, canRestore: () => true }
 
 const openViewIds = ref<string[]>([])
 const visibleViewIds = ref<string[]>([])
@@ -34,9 +49,11 @@ const activeItem = computed(() => (activeViewId.value ? navItem(activeViewId.val
 let restoring = false
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 
-function viewIdOf(panel: IDockviewPanel): string {
-  return (panel.params as PanelParams | undefined)?.viewId ?? panel.id
+function paramsOf(panel: IDockviewPanel): PanelParams {
+  return (panel.params as PanelParams | undefined) ?? { viewId: panel.id }
 }
+
+const viewIdOf = (panel: IDockviewPanel) => paramsOf(panel).viewId
 
 /** Mirrors the dock's state into refs so Vue templates can follow it. */
 function sync() {
@@ -49,7 +66,9 @@ function sync() {
   }
   openViewIds.value = api.panels.map(viewIdOf)
   visibleViewIds.value = api.panels.filter((p) => p.api.isVisible).map(viewIdOf)
-  activeViewId.value = api.activePanel ? viewIdOf(api.activePanel) : null
+
+  const active = api.activePanel
+  activeViewId.value = active ? viewIdOf(active) : null
 }
 
 /* ------------------------------------------------------------- persistence */
@@ -84,7 +103,9 @@ function restore(): boolean {
   restoring = true
   try {
     api.fromJSON(JSON.parse(raw) as SerializedDockview)
-    api.panels.filter((p) => !views[viewIdOf(p)]).forEach((p) => api.removePanel(p))
+    api.panels
+      .filter((p) => !views[viewIdOf(p)] || !policy.canRestore(paramsOf(p)))
+      .forEach((p) => api.removePanel(p))
     return api.totalPanels > 0
   } catch {
     api.clear()
@@ -104,39 +125,56 @@ function clearSavedLayout() {
 
 /* ----------------------------------------------------------------- actions */
 
-/**
- * Focuses the panel for `viewId`, opening it as a new tab first if it is not on
- * screen.
- *
- * Views are single-instance on purpose: the diagram store is a module singleton
- * and Vue Flow keys its instance by a fixed id, so a second editor panel would
- * render the same canvas twice over one store.
- */
-export function openView(viewId: string): IDockviewPanel | undefined {
+export interface OpenPanelOptions {
+  /** Unique across the dock. A view that holds one document per panel derives
+   *  it from the document, so the same document never opens twice. */
+  id: string
+  viewId: string
+  title: string
+  documentId?: string
+}
+
+/** Focuses `id`, opening it as a new tab first if it is not on screen. */
+export function openPanel(options: OpenPanelOptions): IDockviewPanel | undefined {
   const api = dock.value
   if (!api) return undefined
 
-  const existing = api.getPanel(viewId)
+  const existing = api.getPanel(options.id)
   if (existing) {
     existing.api.setActive()
     return existing
   }
-  if (!views[viewId]) return undefined
+  if (!views[options.viewId]) return undefined
 
   return api.addPanel<PanelParams>({
-    id: viewId,
+    id: options.id,
     component: PANEL_COMPONENT,
-    title: navItem(viewId)?.label ?? viewId,
-    params: { viewId },
+    title: options.title,
+    params: { viewId: options.viewId, documentId: options.documentId },
   })
 }
 
-/** The arrangement the dock falls back to: the editor alone, filling the dock. */
+/** Opens a view that has a single shared panel, such as the settings. */
+export function openView(viewId: string): IDockviewPanel | undefined {
+  return openPanel({ id: viewId, viewId, title: navItem(viewId)?.label ?? viewId })
+}
+
+/** Closes a tab, if it is open. */
+export function closePanel(panelId: string) {
+  dock.value?.getPanel(panelId)?.api.close()
+}
+
+/** Renames an open tab, for a view whose title follows its content. */
+export function setPanelTitle(panelId: string, title: string) {
+  dock.value?.getPanel(panelId)?.api.setTitle(title)
+}
+
+/** The arrangement the dock falls back to when there is nothing to restore. */
 function applyDefaultLayout() {
   const api = dock.value
   if (!api) return
   api.clear()
-  openView(defaultNavItemId)
+  policy.defaultLayout()
 }
 
 export function resetLayout() {
@@ -150,8 +188,9 @@ export function resetLayout() {
  * Adopts a dockview instance. Called once from `WorkspaceDock` on `ready`;
  * returns the disposables the host tears down when it unmounts.
  */
-export function registerDock(api: DockviewApi): DockviewIDisposable[] {
+export function registerDock(api: DockviewApi, workspacePolicy: WorkspacePolicy): DockviewIDisposable[] {
   dock.value = api
+  policy = workspacePolicy
 
   const subscriptions = [
     api.onDidLayoutChange(() => {

@@ -12,9 +12,8 @@ import { PANEL_CONTEXT } from '@/features/workspace/composables/usePanel'
 const props = defineProps<{ params: IDockviewPanelProps<PanelParams> }>()
 
 const panelApi = props.params.api
-const viewId = props.params.params.viewId
-
-const view = computed(() => views[viewId])
+const params = props.params.params
+const view = computed(() => views[params.viewId])
 
 const isVisible = ref(panelApi.isVisible)
 const isActive = ref(panelApi.isActive)
@@ -26,7 +25,8 @@ const subscriptions = [
 onBeforeUnmount(() => subscriptions.forEach((s) => s.dispose()))
 
 provide(PANEL_CONTEXT, {
-  viewId,
+  viewId: params.viewId,
+  params,
   isVisible,
   isActive,
   api: panelApi,

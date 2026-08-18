@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Upload } from '@lucide/vue'
+import { FileText, Trash2, Upload } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,12 +11,19 @@ import {
 } from '@/components/ui/dialog'
 import type { DiagramParseError } from '@/model'
 import { safeParse } from '@/model'
-import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { ensureDocument, useDocuments } from '@/features/diagram/composables/useDocuments'
+import {
+  discardDocument,
+  openDocumentTab,
+  openDocumentTabFrom,
+} from '@/features/diagram/composables/useEditorTabs'
 import { readFile } from '@/features/diagram/lib/export'
 
 const open = defineModel<boolean>('open', { required: true })
 
-const { loadDocument } = useDiagram()
+// Closing a tab keeps the diagram; without this list there would be no way
+// back to it.
+const { documents } = useDocuments()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
@@ -30,13 +37,24 @@ async function ingest(file: File | undefined) {
     error.value = result.error
     return
   }
-  loadDocument(result.document)
+  // Its own tab, so opening a file never puts the diagram you were working on
+  // out of reach.
+  openDocumentTabFrom(result.document)
   open.value = false
 }
 
 function onDrop(event: DragEvent) {
   dragging.value = false
   void ingest(event.dataTransfer?.files?.[0])
+}
+
+function openStored(id: string) {
+  if (!ensureDocument(id)) {
+    discardDocument(id)
+    return
+  }
+  openDocumentTab(id)
+  open.value = false
 }
 
 function onPick(event: Event) {
@@ -52,8 +70,8 @@ function onPick(event: Event) {
       <DialogHeader>
         <DialogTitle>Open a diagram</DialogTitle>
         <DialogDescription>
-          Loads a <code class="font-mono text-xs">.baugraph.json</code> file. Exports from the
-          original single-file tool are converted automatically.
+          Loads a <code class="font-mono text-xs">.baugraph.json</code> file into a new tab.
+          Exports from the original single-file tool are converted automatically.
         </DialogDescription>
       </DialogHeader>
 
@@ -74,6 +92,30 @@ function onPick(event: Event) {
           class="hidden"
           @change="onPick"
         />
+      </div>
+
+      <div v-if="documents.length" class="space-y-2">
+        <p class="text-muted-foreground text-xs font-medium">Stored in this browser</p>
+        <ul class="max-h-48 space-y-1 overflow-y-auto">
+          <li v-for="entry in documents" :key="entry.id" class="flex items-center gap-1">
+            <button
+              type="button"
+              class="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+              @click="openStored(entry.id)"
+            >
+              <FileText class="text-muted-foreground size-3.5 shrink-0" />
+              <span class="truncate">{{ entry.title }}</span>
+            </button>
+            <button
+              type="button"
+              class="text-muted-foreground hover:bg-accent hover:text-destructive grid size-7 shrink-0 place-items-center rounded"
+              :aria-label="`Delete ${entry.title}`"
+              @click="discardDocument(entry.id)"
+            >
+              <Trash2 class="size-3.5" />
+            </button>
+          </li>
+        </ul>
       </div>
 
       <div v-if="error" class="space-y-2">

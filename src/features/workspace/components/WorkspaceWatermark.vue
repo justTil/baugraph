@@ -3,10 +3,11 @@ import type { IWatermarkPanelProps } from 'dockview-vue'
 import { LayoutTemplate } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { navigation } from '@/config/navigation'
-import { openView } from '@/features/workspace/composables/useWorkspace'
+import { useNavigation } from '@/composables/useNavigation'
 
 defineProps<{ params: IWatermarkPanelProps }>()
 
+const { setActiveItem } = useNavigation()
 const items = navigation.flatMap((group) => group.items).filter((item) => !item.disabled)
 </script>
 
@@ -23,7 +24,7 @@ const items = navigation.flatMap((group) => group.items).filter((item) => !item.
           :key="item.id"
           variant="outline"
           size="sm"
-          @click="openView(item.id)"
+          @click="setActiveItem(item.id)"
         >
           <component :is="item.icon" v-if="item.icon" />
           {{ item.label }}

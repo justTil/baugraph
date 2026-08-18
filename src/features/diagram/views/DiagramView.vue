@@ -1,70 +1,89 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { HEADER_SLOT_SELECTOR } from '@/components/layout/header-slot'
 import { usePanel } from '@/features/workspace/composables/usePanel'
-import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import {
+  DOCUMENT_ID,
+  claimActiveDocument,
+  diagramStore,
+  setActiveDocument,
+  useIsActiveDocument,
+} from '@/features/diagram/composables/useDiagram'
+import { rememberDocument } from '@/features/diagram/composables/useDocuments'
+import { newDocumentTab, renameDocumentTab } from '@/features/diagram/composables/useEditorTabs'
 import DiagramCanvas from '@/features/diagram/components/DiagramCanvas.vue'
 import DiagramToolbar from '@/features/diagram/components/DiagramToolbar.vue'
 import InspectorPanel from '@/features/diagram/components/InspectorPanel.vue'
 import ExportDialog from '@/features/diagram/components/ExportDialog.vue'
 import FlowsDialog from '@/features/diagram/components/FlowsDialog.vue'
 import HelpDialog from '@/features/diagram/components/HelpDialog.vue'
+import NewDocumentDialog from '@/features/diagram/components/NewDocumentDialog.vue'
 import OpenDialog from '@/features/diagram/components/OpenDialog.vue'
-import { sampleDocument } from '@/features/diagram/data/sample'
 import { exportJson } from '@/features/diagram/lib/export'
-import { fontsReady } from '@/features/diagram/lib/text'
-import { safeParse } from '@/model'
 
-const { nodes, loadDocument, newDocument, toDocument, restorePersisted } = useDiagram()
+// Docked views stay mounted behind their tab, and several can share the screen,
+// so this view has to know which panel it is in before it knows anything else.
+const { params, isActive } = usePanel()
+const documentId = params?.documentId
+if (!documentId) throw new Error('The diagram view can only be opened on a document')
 
-// Docked views stay mounted behind their tab; the header is shared, so the
-// toolbar may only claim it while this panel is actually on screen.
-const { isVisible } = usePanel()
+/**
+ * Every part of the editor below this point — including the toolbar teleported
+ * into the app header — resolves its store from here, so a second tab editing a
+ * second diagram never reaches into this one.
+ */
+provide(DOCUMENT_ID, documentId)
+
+const { meta, toDocument } = diagramStore(documentId)
+
+/**
+ * The app header holds one toolbar and several editors can share the screen, so
+ * only the document the rest of the app is pointed at fills it — and answers
+ * the save shortcut.
+ */
+const owns = useIsActiveDocument(documentId)
 
 const exportOpen = ref(false)
 const helpOpen = ref(false)
 const openOpen = ref(false)
+const newOpen = ref(false)
 const mounted = ref(false)
 
-onMounted(async () => {
+onMounted(() => {
   mounted.value = true
+  claimActiveDocument(documentId)
   window.addEventListener('keydown', onSave)
-
-  // A previous session wins over the sample, but a corrupt entry must not
-  // leave the user staring at an empty canvas.
-  const stored = restorePersisted()
-  const parsed = stored ? safeParse(stored) : null
-  if (parsed?.ok) {
-    loadDocument(parsed.document)
-    return
-  }
-
-  // The example sizes its nodes from their own text, so it has to be built with
-  // the font it will be drawn in.
-  await fontsReady()
-  loadDocument(sampleDocument())
 })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', onSave))
 
+// The palette in the sidebar and the settings view sit outside every panel;
+// this is what points them at the diagram the user is actually working on.
+// Sticky: clicking into the settings tab must not leave them without a target.
+watch(isActive, (active) => active && setActiveDocument(documentId), { immediate: true })
+
+// The tab is labelled by the diagram it holds, so renaming one renames the other.
+watch(
+  () => meta.title,
+  (title) => {
+    renameDocumentTab(documentId, title)
+    rememberDocument(documentId, title)
+  },
+)
+
 /** ⌘S downloads the source file rather than letting the browser save the page. */
 function onSave(event: KeyboardEvent) {
-  if (!isVisible.value) return
+  if (!owns.value) return
   if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return
   event.preventDefault()
   exportJson(toDocument())
 }
-
-function onNew() {
-  if (nodes.value.length && !window.confirm('Discard the current diagram and start over?')) return
-  newDocument()
-}
 </script>
 
 <template>
-  <Teleport v-if="mounted && isVisible" :to="HEADER_SLOT_SELECTOR">
+  <Teleport v-if="mounted && owns" :to="HEADER_SLOT_SELECTOR">
     <DiagramToolbar
-      @new="onNew"
+      @new="newOpen = true"
       @open="openOpen = true"
       @export="exportOpen = true"
       @help="helpOpen = true"
@@ -79,6 +98,8 @@ function onNew() {
   <!-- Opens itself: both the toolbar and a connection's inspector reach for it. -->
   <FlowsDialog />
 
+  <!-- A new diagram is a new tab, so this one is left exactly as it was. -->
+  <NewDocumentDialog v-model:open="newOpen" @create="newDocumentTab($event)" />
   <ExportDialog v-model:open="exportOpen" />
   <OpenDialog v-model:open="openOpen" />
   <HelpDialog v-model:open="helpOpen" />

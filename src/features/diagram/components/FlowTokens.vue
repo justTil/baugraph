@@ -2,11 +2,7 @@
 import type { ComponentPublicInstance } from 'vue'
 import { computed, onBeforeUnmount } from 'vue'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
-import {
-  registerToken,
-  unregisterToken,
-  useFlows,
-} from '@/features/diagram/composables/useFlows'
+import { useFlows } from '@/features/diagram/composables/useFlows'
 import { COLOR_HEX, diagramTheme } from '@/features/diagram/lib/theme'
 
 /**
@@ -28,7 +24,7 @@ const props = defineProps<{
 }>()
 
 const { canvas } = useDiagram()
-const { tokensFor, dashesFor, running } = useFlows()
+const { tokensFor, dashesFor, running, registerToken, unregisterToken } = useFlows()
 
 const theme = computed(() => diagramTheme(canvas.theme))
 const tokens = computed(() => tokensFor(props.edgeId))
