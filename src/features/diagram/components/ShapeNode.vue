@@ -13,10 +13,12 @@ import { fitNodeSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
 
 const props = defineProps<NodeProps<NodeData>>()
 
 const { canvas, commit, endCoalesce, setNodesLocked } = useDiagram()
+const { connecting, from: connectFrom, to: connectTo } = useConnectionTarget()
 
 /** The badge is the only way back: a locked node cannot be selected. */
 function unlock() {
@@ -94,6 +96,21 @@ const HANDLE_POSITION: Record<PortSide, Position> = {
  * The id carries both halves — `right:3` — and that is all `onConnect` needs to
  * write the connection down (see `DiagramCanvas`).
  */
+/**
+ * The point on this node a release would connect to, while a drag is looking for
+ * one. Named rather than left to CSS: the canvas cannot mark it with a class of
+ * its own without also marking the drops that would be refused (see
+ * `useConnectionTarget`).
+ */
+const dropHandle = computed(() =>
+  connectTo.value?.nodeId === props.id ? connectTo.value.id : null,
+)
+
+/** The point the drag came out of, if it came out of this node. */
+const fromHandle = computed(() =>
+  connectFrom.value?.nodeId === props.id ? connectFrom.value.id : null,
+)
+
 const handles = computed(() => {
   const ports = nodePorts(props.data.ports)
   return PORT_SIDES.flatMap((side) => {
@@ -144,7 +161,11 @@ const handles = computed(() => {
 
   <div
     class="bg-node group"
-    :class="{ 'bg-node--selected': selected, 'bg-node--locked': data.locked }"
+    :class="{
+      'bg-node--selected': selected,
+      'bg-node--locked': data.locked,
+      'bg-node--connecting': connecting,
+    }"
   >
     <svg
       class="pointer-events-none absolute inset-0"
@@ -240,6 +261,10 @@ const handles = computed(() => {
       :position="handle.position"
       :style="handle.style"
       class="bg-node__handle"
+      :class="{
+        'bg-node__handle--drop': handle.id === dropHandle,
+        'bg-node__handle--from': handle.id === fromHandle,
+      }"
     />
   </div>
 </template>
@@ -313,6 +338,64 @@ const handles = computed(() => {
 .bg-node:hover :deep(.bg-node__handle)::after,
 .bg-node--selected :deep(.bg-node__handle)::after {
   opacity: 1;
+}
+
+/*
+ * While a connection is being dragged, every point on the canvas it could land
+ * on comes up faintly — the drop targets are the question being asked, and half
+ * of them are on nodes the pointer is nowhere near. Faintly, because all of them
+ * at full strength turns a busy diagram into a field of dots.
+ */
+.bg-node--connecting :deep(.bg-node__handle)::after {
+  opacity: 0.4;
+}
+
+/* The two ends of the connection about to be made: where it left, where it lands. */
+.bg-node :deep(.bg-node__handle--from)::after,
+.bg-node :deep(.bg-node__handle--drop)::after {
+  opacity: 1;
+  border-color: var(--bg-connect);
+  background: var(--bg-connect);
+}
+
+/*
+ * And a ring off the one it lands on. The dots are small by the time a side
+ * carries six of them, and a colour change alone is easy to miss mid-drag —
+ * movement is what the eye finds without being pointed at it.
+ */
+.bg-node :deep(.bg-node__handle--drop)::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--bg-dot, 10px);
+  height: var(--bg-dot, 10px);
+  margin: calc(var(--bg-dot, 10px) / -2) 0 0 calc(var(--bg-dot, 10px) / -2);
+  border-radius: 9999px;
+  border: 2px solid var(--bg-connect);
+  /* The ring grows past the handle it belongs to; it must not take the drop. */
+  pointer-events: none;
+  animation: bg-connect-pulse 900ms ease-out infinite;
+}
+
+@keyframes bg-connect-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+/* The colour still says it; only the movement goes. */
+@media (prefers-reduced-motion: reduce) {
+  .bg-node :deep(.bg-node__handle--drop)::before {
+    animation: none;
+    transform: scale(2);
+    opacity: 0.5;
+  }
 }
 
 /* Nothing can be connected to a locked node, so its dots stay away. */

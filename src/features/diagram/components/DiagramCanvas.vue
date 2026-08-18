@@ -26,6 +26,7 @@ import { usePanel } from '@/features/workspace/composables/usePanel'
 import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { useSavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
+import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
 import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
 import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
@@ -79,6 +80,7 @@ const {
   getEdges,
 } = useCanvas()
 const { place, placeAtScreen } = usePlacement()
+const { to: connectTo } = useConnectionTarget()
 const { installFlowRuntime, stopFlowRuntime } = useFlows()
 // Other views can share the screen with the canvas, so the window-level
 // shortcuts below only belong to it while it is the dock's focused panel.
@@ -122,6 +124,20 @@ function endpointOf(handleId: string | null | undefined): { side: Side; port: nu
  * than this, and the nearest is still the one under the cursor.
  */
 const CONNECTION_RADIUS = 40
+
+/**
+ * The line trailing the cursor while a connection is drawn.
+ *
+ * Dashed and neutral while it is still looking for somewhere to go; solid and
+ * green the moment releasing would actually connect something. It is the same
+ * answer the dot on the node lights up on, so the line and the node can never
+ * tell the user two different things.
+ */
+const connectionLineStyle = computed(() =>
+  connectTo.value
+    ? { stroke: theme.value.connect, strokeWidth: 2.2 }
+    : { stroke: theme.value.selection, strokeWidth: 1.8, strokeDasharray: '5 4' },
+)
 
 /**
  * Records a connection the user has just drawn, in the direction they drew it.
@@ -597,6 +613,7 @@ watch(isVisible, (visible) => {
         :style="{
           '--bg-canvas': theme.bg,
           '--bg-selection': theme.selection,
+          '--bg-connect': theme.connect,
           background: theme.bg,
         }"
         @dragover="onDragOver"
@@ -629,11 +646,7 @@ watch(isVisible, (visible) => {
           :selection-key-code="'Shift'"
           :elevate-edges-on-select="true"
           :elevate-nodes-on-select="false"
-          :connection-line-style="{
-            stroke: theme.selection,
-            strokeWidth: 1.8,
-            strokeDasharray: '5 4',
-          }"
+          :connection-line-style="connectionLineStyle"
           :default-edge-options="{ type: 'diagram' }"
           @connect="onConnect"
           @node-drag-start="onNodeDragStart"

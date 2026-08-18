@@ -30,6 +30,8 @@ export interface DiagramTheme {
   grid: string
   edge: string
   selection: string
+  /** Says a gesture has found its mark: the connection point a drag would land on. */
+  connect: string
 }
 
 export function diagramTheme(mode: 'light' | 'dark'): DiagramTheme {
@@ -44,6 +46,9 @@ export function diagramTheme(mode: 'light' | 'dark'): DiagramTheme {
     grid: dark ? '#39414c' : '#c4c9d0',
     edge: dark ? '#8b939d' : '#6a7280',
     selection: dark ? '#5b9dff' : '#2f6fdb',
+    // Lifted on a dark canvas: the palette's green is chosen to sit on white and
+    // goes muddy against near-black, where this has to read at a glance.
+    connect: dark ? '#3fd18a' : '#12995d',
   }
 }
 
