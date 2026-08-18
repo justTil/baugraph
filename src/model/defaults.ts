@@ -34,6 +34,7 @@ export const NODE_DEFAULTS = {
   tech: '',
   shape: 'rect',
   color: 'slate',
+  border: 'regular',
   sublabel: '',
   icon: '',
   parent: null,

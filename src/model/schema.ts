@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   ARROW_MODES,
+  BORDER_WIDTHS,
   COLOR_KEYS,
   FLOW_MODES,
   FLOW_MOTIONS,
@@ -68,6 +69,7 @@ export const nodeSchema = z.object({
   sublabel: z.string().default(NODE_DEFAULTS.sublabel),
   shape: z.enum(SHAPE_KEYS).default(NODE_DEFAULTS.shape),
   color: z.enum(COLOR_KEYS).default(NODE_DEFAULTS.color),
+  border: z.enum(BORDER_WIDTHS).default(NODE_DEFAULTS.border),
   icon: z.string().default(NODE_DEFAULTS.icon),
   position: vec2Schema,
   size: sizeSchema,

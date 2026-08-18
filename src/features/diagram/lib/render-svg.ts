@@ -223,10 +223,19 @@ function renderTextBlock(
 const round2 = (n: number) => Math.round(n * 100) / 100
 
 function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
-  const frame = roundedRect(box.x, box.y, box.width, box.height, 12)
-  let out =
-    `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
-    `stroke-width="1.5" stroke-dasharray="7 5"/>`
+  // Held half a stroke inside the box, exactly as `ZoneNode` draws it.
+  const inset = paint.strokeWidth / 2
+  const frame = roundedRect(
+    box.x + inset,
+    box.y + inset,
+    Math.max(1, box.width - paint.strokeWidth),
+    Math.max(1, box.height - paint.strokeWidth),
+    12,
+  )
+  let out = paint.strokeWidth
+    ? `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
+      `stroke-width="${paint.strokeWidth}" stroke-dasharray="7 5"/>`
+    : `<path d="${frame}" fill="${paint.fill}"/>`
 
   const available = box.width - 26
   const label = fitText((node.label || '').toUpperCase(), available, 12, 700)
@@ -243,7 +252,16 @@ function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePa
 function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
   const parts: string[] = []
 
-  for (const element of shapeElements(node.shape, box.width, box.height)) {
+  // A weightless outline is left off entirely rather than written as `0`, so a
+  // borderless node exports as the single filled path it looks like.
+  const outline = paint.strokeWidth
+    ? ` stroke="${paint.stroke}" stroke-width="${paint.strokeWidth}" stroke-linejoin="round"`
+    : ''
+
+  for (const element of shapeElements(node.shape, box.width, box.height, paint.strokeWidth)) {
+    // Trim — a cylinder's rim, a queue's ticks — is stroke only, so without one
+    // there is nothing to draw.
+    if (element.role === 'detail' && !outline) continue
     const attrs = Object.entries(element.attrs)
       .map(([key, value]) => {
         // Element geometry is node-local; shift it into canvas space.
@@ -255,9 +273,7 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
     const transform =
       element.tag === 'path' ? ` transform="translate(${box.x},${box.y})"` : ''
     const fill = element.role === 'body' ? paint.fill : 'none'
-    parts.push(
-      `<${element.tag} ${attrs}${transform} fill="${fill}" stroke="${paint.stroke}" stroke-width="1.5"/>`,
-    )
+    parts.push(`<${element.tag} ${attrs}${transform} fill="${fill}"${outline}/>`)
   }
 
   const hasIcon = !!node.icon && !!iconInnerMarkup(node.icon)

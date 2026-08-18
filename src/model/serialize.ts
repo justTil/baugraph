@@ -54,6 +54,7 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'sublabel',
   'shape',
   'color',
+  'border',
   'icon',
   'position',
   'size',

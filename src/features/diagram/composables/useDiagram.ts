@@ -3,6 +3,7 @@ import type { ComputedRef, InjectionKey, Ref } from 'vue'
 import { computed, effectScope, inject, nextTick, reactive, ref, watch } from 'vue'
 import type {
   ArrowMode,
+  BorderWidth,
   CanvasSettings,
   ColorKey,
   DiagramDocument,
@@ -48,6 +49,8 @@ export interface NodeData {
   sublabel: string
   shape: ShapeKey
   color: ColorKey
+  /** Weight of the node's outline. */
+  border: BorderWidth
   icon: string
   /** Mirrors `DiagramNode.locked`; the Vue Flow interaction flags follow it. */
   locked: boolean
@@ -176,6 +179,7 @@ function createDiagramStore(documentId: string) {
         sublabel: node.sublabel ?? '',
         shape: node.shape,
         color: node.color,
+        border: node.border ?? 'regular',
         icon: node.icon ?? '',
         locked,
         meta: node.data,
@@ -234,6 +238,7 @@ function createDiagramStore(documentId: string) {
       sublabel: node.data?.sublabel ?? '',
       shape: node.data?.shape ?? 'rect',
       color: node.data?.color ?? 'slate',
+      border: node.data?.border ?? 'regular',
       icon: node.data?.icon ?? '',
       position: { x: node.position.x, y: node.position.y },
       size: sizeOf(node),

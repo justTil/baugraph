@@ -135,6 +135,16 @@
               "pink"
             ]
           },
+          "border": {
+            "default": "regular",
+            "type": "string",
+            "enum": [
+              "none",
+              "regular",
+              "medium",
+              "thick"
+            ]
+          },
           "icon": {
             "default": "",
             "type": "string"

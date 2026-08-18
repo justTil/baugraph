@@ -28,8 +28,12 @@ const width = computed(() => props.dimensions.width || DEFAULT_NODE_SIZE.width)
 const height = computed(() => props.dimensions.height || DEFAULT_NODE_SIZE.height)
 
 const theme = computed(() => diagramTheme(canvas.theme))
-const paint = computed(() => nodePaint({ color: props.data.color, kind: 'shape' }, theme.value))
-const elements = computed(() => shapeElements(props.data.shape, width.value, height.value))
+const paint = computed(() =>
+  nodePaint({ color: props.data.color, kind: 'shape', border: props.data.border }, theme.value),
+)
+const elements = computed(() =>
+  shapeElements(props.data.shape, width.value, height.value, paint.value.strokeWidth),
+)
 
 const icon = computed(() => iconComponent(props.data.icon))
 const inset = computed(() => contentInset(props.data.shape, height.value))
@@ -115,7 +119,8 @@ const HANDLES = [
         v-bind="element.attrs"
         :fill="element.role === 'body' ? paint.fill : 'none'"
         :stroke="paint.stroke"
-        stroke-width="1.5"
+        :stroke-width="paint.strokeWidth"
+        stroke-linejoin="round"
       />
     </svg>
 

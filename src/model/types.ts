@@ -41,6 +41,14 @@ export const SHAPE_KEYS = [
 ] as const
 export type ShapeKey = (typeof SHAPE_KEYS)[number]
 
+/**
+ * How heavily a node's outline is drawn. Semantic rather than a raw number, so a
+ * file states the intent — `thick` — and the renderer decides what that is worth
+ * in canvas units (see `features/diagram/lib/theme.ts`).
+ */
+export const BORDER_WIDTHS = ['none', 'regular', 'medium', 'thick'] as const
+export type BorderWidth = (typeof BORDER_WIDTHS)[number]
+
 /** Which edge of a node a connection attaches to. `auto` picks the nearest. */
 export const SIDES = ['auto', 'top', 'right', 'bottom', 'left'] as const
 export type Side = (typeof SIDES)[number]
@@ -91,6 +99,8 @@ export interface DiagramNode {
   sublabel?: string
   shape: ShapeKey
   color: ColorKey
+  /** Weight of the node's outline. Omitted means `regular`. */
+  border?: BorderWidth
   /** Icon id from the Lucide registry (kebab-case, e.g. `door-open`). Empty = none. */
   icon?: string
   /**

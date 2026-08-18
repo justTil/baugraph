@@ -121,6 +121,12 @@ const sharedTech = computed(() => {
   return values.size === 1 ? [...values][0] : null
 })
 
+/** The outline weight a whole selection shares; `null` when they disagree. */
+const sharedBorder = computed(() => {
+  const values = new Set(selectedNodes.value.map((n) => n.data.border))
+  return values.size === 1 ? [...values][0] : null
+})
+
 /** The technology catalogue, with the category this node's type suggests first. */
 const techGroups = computed(() =>
   categoryFirst(
@@ -148,6 +154,17 @@ const SHAPE_LABELS: Record<string, string> = {
   circle: 'Circle',
   note: 'Note',
 }
+
+/**
+ * Outline weights, heaviest last, so the row reads as the ramp it is. The values
+ * are the model's — what each one is worth in canvas units lives in `theme.ts`.
+ */
+const BORDER_OPTIONS = [
+  { value: 'none', label: 'None', title: 'No outline' },
+  { value: 'regular', label: 'Regular' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'thick', label: 'Thick' },
+]
 
 const SIDE_OPTIONS = [
   { value: 'auto', label: 'Auto' },
@@ -261,12 +278,22 @@ function withCommit(fn: () => void) {
           </div>
         </section>
 
-        <section class="space-y-2 border-b p-3">
-          <Label class="text-xs">Colour</Label>
-          <ColorSwatches
-            :model-value="node.data.color"
-            @update:model-value="withCommit(() => updateNodeData(node!.id, { color: $event! }))"
-          />
+        <section class="space-y-3 border-b p-3">
+          <div class="space-y-2">
+            <Label class="text-xs">Colour</Label>
+            <ColorSwatches
+              :model-value="node.data.color"
+              @update:model-value="withCommit(() => updateNodeData(node!.id, { color: $event! }))"
+            />
+          </div>
+          <div class="space-y-1.5">
+            <Label class="text-xs">Border</Label>
+            <SegmentedField
+              :model-value="node.data.border"
+              :options="BORDER_OPTIONS"
+              @update:model-value="withCommit(() => updateNodeData(node!.id, { border: $event as never }))"
+            />
+          </div>
         </section>
 
         <section v-if="node.type !== 'zone'" class="space-y-2 border-b p-3">
@@ -585,16 +612,30 @@ function withCommit(fn: () => void) {
           </Button>
         </section>
 
-        <section v-if="selectedNodes.length" class="space-y-2 border-b p-3">
-          <Label class="text-xs">Colour</Label>
-          <ColorSwatches
-            :model-value="undefined"
-            @update:model-value="
-              withCommit(() =>
-                selectedNodes.forEach((n) => updateNodeData(n.id, { color: $event! })),
-              )
-            "
-          />
+        <section v-if="selectedNodes.length" class="space-y-3 border-b p-3">
+          <div class="space-y-2">
+            <Label class="text-xs">Colour</Label>
+            <ColorSwatches
+              :model-value="undefined"
+              @update:model-value="
+                withCommit(() =>
+                  selectedNodes.forEach((n) => updateNodeData(n.id, { color: $event! })),
+                )
+              "
+            />
+          </div>
+          <div class="space-y-1.5">
+            <Label class="text-xs">Border</Label>
+            <SegmentedField
+              :model-value="sharedBorder ?? ''"
+              :options="BORDER_OPTIONS"
+              @update:model-value="
+                withCommit(() =>
+                  selectedNodes.forEach((n) => updateNodeData(n.id, { border: $event as never })),
+                )
+              "
+            />
+          </div>
         </section>
 
         <section v-if="selectedNodes.length" class="space-y-2 border-b p-3">

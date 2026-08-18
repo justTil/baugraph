@@ -1,4 +1,4 @@
-import type { ColorKey, DiagramNode } from '@/model'
+import type { BorderWidth, ColorKey, DiagramNode } from '@/model'
 import { COLOR_KEYS } from '@/model'
 
 /**
@@ -74,26 +74,42 @@ export function mix(a: string, b: string, t: number): string {
   ])
 }
 
+/**
+ * What each outline weight is worth in canvas units. `regular` is the 1.5 every
+ * node was drawn with before the setting existed, so an untouched diagram looks
+ * exactly as it did.
+ */
+export const BORDER_PX: Record<BorderWidth, number> = {
+  none: 0,
+  regular: 1.5,
+  medium: 2.5,
+  thick: 4,
+}
+
 export interface NodePaint {
   accent: string
   fill: string
   stroke: string
+  /** Outline weight in canvas units; `0` means the node is drawn fill-only. */
+  strokeWidth: number
   ink: string
   muted: string
 }
 
 /** Derives a node's fill/stroke from its semantic colour and the active theme. */
 export function nodePaint(
-  node: Pick<DiagramNode, 'color' | 'kind'>,
+  node: Pick<DiagramNode, 'color' | 'kind'> & { border?: BorderWidth },
   theme: DiagramTheme,
 ): NodePaint {
   const accent = COLOR_HEX[node.color] ?? COLOR_HEX.slate
+  const strokeWidth = BORDER_PX[node.border ?? 'regular'] ?? BORDER_PX.regular
 
   if (node.kind === 'zone') {
     return {
       accent,
       fill: mix(accent, theme.bg, theme.dark ? 0.93 : 0.965),
       stroke: mix(accent, theme.bg, 0.45),
+      strokeWidth,
       ink: theme.ink,
       muted: theme.muted,
     }
@@ -103,6 +119,7 @@ export function nodePaint(
     accent,
     fill: mix(accent, theme.surface, theme.dark ? 0.9 : 0.955),
     stroke: mix(accent, theme.surface, theme.dark ? 0.62 : 0.55),
+    strokeWidth,
     ink: theme.ink,
     muted: theme.muted,
   }

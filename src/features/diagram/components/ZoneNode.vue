@@ -29,8 +29,20 @@ const width = computed(() => props.dimensions.width || DEFAULT_ZONE_SIZE.width)
 const height = computed(() => props.dimensions.height || DEFAULT_ZONE_SIZE.height)
 
 const theme = computed(() => diagramTheme(canvas.theme))
-const paint = computed(() => nodePaint({ color: props.data.color, kind: 'zone' }, theme.value))
-const frame = computed(() => roundedRect(0.75, 0.75, width.value - 1.5, height.value - 1.5, 12))
+const paint = computed(() =>
+  nodePaint({ color: props.data.color, kind: 'zone', border: props.data.border }, theme.value),
+)
+/** Half a stroke inside the box, so the whole dashed frame lands on the zone. */
+const frame = computed(() => {
+  const inset = paint.value.strokeWidth / 2
+  return roundedRect(
+    inset,
+    inset,
+    Math.max(1, width.value - paint.value.strokeWidth),
+    Math.max(1, height.value - paint.value.strokeWidth),
+    12,
+  )
+})
 
 /** What the zone is — VPC, cluster, namespace — kept on it after a rename. */
 const caption = computed(() => nodeCaption(props.data))
@@ -65,7 +77,7 @@ const min = computed(() => fitZoneMinSize(props.data))
         :d="frame"
         :fill="paint.fill"
         :stroke="paint.stroke"
-        stroke-width="1.5"
+        :stroke-width="paint.strokeWidth"
         stroke-dasharray="7 5"
       />
     </svg>
