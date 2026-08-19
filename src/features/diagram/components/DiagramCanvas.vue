@@ -57,6 +57,8 @@ const {
   addEdge,
   removeSelection,
   duplicateSelection,
+  copySelection,
+  pasteClipboard,
   groupSelection,
   regroup,
   lockSelection,
@@ -467,6 +469,14 @@ function onKeyDown(event: KeyboardEvent) {
       commit()
       endCoalesce()
       duplicateSelection()
+    } else if (key === 'c') {
+      event.preventDefault()
+      copySelection()
+    } else if (key === 'v') {
+      event.preventDefault()
+      commit()
+      endCoalesce()
+      pasteClipboard()
     } else if (key === 'g') {
       event.preventDefault()
       commit()

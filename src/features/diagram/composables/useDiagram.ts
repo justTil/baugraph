@@ -115,6 +115,18 @@ const HISTORY_LIMIT = 100
 const storageKey = (documentId: string) => `baugraph:document:v1:${documentId}`
 
 /**
+ * The last copied selection, held at module scope rather than per document so
+ * a paste can land in a different open tab than the copy came from.
+ *
+ * A plain variable, not a `ref`: nothing renders off this, and wrapping it in
+ * one would make Vue proxy the nodes/edges it holds — which `structuredClone`
+ * cannot clone.
+ */
+let clipboard: { nodes: DiagramNode[]; edges: DiagramEdge[] } | null = null
+/** How far a paste offsets from the copied position; grows with each repeat so pastes don't stack. */
+let pasteOffset = 0
+
+/**
  * Everything one open diagram owns: its contents, its undo history and its
  * autosave. Built per document rather than per module so two editor tabs can
  * hold two unrelated diagrams without either seeing the other's state.
@@ -921,6 +933,69 @@ function createDiagramStore(documentId: string) {
     edges.value = [...edges.value, ...copiedEdges]
   }
 
+  /** Copies the selection to the shared clipboard, ready for `pasteClipboard`. */
+  function copySelection() {
+    const source = selectedNodes.value
+    if (!source.length) return
+    const ids = new Set(source.map((n) => n.id))
+    clipboard = {
+      nodes: source.map((n) => structuredClone(toModelNode(n))),
+      edges: edges.value
+        .filter((e) => ids.has(e.source) && ids.has(e.target))
+        .map((e) => structuredClone(toModelEdge(e))),
+    }
+    pasteOffset = 0
+  }
+
+  /**
+   * Drops the clipboard into this document, offsetting a little further each
+   * repeat so successive pastes fan out instead of stacking on top of each other.
+   */
+  function pasteClipboard() {
+    const copy = clipboard
+    if (!copy?.nodes.length) return
+    pasteOffset += 24
+    const offset = pasteOffset
+    const taken = takenNodeIds()
+    const idMap = new Map<string, string>()
+
+    const copies = copy.nodes.map((node) => {
+      const id = makeNodeId(node.label || 'node', taken)
+      taken.add(id)
+      idMap.set(node.id, id)
+      return {
+        ...structuredClone(node),
+        id,
+        position: { x: node.position.x + offset, y: node.position.y + offset },
+      }
+    })
+
+    // A pasted child keeps its parent only if that parent was copied too.
+    const pastedNodes = copies.map((node) =>
+      toVueFlowNode({
+        ...node,
+        parent: node.parent && idMap.has(node.parent) ? idMap.get(node.parent)! : null,
+      }),
+    )
+
+    const takenEdges = takenEdgeIds()
+    const pastedEdges = copy.edges
+      .filter((e) => idMap.has(e.source) && idMap.has(e.target))
+      .map((e) => {
+        const source = idMap.get(e.source)!
+        const target = idMap.get(e.target)!
+        const id = makeEdgeId(source, target, takenEdges)
+        takenEdges.add(id)
+        return toVueFlowEdge({ ...structuredClone(e), id, source, target })
+      })
+
+    nodes.value = [
+      ...nodes.value.map((n) => ({ ...n, selected: false })),
+      ...pastedNodes.map((n) => ({ ...n, selected: true })),
+    ]
+    edges.value = [...edges.value, ...pastedEdges]
+  }
+
   /**
    * Wraps the selected nodes in a new zone that becomes their parent.
    *
@@ -1372,6 +1447,8 @@ function createDiagramStore(documentId: string) {
     addEdge,
     removeSelection,
     duplicateSelection,
+    copySelection,
+    pasteClipboard,
     groupSelection,
     ungroupSelection,
     regroup,
