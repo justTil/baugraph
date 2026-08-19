@@ -191,8 +191,15 @@ function selfLoop(box: Box): EdgeGeometry {
  * one to grow a jog nobody asked for. Within this much, both ends are pulled
  * onto one shared line and the connector comes out straight — the design that
  * was intended, without demanding the impossible of the grid.
+ *
+ * Sized to cover a node auto-fitted to its label, not just grid jitter: width
+ * grows in 10px steps with a node's text (see `fitNodeSize`) while height
+ * mostly sits at its type's floor, so two nodes stacked top-to-bottom drift off
+ * centre far more often than two placed side-by-side ever do. A tolerance tuned
+ * only to grid rounding straightened left/right connectors and left top/bottom
+ * ones jogging on exactly that drift.
  */
-const ALIGN_TOLERANCE = 14
+const ALIGN_TOLERANCE = 26
 
 /**
  * Pulls two facing anchors onto a shared line when they are nearly aligned.
@@ -596,7 +603,7 @@ function orthogonalPoints(s: Vec, t: Vec, sa: Anchor, ta: Anchor): Vec[] {
       points.push({ x: mx, y: s1.y }, { x: mx, y: t1.y })
     }
   } else if (!sourceHorizontal && !targetHorizontal) {
-    if (Math.abs(s1.x - t1.x) > 1) {
+    if (Math.abs(s1.x - t1.x) >= 1) {
       const my = (s1.y + t1.y) / 2
       points.push({ x: s1.x, y: my }, { x: t1.x, y: my })
     }
