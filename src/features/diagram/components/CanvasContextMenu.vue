@@ -26,6 +26,8 @@ import {
   ArrowLeftRight,
   Braces,
   BringToFront,
+  ClipboardCopy,
+  ClipboardPaste,
   Copy,
   Download,
   Frame,
@@ -111,6 +113,9 @@ const {
   redo,
   removeSelection,
   duplicateSelection,
+  copySelection,
+  pasteClipboard,
+  hasClipboard,
   groupSelection,
   ungroupSelection,
   lockSelection,
@@ -466,6 +471,11 @@ function copySelectionIds() {
         Duplicate
         <ContextMenuShortcut>⌘D</ContextMenuShortcut>
       </ContextMenuItem>
+      <ContextMenuItem @select="copySelection()">
+        <ClipboardCopy />
+        Copy
+        <ContextMenuShortcut>⌘C</ContextMenuShortcut>
+      </ContextMenuItem>
       <ContextMenuItem @select="act(groupSelection)">
         <Group />
         Wrap in zone
@@ -773,6 +783,11 @@ function copySelectionIds() {
         Duplicate
         <ContextMenuShortcut>⌘D</ContextMenuShortcut>
       </ContextMenuItem>
+      <ContextMenuItem @select="copySelection()">
+        <ClipboardCopy />
+        Copy
+        <ContextMenuShortcut>⌘C</ContextMenuShortcut>
+      </ContextMenuItem>
       <ContextMenuItem @select="act(groupSelection)">
         <Group />
         Wrap in zone
@@ -836,6 +851,14 @@ function copySelectionIds() {
 
     <!-- ------------------------------------------------------------- pane -->
     <template v-else>
+      <ContextMenuItem :disabled="!hasClipboard" @select="act(pasteClipboard)">
+        <ClipboardPaste />
+        Paste
+        <ContextMenuShortcut>⌘V</ContextMenuShortcut>
+      </ContextMenuItem>
+
+      <ContextMenuSeparator />
+
       <ContextMenuSub>
         <ContextMenuSubTrigger>
           <Plus />

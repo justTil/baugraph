@@ -125,6 +125,8 @@ const storageKey = (documentId: string) => `baugraph:document:v1:${documentId}`
 let clipboard: { nodes: DiagramNode[]; edges: DiagramEdge[] } | null = null
 /** How far a paste offsets from the copied position; grows with each repeat so pastes don't stack. */
 let pasteOffset = 0
+/** Whether the clipboard holds a copy, so a Paste menu item can grey itself out. */
+const hasClipboard = ref(false)
 
 /**
  * Everything one open diagram owns: its contents, its undo history and its
@@ -945,6 +947,7 @@ function createDiagramStore(documentId: string) {
         .map((e) => structuredClone(toModelEdge(e))),
     }
     pasteOffset = 0
+    hasClipboard.value = true
   }
 
   /**
@@ -1449,6 +1452,7 @@ function createDiagramStore(documentId: string) {
     duplicateSelection,
     copySelection,
     pasteClipboard,
+    hasClipboard: computed(() => hasClipboard.value),
     groupSelection,
     ungroupSelection,
     regroup,
