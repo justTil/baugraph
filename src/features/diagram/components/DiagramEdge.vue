@@ -161,6 +161,15 @@ const dragNodeId = ref('')
 const dragHandleId = ref<string | null>(null)
 /** Which end of a *fresh* connection the fixed node would be playing. */
 const dragFixedEnd = ref<'source' | 'target'>('source')
+/**
+ * The end actually being dragged, exactly as `startReconnect` was told —
+ * settled before the drag rather than guessed afterwards. A guess built from
+ * comparing the dropped-on node to the connection's own ends breaks the
+ * moment that node is the one the drag started at: dropping on one of its
+ * *other* dots, to move the connection onto a different point on the node it
+ * already meets, looks identical to never having moved that end at all.
+ */
+const draggedEnd = ref<'source' | 'target'>('source')
 
 /**
  * Only one end of a reconnect drag ever moves — Vue Flow holds the other
@@ -169,13 +178,14 @@ const dragFixedEnd = ref<'source' | 'target'>('source')
  * the event, or the drag would reset it to `auto` on every reconnect.
  */
 function applyReconnect(connection: Connection) {
-  const sourceMoved = connection.target === props.target
-  const from = sourceMoved
-    ? endpointOf(connection.sourceHandle)
-    : { side: props.data.sourceSide, port: props.data.sourcePort }
-  const to = sourceMoved
-    ? { side: props.data.targetSide, port: props.data.targetPort }
-    : endpointOf(connection.targetHandle)
+  const from =
+    draggedEnd.value === 'source'
+      ? endpointOf(connection.sourceHandle)
+      : { side: props.data.sourceSide, port: props.data.sourcePort }
+  const to =
+    draggedEnd.value === 'target'
+      ? endpointOf(connection.targetHandle)
+      : { side: props.data.targetSide, port: props.data.targetPort }
   reconnectEdge(props.id, connection.source, connection.target, {
     sourceSide: from.side,
     sourcePort: from.port,
@@ -208,6 +218,7 @@ function startReconnect(event: MouseEvent, end: 'source' | 'target') {
   endCoalesce()
   dragging.value = true
   reconnectingEdge.value = true
+  draggedEnd.value = end
   dragNodeId.value = end === 'source' ? props.target : props.source
   dragHandleId.value = null
   dragFixedEnd.value = end === 'source' ? 'target' : 'source'
