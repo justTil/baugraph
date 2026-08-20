@@ -383,6 +383,128 @@ function axisTicks(values: number[], lo: number, hi: number): number[] {
   return [...seen].sort((a, b) => a - b)
 }
 
+/**
+ * How far apart two neighbouring ticks may sit before a bend confined to that
+ * stretch gets pulled all the way to one end of it.
+ *
+ * The Hanan grid a detour searches only has lines through obstacle edges, so
+ * an open stretch with nothing in it — the common case, one node sitting well
+ * clear of another — carries no line to turn on until the edge of whichever
+ * box the search is skirting. Left alone, every bend in a long detour lands
+ * jammed against that box instead of somewhere a person would have drawn it.
+ *
+ * Kept tight enough that even two nodes sitting close together still get a
+ * midpoint of their own — a gap has to clear this before it earns even one
+ * inserted tick, so a stretch not much wider than this got none at all, and
+ * the only place left to bend was wherever the stub happened to end.
+ */
+const MAX_TICK_GAP = 24
+
+/**
+ * Ticks a single gap is split into once it is wide enough to split at all —
+ * quarters, not one every {@link MAX_TICK_GAP}.
+ *
+ * A per-gap cap rather than a per-pixel one: splitting every such run into
+ * one-tick-per-`MAX_TICK_GAP` scales with how wide the diagram is, and a
+ * single long open stretch — one node placed well clear of another, the case
+ * this exists for — could alone burn through the search's whole cell budget,
+ * silently losing the obstacle-avoidance that budget exists to afford. A
+ * handful of candidates spread through any one gap is enough for a bend to
+ * land near its middle; it does not need one every `MAX_TICK_GAP` on top.
+ */
+const MAX_SPLITS = 4
+
+/** Split any gap wider than `MAX_TICK_GAP` into up to `MAX_SPLITS` even parts. */
+function withMidpoints(ticks: number[]): number[] {
+  const out: number[] = []
+  for (const v of ticks) {
+    const prev = out.at(-1)
+    if (prev !== undefined && v - prev > MAX_TICK_GAP) {
+      const steps = Math.min(Math.ceil((v - prev) / MAX_TICK_GAP), MAX_SPLITS)
+      for (let s = 1; s < steps; s++) out.push(tick(prev + ((v - prev) * s) / steps))
+    }
+    out.push(v)
+  }
+  return out
+}
+
+/**
+ * The open run of one axis that `at` sits in, bounded by the nearest wall on
+ * either side whose span actually crosses `probe` on the other axis — or by
+ * the search region itself, where nothing does.
+ *
+ * This is deliberately not a fixed point (an anchor, a box centre): the two
+ * nodes a connector joins can sit anywhere relative to each other, and their
+ * ports carry no relation to how much open space happens to separate the
+ * boxes at a given spot. Reading the gap off the walls themselves is what
+ * lets the centering bias below track the actual free space between two
+ * nodes as they move — including shrinking right along with it as the nodes
+ * are dragged closer together — rather than aiming at a spot that stays put
+ * while the room around it changes size.
+ */
+function openInterval(
+  walls: Box[],
+  fixedAxis: 'x' | 'y',
+  probe: number,
+  at: number,
+  lo: number,
+  hi: number,
+): [number, number] {
+  let near = lo
+  let far = hi
+  for (const w of walls) {
+    const wLo = fixedAxis === 'x' ? w.x : w.y
+    const wSpan = fixedAxis === 'x' ? w.width : w.height
+    if (probe <= wLo || probe >= wLo + wSpan) continue
+    const bLo = fixedAxis === 'x' ? w.y : w.x
+    const bHi = fixedAxis === 'x' ? w.y + w.height : w.x + w.width
+    if (bHi <= at && bHi > near) near = bHi
+    if (bLo >= at && bLo < far) far = bLo
+  }
+  return [near, far]
+}
+
+/** How far `at` sits from the middle of `[lo, hi]`. */
+const centerOffset = (at: number, [lo, hi]: [number, number]) => Math.abs(at - (lo + hi) / 2)
+
+/**
+ * Tie-break weight pulling a free bend toward the middle of the open space it
+ * crosses, so where a bend's exact position is open — costing the same
+ * wherever it falls along an obstacle-free stretch — the search settles on
+ * the one a person would draw instead of whichever the grid happened to
+ * visit first.
+ *
+ * Charged once per turn, against its distance from the middle of the local
+ * gap {@link openInterval} finds at that turn — not against distance from a
+ * fixed point such as the anchors' own midpoint, which stays put as the two
+ * nodes move and so drifts outside the gap, and not against distance from the
+ * straight line between the anchors, which rewards cutting a forced detour
+ * short instead of centering it — both recreate the hugging this exists to
+ * fix. Only ever compared within one value of {@link COST_SCALE} — see there
+ * for why that keeps it powerless to change which route is actually
+ * shortest.
+ */
+const CENTER_BIAS = 0.1
+
+/**
+ * What one real pixel — or one {@link TURN_COST} — of route cost is worth in
+ * the units the search actually minimises.
+ *
+ * The search has to weigh real cost first and the centering bias only as a
+ * tiebreak between routes already equal on that: a bend free to land
+ * anywhere in open space should land in the middle, but never at the price of
+ * a longer or cornier route — that was the bug centering by raw bias alone
+ * produced, trading real distance for a straighter-looking detour. Scaling
+ * real cost up here and leaving the bias unscaled gets both at once: real
+ * cost so dwarfs the bias that no plausible accumulation of it can look
+ * cheaper than the next real-cost step (real costs move in units of at least
+ * 0.5, so keeping total bias on any one path under half of `COST_SCALE` — true
+ * with room to spare at diagram-sized path lengths — keeps it from ever
+ * crossing one), while genuine ties in real cost still separate cleanly once
+ * the bias is added on top.
+ */
+const COST_SCALE = 1e7
+
 /** Drops the middle of any three points that lie on one straight run. */
 function simplify(points: Vec[]): Vec[] {
   const out: Vec[] = []
@@ -488,15 +610,19 @@ function detour(
 
   const xHi = region.x + region.width
   const yHi = region.y + region.height
-  const xs = axisTicks(
-    [region.x, xHi, s.x, s1.x, t.x, t1.x, ...walls.flatMap((w) => [w.x, w.x + w.width])],
-    region.x,
-    xHi,
+  const xs = withMidpoints(
+    axisTicks(
+      [region.x, xHi, s.x, s1.x, t.x, t1.x, ...walls.flatMap((w) => [w.x, w.x + w.width])],
+      region.x,
+      xHi,
+    ),
   )
-  const ys = axisTicks(
-    [region.y, yHi, s.y, s1.y, t.y, t1.y, ...walls.flatMap((w) => [w.y, w.y + w.height])],
-    region.y,
-    yHi,
+  const ys = withMidpoints(
+    axisTicks(
+      [region.y, yHi, s.y, s1.y, t.y, t1.y, ...walls.flatMap((w) => [w.y, w.y + w.height])],
+      region.y,
+      yHi,
+    ),
   )
   const nx = xs.length
   const ny = ys.length
@@ -512,7 +638,7 @@ function detour(
   const start = stateOf(sx, sy, dirOf(sa.normal))
   const goal = stateOf(tx, ty, dirOf({ x: -ta.normal.x, y: -ta.normal.y }))
   const heuristic = (ix: number, iy: number) =>
-    Math.abs(xs[ix]! - xs[tx]!) + Math.abs(ys[iy]! - ys[ty]!)
+    (Math.abs(xs[ix]! - xs[tx]!) + Math.abs(ys[iy]! - ys[ty]!)) * COST_SCALE
 
   const best = new Map<number, number>([[start, 0]])
   const cameFrom = new Map<number, number>()
@@ -542,7 +668,16 @@ function detour(
       const a = { x: xs[ix]!, y: ys[iy]! }
       const b = { x: xs[jx]!, y: ys[jy]! }
       if (walls.some((w) => segmentBlocked(a, b, w))) continue
-      const cost = g + Math.abs(b.x - a.x) + Math.abs(b.y - a.y) + (step === dir ? 0 : TURN_COST)
+      const turning = step !== dir
+      const turnBias = !turning
+        ? 0
+        : dir === 1 || dir === 3
+          ? centerOffset(a.y, openInterval(walls, 'x', a.x, a.y, region.y, yHi))
+          : centerOffset(a.x, openInterval(walls, 'y', a.y, a.x, region.x, xHi))
+      const cost =
+        g +
+        (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) + (turning ? TURN_COST : 0)) * COST_SCALE +
+        CENTER_BIAS * turnBias
       const next = stateOf(jx, jy, step)
       if (cost >= (best.get(next) ?? Infinity)) continue
       best.set(next, cost)
@@ -600,6 +735,33 @@ function fromPolyline(points: Vec[], radius: number): EdgeGeometry {
     startDir: { x: (first.x - afterFirst.x) / ls, y: (first.y - afterFirst.y) / ls },
     endDir: { x: (last.x - beforeLast.x) / le, y: (last.y - beforeLast.y) / le },
   }
+}
+
+/**
+ * Whether the polyline folds back on itself: two consecutive legs running the
+ * same axis in opposite directions, rather than turning onto the other one.
+ *
+ * `orthogonalPoints` only ever produces axis-aligned legs, so consecutive
+ * ones are exactly parallel, exactly perpendicular, or exactly opposite —
+ * nothing in between — which is what lets a plain sign check stand in for a
+ * real angle. It happens when a stub sends the line further from the other
+ * node before the shared midpoint pulls it back — most often two ends on the
+ * same side (both `right`, say) with one node behind the other along that
+ * axis — and once rounded, the corner shows as the line visibly doubling back
+ * on itself rather than turning a clean corner.
+ */
+function reversesDirection(points: Vec[]): boolean {
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = points[i - 1]!
+    const p = points[i]!
+    const b = points[i + 1]!
+    const d1x = p.x - a.x
+    const d1y = p.y - a.y
+    const d2x = b.x - p.x
+    const d2y = b.y - p.y
+    if (d1x * d2x + d1y * d2y < -0.01) return true
+  }
+  return false
 }
 
 /** The plain right-angled route between two anchors, ignoring everything else. */
@@ -748,7 +910,7 @@ export function edgeGeometry(
 
   /* orthogonal */
   const points = orthogonalPoints(s, t, sa, ta)
-  if (polylineBlocked(points, walls)) {
+  if (polylineBlocked(points, walls) || reversesDirection(points)) {
     const around = detourRoute(s, t, sa, ta, others, [source, target])
     if (around) return fromPolyline(around, DETOUR_RADIUS.orthogonal)
   }
