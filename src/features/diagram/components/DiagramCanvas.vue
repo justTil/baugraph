@@ -14,7 +14,7 @@ import type {
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { Check } from '@lucide/vue'
+import { Check, Waypoints } from '@lucide/vue'
 import type { ColorKey } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -49,6 +49,7 @@ const {
   edges,
   canvas,
   dirty,
+  reconnectingEdge,
   selectedNodes,
   commit,
   endCoalesce,
@@ -673,6 +674,27 @@ watch(isVisible, (visible) => {
             class="!right-3 !bottom-3 !rounded-md !border"
           />
         </VueFlow>
+
+        <!-- Top-centre indicator, up for as long as a connection's own end is being dragged loose. -->
+        <Transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="-translate-y-1 opacity-0"
+          leave-active-class="transition duration-150 ease-in"
+          leave-to-class="-translate-y-1 opacity-0"
+        >
+          <div
+            v-if="reconnectingEdge"
+            class="pointer-events-none absolute top-4 left-1/2 z-30 -translate-x-1/2"
+          >
+            <div
+              class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
+              :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
+            >
+              <Waypoints :size="14" :style="{ color: theme.selection }" />
+              Moving connection — drop it on a node to reconnect
+            </div>
+          </div>
+        </Transition>
 
         <!-- Alignment guides; only up while a drag is held against something. -->
         <svg

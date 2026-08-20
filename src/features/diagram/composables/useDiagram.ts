@@ -156,6 +156,14 @@ function createDiagramStore(documentId: string) {
   const fitRequest = ref(0)
 
   /**
+   * Set by a connection's own component for as long as one of its ends is
+   * being dragged loose, so the canvas — which has no other way to tell a
+   * connection is mid-drag from a node dragging its own dot — can show its own
+   * "reconnecting" indicator regardless of which connection it is.
+   */
+  const reconnectingEdge = ref(false)
+
+  /**
    * Whether this diagram has edits that are not in a file yet.
    *
    * The autosave below means nothing is *lost* when a tab closes — the diagram
@@ -1474,6 +1482,7 @@ function createDiagramStore(documentId: string) {
     lockedCount,
     fitRequest,
     dirty,
+    reconnectingEdge,
     // actions
     markSaved,
     commit,

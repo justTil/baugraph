@@ -13,7 +13,7 @@ import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
-const { canvas, reconnectEdge, commit, endCoalesce } = useDiagram()
+const { canvas, reconnectEdge, reconnectingEdge, commit, endCoalesce } = useDiagram()
 const { getNodes } = useVueFlow()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 
@@ -192,6 +192,7 @@ const { handlePointerDown } = useHandle({
   onEdgeUpdate: (_event, connection) => applyReconnect(connection),
   onEdgeUpdateEnd: () => {
     dragging.value = false
+    reconnectingEdge.value = false
   },
 })
 
@@ -206,6 +207,7 @@ function startReconnect(event: MouseEvent, end: 'source' | 'target') {
   commit()
   endCoalesce()
   dragging.value = true
+  reconnectingEdge.value = true
   dragNodeId.value = end === 'source' ? props.target : props.source
   dragHandleId.value = null
   dragFixedEnd.value = end === 'source' ? 'target' : 'source'
