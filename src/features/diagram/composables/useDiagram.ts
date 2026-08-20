@@ -115,6 +115,20 @@ const HISTORY_LIMIT = 100
 const storageKey = (documentId: string) => `baugraph:document:v1:${documentId}`
 
 /**
+ * The last copied selection, held at module scope rather than per document so
+ * a paste can land in a different open tab than the copy came from.
+ *
+ * A plain variable, not a `ref`: nothing renders off this, and wrapping it in
+ * one would make Vue proxy the nodes/edges it holds — which `structuredClone`
+ * cannot clone.
+ */
+let clipboard: { nodes: DiagramNode[]; edges: DiagramEdge[] } | null = null
+/** How far a paste offsets from the copied position; grows with each repeat so pastes don't stack. */
+let pasteOffset = 0
+/** Whether the clipboard holds a copy, so a Paste menu item can grey itself out. */
+const hasClipboard = ref(false)
+
+/**
  * Everything one open diagram owns: its contents, its undo history and its
  * autosave. Built per document rather than per module so two editor tabs can
  * hold two unrelated diagrams without either seeing the other's state.
@@ -140,6 +154,14 @@ function createDiagramStore(documentId: string) {
 
   /** Set by the view once Vue Flow is mounted, so the store can trigger a re-fit. */
   const fitRequest = ref(0)
+
+  /**
+   * Set by a connection's own component for as long as one of its ends is
+   * being dragged loose, so the canvas — which has no other way to tell a
+   * connection is mid-drag from a node dragging its own dot — can show its own
+   * "reconnecting" indicator regardless of which connection it is.
+   */
+  const reconnectingEdge = ref(false)
 
   /**
    * Whether this diagram has edits that are not in a file yet.
@@ -648,6 +670,41 @@ function createDiagramStore(documentId: string) {
     return edge
   }
 
+  /**
+   * Re-plugs one end of an existing connection into a different node — dragging
+   * its own endpoint the way a fresh connection is drawn from a dot. The edge
+   * keeps its id, so anything hung off it (a flow, a label) stays attached.
+   */
+  function reconnectEdge(
+    id: string,
+    source: string,
+    target: string,
+    ends: { sourceSide: Side; targetSide: Side; sourcePort: number; targetPort: number },
+  ): boolean {
+    if (source === target) return false
+    if (edges.value.some((e) => e.id !== id && e.source === source && e.target === target)) {
+      return false
+    }
+    let changed = false
+    edges.value = edges.value.map((e) => {
+      if (e.id !== id) return e
+      changed = true
+      return {
+        ...e,
+        source,
+        target,
+        data: {
+          ...(e.data as EdgeData),
+          sourceSide: ends.sourceSide,
+          targetSide: ends.targetSide,
+          sourcePort: ends.sourcePort,
+          targetPort: ends.targetPort,
+        },
+      }
+    })
+    return changed
+  }
+
   /* -------------------------------------------------------------- flows */
 
   /**
@@ -919,6 +976,70 @@ function createDiagramStore(documentId: string) {
       ...copiedNodes.map((n) => ({ ...n, selected: true })),
     ]
     edges.value = [...edges.value, ...copiedEdges]
+  }
+
+  /** Copies the selection to the shared clipboard, ready for `pasteClipboard`. */
+  function copySelection() {
+    const source = selectedNodes.value
+    if (!source.length) return
+    const ids = new Set(source.map((n) => n.id))
+    clipboard = {
+      nodes: source.map((n) => structuredClone(toModelNode(n))),
+      edges: edges.value
+        .filter((e) => ids.has(e.source) && ids.has(e.target))
+        .map((e) => structuredClone(toModelEdge(e))),
+    }
+    pasteOffset = 0
+    hasClipboard.value = true
+  }
+
+  /**
+   * Drops the clipboard into this document, offsetting a little further each
+   * repeat so successive pastes fan out instead of stacking on top of each other.
+   */
+  function pasteClipboard() {
+    const copy = clipboard
+    if (!copy?.nodes.length) return
+    pasteOffset += 24
+    const offset = pasteOffset
+    const taken = takenNodeIds()
+    const idMap = new Map<string, string>()
+
+    const copies = copy.nodes.map((node) => {
+      const id = makeNodeId(node.label || 'node', taken)
+      taken.add(id)
+      idMap.set(node.id, id)
+      return {
+        ...structuredClone(node),
+        id,
+        position: { x: node.position.x + offset, y: node.position.y + offset },
+      }
+    })
+
+    // A pasted child keeps its parent only if that parent was copied too.
+    const pastedNodes = copies.map((node) =>
+      toVueFlowNode({
+        ...node,
+        parent: node.parent && idMap.has(node.parent) ? idMap.get(node.parent)! : null,
+      }),
+    )
+
+    const takenEdges = takenEdgeIds()
+    const pastedEdges = copy.edges
+      .filter((e) => idMap.has(e.source) && idMap.has(e.target))
+      .map((e) => {
+        const source = idMap.get(e.source)!
+        const target = idMap.get(e.target)!
+        const id = makeEdgeId(source, target, takenEdges)
+        takenEdges.add(id)
+        return toVueFlowEdge({ ...structuredClone(e), id, source, target })
+      })
+
+    nodes.value = [
+      ...nodes.value.map((n) => ({ ...n, selected: false })),
+      ...pastedNodes.map((n) => ({ ...n, selected: true })),
+    ]
+    edges.value = [...edges.value, ...pastedEdges]
   }
 
   /**
@@ -1361,6 +1482,7 @@ function createDiagramStore(documentId: string) {
     lockedCount,
     fitRequest,
     dirty,
+    reconnectingEdge,
     // actions
     markSaved,
     commit,
@@ -1370,8 +1492,12 @@ function createDiagramStore(documentId: string) {
     snap,
     addNode,
     addEdge,
+    reconnectEdge,
     removeSelection,
     duplicateSelection,
+    copySelection,
+    pasteClipboard,
+    hasClipboard: computed(() => hasClipboard.value),
     groupSelection,
     ungroupSelection,
     regroup,

@@ -805,6 +805,7 @@ function withCommit(fn: () => void) {
           <p>
             Hover a node and drag one of its dots onto another node to connect them.
           </p>
+          <p>Drag either end of a connection onto a different node to reconnect it.</p>
           <p>Double-click a node to rename it inline.</p>
           <p>Right-click a node, connection or the canvas for the actions that apply to it.</p>
         </section>
