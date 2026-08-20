@@ -15,8 +15,7 @@ import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import { Check } from '@lucide/vue'
-import type { ColorKey, PortSide, Side } from '@/model'
-import { PORT_SIDES } from '@/model'
+import type { ColorKey } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
@@ -36,6 +35,7 @@ import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
 import type { AlignGuide } from '@/features/diagram/lib/align-snap'
 import { alignSnap } from '@/features/diagram/lib/align-snap'
 import type { Box } from '@/features/diagram/lib/edge-path'
+import { endpointOf } from '@/features/diagram/lib/edge-path'
 import { DEFAULT_PALETTE_ITEM, type PaletteItem } from '@/features/diagram/data/palette'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 
@@ -106,17 +106,6 @@ function minimapNodeColor(node: { data?: { color?: ColorKey }; type?: string }) 
 }
 
 /* ------------------------------------------------------------ connections */
-
-/**
- * Splits a handle id — `right:3` — back into the side and the connection point
- * on it that the drag actually touched. Anything unrecognised is `auto`, which
- * is what a connection to a node with no dots of its own (a zone) comes out as.
- */
-function endpointOf(handleId: string | null | undefined): { side: Side; port: number } {
-  const [side, port] = (handleId ?? '').split(':')
-  if (!PORT_SIDES.includes(side as PortSide)) return { side: 'auto', port: 1 }
-  return { side: side as Side, port: Number(port) || 1 }
-}
 
 /**
  * How far from a connection dot a drag may be released and still land on it.

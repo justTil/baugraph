@@ -662,6 +662,41 @@ function createDiagramStore(documentId: string) {
     return edge
   }
 
+  /**
+   * Re-plugs one end of an existing connection into a different node — dragging
+   * its own endpoint the way a fresh connection is drawn from a dot. The edge
+   * keeps its id, so anything hung off it (a flow, a label) stays attached.
+   */
+  function reconnectEdge(
+    id: string,
+    source: string,
+    target: string,
+    ends: { sourceSide: Side; targetSide: Side; sourcePort: number; targetPort: number },
+  ): boolean {
+    if (source === target) return false
+    if (edges.value.some((e) => e.id !== id && e.source === source && e.target === target)) {
+      return false
+    }
+    let changed = false
+    edges.value = edges.value.map((e) => {
+      if (e.id !== id) return e
+      changed = true
+      return {
+        ...e,
+        source,
+        target,
+        data: {
+          ...(e.data as EdgeData),
+          sourceSide: ends.sourceSide,
+          targetSide: ends.targetSide,
+          sourcePort: ends.sourcePort,
+          targetPort: ends.targetPort,
+        },
+      }
+    })
+    return changed
+  }
+
   /* -------------------------------------------------------------- flows */
 
   /**
@@ -1448,6 +1483,7 @@ function createDiagramStore(documentId: string) {
     snap,
     addNode,
     addEdge,
+    reconnectEdge,
     removeSelection,
     duplicateSelection,
     copySelection,

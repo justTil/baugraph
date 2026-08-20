@@ -1,5 +1,5 @@
 import type { NodePorts, PortSide, Route, Side } from '@/model'
-import { nodePorts } from '@/model'
+import { nodePorts, PORT_SIDES } from '@/model'
 import { EDGE_PX } from '@/features/diagram/lib/theme'
 
 /**
@@ -32,6 +32,20 @@ export interface EdgeGeometry {
   /** Unit vectors pointing outwards at each end, for arrowheads. */
   startDir: Vec
   endDir: Vec
+}
+
+/**
+ * Splits a Vue Flow handle id — `right:3` — back into the side and the
+ * connection point on it a drag actually touched. Anything unrecognised is
+ * `auto`, which is what a connection to a node with no dots of its own (a
+ * zone) comes out as, and what the fixed end of a reconnect drag comes out as
+ * too — Baugraph's own edges never carry a concrete handle id of their own
+ * (see `toVueFlowEdge`), so that end has to fall back on its stored side.
+ */
+export function endpointOf(handleId: string | null | undefined): { side: Side; port: number } {
+  const [side, port] = (handleId ?? '').split(':')
+  if (!PORT_SIDES.includes(side as PortSide)) return { side: 'auto', port: 1 }
+  return { side: side as Side, port: Number(port) || 1 }
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))

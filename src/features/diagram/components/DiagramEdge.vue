@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import type { CSSProperties } from 'vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import type { EdgeProps } from '@vue-flow/core'
-import { useVueFlow } from '@vue-flow/core'
+import type { Connection, EdgeProps } from '@vue-flow/core'
+import { useHandle, useVueFlow } from '@vue-flow/core'
 import type { EdgeData, NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
-import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
+import { arrowHeadPath, dashArray, edgeGeometry, endpointOf } from '@/features/diagram/lib/edge-path'
 import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
 import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
-const { canvas } = useDiagram()
+const { canvas, reconnectEdge, commit, endCoalesce } = useDiagram()
 const { getNodes } = useVueFlow()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 
@@ -111,6 +111,107 @@ watch(
 
 onBeforeUnmount(() => unregisterEdgePath(props.id))
 
+/* ---------------------------------------------------------- reconnecting */
+
+/**
+ * How much of the connector, at each end, can be grabbed and dragged onto a
+ * different node — dragging the drawn line itself near its tip, rather than
+ * a dot only findable by first hovering exactly over it. Capped at half the
+ * connector's own length, so the two ends of a short connector meet in the
+ * middle instead of trying to overlap.
+ */
+const GRAB_FRACTION = 0.35
+const GRAB_SAMPLES = 20
+
+const nearSourcePath = ref('')
+const nearTargetPath = ref('')
+
+/** A subpath of `el`, from length `from` to `to`, as its own polyline `d`. */
+function sampleRange(el: SVGPathElement, from: number, to: number): string {
+  if (to <= from) return ''
+  let d = ''
+  for (let i = 0; i <= GRAB_SAMPLES; i++) {
+    const { x, y } = el.getPointAtLength(from + ((to - from) * i) / GRAB_SAMPLES)
+    d += i === 0 ? `M${x},${y}` : `L${x},${y}`
+  }
+  return d
+}
+
+/**
+ * Rebuilds the two grab zones from the line actually on screen, rather than
+ * re-deriving them from `geometry` — sampling the rendered path is one
+ * implementation that works whether that geometry is a straight run, a
+ * curve, or a routed polyline, with no case to add when routing grows one.
+ */
+function updateGrabZones() {
+  const el = pathEl.value
+  if (!el) return
+  const len = el.getTotalLength()
+  const reach = Math.min(len * GRAB_FRACTION, len / 2)
+  nearSourcePath.value = sampleRange(el, 0, reach)
+  nearTargetPath.value = sampleRange(el, len - reach, len)
+}
+
+watch([pathEl, () => geometry.value.path], updateGrabZones, { flush: 'post' })
+
+/** Set while an end is being dragged loose, so the drawn line stays out of the way of Vue Flow's own in-progress connection line. */
+const dragging = ref(false)
+
+const dragNodeId = ref('')
+const dragHandleId = ref<string | null>(null)
+/** Which end of a *fresh* connection the fixed node would be playing. */
+const dragFixedEnd = ref<'source' | 'target'>('source')
+
+/**
+ * Only one end of a reconnect drag ever moves — Vue Flow holds the other
+ * fixed and reports it back with no handle id of its own, so that end's side
+ * and port are kept from the connection's existing data rather than read off
+ * the event, or the drag would reset it to `auto` on every reconnect.
+ */
+function applyReconnect(connection: Connection) {
+  const sourceMoved = connection.target === props.target
+  const from = sourceMoved
+    ? endpointOf(connection.sourceHandle)
+    : { side: props.data.sourceSide, port: props.data.sourcePort }
+  const to = sourceMoved
+    ? { side: props.data.targetSide, port: props.data.targetPort }
+    : endpointOf(connection.targetHandle)
+  reconnectEdge(props.id, connection.source, connection.target, {
+    sourceSide: from.side,
+    sourcePort: from.port,
+    targetSide: to.side,
+    targetPort: to.port,
+  })
+}
+
+const { handlePointerDown } = useHandle({
+  nodeId: dragNodeId,
+  handleId: dragHandleId,
+  type: dragFixedEnd,
+  edgeUpdaterType: dragFixedEnd,
+  onEdgeUpdate: (_event, connection) => applyReconnect(connection),
+  onEdgeUpdateEnd: () => {
+    dragging.value = false
+  },
+})
+
+/**
+ * Picks up whichever end the drag started nearest to, holding the other end
+ * fixed — the same mechanic a fresh connection is drawn with (see `onConnect`
+ * in `DiagramCanvas`), just starting from the connector's own tip instead of
+ * a node's dot.
+ */
+function startReconnect(event: MouseEvent, end: 'source' | 'target') {
+  if (event.button !== 0) return
+  commit()
+  endCoalesce()
+  dragging.value = true
+  dragNodeId.value = end === 'source' ? props.target : props.source
+  dragHandleId.value = null
+  dragFixedEnd.value = end === 'source' ? 'target' : 'source'
+  handlePointerDown(event)
+}
+
 /**
  * Lit while the inspector points at a flow that runs over this connection. The
  * halo takes the flow's colour, so two flows sharing a connection stay tellable
@@ -137,69 +238,121 @@ const label = computed(() => {
 </script>
 
 <template>
-  <!-- Invisible fat stroke first, so thin edges are still easy to click. -->
-  <path
-    :d="geometry.path"
-    fill="none"
-    stroke="transparent"
-    stroke-width="16"
-    class="vue-flow__edge-interaction"
-  />
-  <!-- Halo for a flow the inspector is pointing at; under the line it belongs to. -->
-  <path
-    v-if="highlight"
-    :d="geometry.path"
-    fill="none"
-    :stroke="highlight"
-    stroke-width="9"
-    stroke-opacity="0.22"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    class="pointer-events-none"
-  />
-
-  <path
-    :id="id"
-    ref="pathEl"
-    :d="geometry.path"
-    :style="lineStyle"
-    class="vue-flow__edge-path"
-  />
-
-  <path
-    v-if="showEndArrow"
-    :d="arrowHeadPath(geometry.end, geometry.endDir, lineWidth)"
-    :fill="stroke"
-  />
-  <path
-    v-if="showStartArrow"
-    :d="arrowHeadPath(geometry.start, geometry.startDir, lineWidth)"
-    :fill="stroke"
-  />
-
-  <!-- Messages travelling this connection, and any moving line under them. -->
-  <FlowTokens :edge-id="id" :path="geometry.path" :line-width="lineWidth" />
-
-  <template v-if="label">
-    <rect
-      :x="label.x"
-      :y="label.y"
-      :width="label.width"
-      height="18"
-      rx="4"
-      :fill="label.fill"
-      :stroke="label.stroke"
-      stroke-width="1"
+  <!--
+    Hidden for the length of a reconnect drag: Vue Flow draws its own
+    connection-in-progress line from the fixed end to the cursor, and with the
+    real connection still on screen underneath, the two would read as two
+    connections rather than one being moved.
+  -->
+  <template v-if="!dragging">
+    <!-- Invisible fat stroke first, so thin edges are still easy to click. -->
+    <path
+      :d="geometry.path"
+      fill="none"
+      stroke="transparent"
+      stroke-width="16"
+      class="vue-flow__edge-interaction"
     />
-    <text
-      :x="geometry.mid.x"
-      :y="geometry.mid.y + 4"
-      text-anchor="middle"
-      font-size="11"
-      :fill="label.color"
-      class="pointer-events-none select-none"
-    >
-      {{ label.text }}
-    </text>
+    <!-- Halo for a flow the inspector is pointing at; under the line it belongs to. -->
+    <path
+      v-if="highlight"
+      :d="geometry.path"
+      fill="none"
+      :stroke="highlight"
+      stroke-width="9"
+      stroke-opacity="0.22"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class="pointer-events-none"
+    />
+
+    <path
+      :id="id"
+      ref="pathEl"
+      :d="geometry.path"
+      :style="lineStyle"
+      class="vue-flow__edge-path"
+    />
+
+    <path
+      v-if="showEndArrow"
+      :d="arrowHeadPath(geometry.end, geometry.endDir, lineWidth)"
+      :fill="stroke"
+    />
+    <path
+      v-if="showStartArrow"
+      :d="arrowHeadPath(geometry.start, geometry.startDir, lineWidth)"
+      :fill="stroke"
+    />
+
+    <!-- Messages travelling this connection, and any moving line under them. -->
+    <FlowTokens :edge-id="id" :path="geometry.path" :line-width="lineWidth" />
+
+    <template v-if="label">
+      <rect
+        :x="label.x"
+        :y="label.y"
+        :width="label.width"
+        height="18"
+        rx="4"
+        :fill="label.fill"
+        :stroke="label.stroke"
+        stroke-width="1"
+      />
+      <text
+        :x="geometry.mid.x"
+        :y="geometry.mid.y + 4"
+        text-anchor="middle"
+        font-size="11"
+        :fill="label.color"
+        class="pointer-events-none select-none"
+      >
+        {{ label.text }}
+      </text>
+    </template>
   </template>
+
+  <!--
+    Where the connection itself can be picked up and dragged onto a different
+    node — the last stretch of the line at each end, not just its exact tip.
+    Invisible until hovered, same as a node's own dots (see `ShapeNode`).
+  -->
+  <path
+    v-if="nearSourcePath"
+    :d="nearSourcePath"
+    fill="none"
+    stroke-width="20"
+    stroke-linecap="round"
+    class="bg-edge__grab"
+    @mousedown="startReconnect($event, 'source')"
+  />
+  <path
+    v-if="nearTargetPath"
+    :d="nearTargetPath"
+    fill="none"
+    stroke-width="20"
+    stroke-linecap="round"
+    class="bg-edge__grab"
+    @mousedown="startReconnect($event, 'target')"
+  />
 </template>
+
+<style scoped>
+/*
+ * Transparent until the connector is hovered, when it lights up to show
+ * exactly how much of the end is grabbable — a node's own dots follow the
+ * same rule, and for the same reason: shown all the time, one of these at
+ * both ends of every connection on the canvas would be its own kind of
+ * clutter.
+ */
+.bg-edge__grab {
+  stroke: var(--bg-selection);
+  stroke-opacity: 0;
+  cursor: crosshair;
+  transition: stroke-opacity 120ms ease;
+}
+
+.bg-edge__grab:hover {
+  stroke-opacity: 0.25;
+}
+</style>
