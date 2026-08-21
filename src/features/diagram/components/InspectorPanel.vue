@@ -33,7 +33,14 @@ import EdgeFlowSection from '@/features/diagram/components/EdgeFlowSection.vue'
 import type { PortSide, Side } from '@/model'
 import { MAX_PORTS, PORT_SIDES, SHAPE_KEYS, nodePorts } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
-import { TECH_CATEGORIES, categoryFirst, techTerms } from '@/features/diagram/data/tech'
+import {
+  addCustomTech,
+  categoryFirst,
+  customTech,
+  removeCustomTech,
+  techCategoriesWithCustom,
+  techTerms,
+} from '@/features/diagram/data/tech'
 import { diagramTheme } from '@/features/diagram/lib/theme'
 import { fitZoneMinSize } from '@/features/diagram/lib/auto-size'
 
@@ -132,7 +139,7 @@ const sharedBorder = computed(() => {
 /** The technology catalogue, with the category this node's type suggests first. */
 const techGroups = computed(() =>
   categoryFirst(
-    TECH_CATEGORIES.map((category) => ({
+    techCategoriesWithCustom.value.map((category) => ({
       id: category.id,
       label: category.label,
       items: category.items.map((item) => ({
@@ -144,6 +151,15 @@ const techGroups = computed(() =>
     nodeType(node.value?.data.type)?.tech,
   ),
 )
+
+/** Ids the technology picker may offer a remove button for — a user's own additions. */
+const customTechIds = computed(() => new Set(customTech.map((item) => item.id)))
+
+/** Adds a typed technology and applies it to `ids` right away. */
+function createTech(ids: string[], label: string) {
+  const item = addCustomTech(label)
+  withCommit(() => ids.forEach((id) => setNodeTech(id, item.id)))
+}
 
 const SHAPE_LABELS: Record<string, string> = {
   rect: 'Rectangle',
@@ -314,7 +330,11 @@ function withCommit(fn: () => void) {
               placeholder="Not specified"
               clear-label="No technology"
               search-placeholder="PostgreSQL, Kafka, IBM MQ…"
+              allow-custom
+              :removable-ids="customTechIds"
               @update:model-value="withCommit(() => setNodeTech(node!.id, $event))"
+              @create="createTech([node!.id], $event)"
+              @remove="removeCustomTech($event)"
             />
           </div>
         </section>
@@ -746,9 +766,13 @@ function withCommit(fn: () => void) {
             :placeholder="sharedTech === null ? 'Mixed' : 'Not specified'"
             clear-label="No technology"
             search-placeholder="PostgreSQL, Kafka, IBM MQ…"
+            allow-custom
+            :removable-ids="customTechIds"
             @update:model-value="
               withCommit(() => selectedNodes.forEach((n) => setNodeTech(n.id, $event)))
             "
+            @create="createTech(selectedNodes.map((n) => n.id), $event)"
+            @remove="removeCustomTech($event)"
           />
         </section>
 

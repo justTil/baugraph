@@ -17,7 +17,7 @@ export interface PickerGroup {
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { Ban, Check, ChevronsUpDown } from '@lucide/vue'
+import { Ban, Check, ChevronsUpDown, Plus, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -37,16 +37,28 @@ const props = withDefaults(
     /** Label of the entry that clears the selection. */
     clearLabel?: string
     searchPlaceholder?: string
+    /**
+     * Offers "Add “<query>” …" when nothing matches, and a remove button next
+     * to entries listed in `removableIds`.
+     */
+    allowCustom?: boolean
+    /** Ids that may be removed again — a picker's own past additions. */
+    removableIds?: Set<string>
   }>(),
   {
     placeholder: 'Not set',
     clearLabel: 'None',
     searchPlaceholder: 'Search…',
+    allowCustom: false,
+    removableIds: () => new Set(),
   },
 )
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
+  /** A picker with `allowCustom` asking the parent to add this as a new entry. */
+  (e: 'create', label: string): void
+  (e: 'remove', id: string): void
 }>()
 
 const open = ref(false)
@@ -81,15 +93,33 @@ const results = computed(() => {
     .filter((group) => group.items.length > 0)
 })
 
+/** Whether the typed text is worth offering as a new entry: non-empty and not already there. */
+const createLabel = computed(() => {
+  if (!props.allowCustom) return null
+  const trimmed = query.value.trim()
+  if (!trimmed) return null
+  const exists = props.groups.some((group) =>
+    group.items.some((item) => item.label.toLowerCase() === trimmed.toLowerCase()),
+  )
+  return exists ? null : trimmed
+})
+
 function select(id: string) {
   emit('update:modelValue', id)
   open.value = false
 }
 
-/** Enter takes the first match, so a picker never needs the mouse. */
+function create() {
+  if (!createLabel.value) return
+  emit('create', createLabel.value)
+  open.value = false
+}
+
+/** Enter takes the first match, or adds the typed text when nothing matched. */
 function takeFirst() {
   const first = results.value[0]?.items[0]
   if (first) select(first.id)
+  else create()
 }
 
 watch(open, (isOpen) => {
@@ -157,30 +187,53 @@ watch(open, (isOpen) => {
           >
             {{ group.label }}
           </div>
-          <button
+          <div
             v-for="item in group.items"
             :key="item.id"
-            type="button"
-            :title="item.id"
             :class="
               cn(
-                'hover:bg-accent flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs',
+                'group hover:bg-accent flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs',
                 modelValue === item.id && 'bg-accent',
               )
             "
-            @click="select(item.id)"
           >
-            <component
-              :is="iconComponent(item.icon)"
-              v-if="item.icon && iconComponent(item.icon)"
-              class="size-3.5 shrink-0 opacity-70"
-            />
-            <span class="flex-1 truncate">{{ item.label }}</span>
-            <Check v-if="modelValue === item.id" class="size-3.5 shrink-0" />
-          </button>
+            <button
+              type="button"
+              :title="item.id"
+              class="flex min-w-0 flex-1 items-center gap-1.5"
+              @click="select(item.id)"
+            >
+              <component
+                :is="iconComponent(item.icon)"
+                v-if="item.icon && iconComponent(item.icon)"
+                class="size-3.5 shrink-0 opacity-70"
+              />
+              <span class="flex-1 truncate">{{ item.label }}</span>
+              <Check v-if="modelValue === item.id" class="size-3.5 shrink-0" />
+            </button>
+            <button
+              v-if="removableIds.has(item.id)"
+              type="button"
+              title="Remove"
+              class="hover:text-destructive shrink-0 opacity-0 group-hover:opacity-60 hover:opacity-100"
+              @click.stop="emit('remove', item.id)"
+            >
+              <X class="size-3.5" />
+            </button>
+          </div>
         </template>
 
-        <p v-if="!results.length" class="text-muted-foreground px-1.5 py-2 text-xs">
+        <button
+          v-if="createLabel"
+          type="button"
+          class="hover:bg-accent text-muted-foreground hover:text-foreground mt-0.5 flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs"
+          @click="create()"
+        >
+          <Plus class="size-3.5 shrink-0" />
+          <span class="flex-1 truncate">Add “{{ createLabel }}”</span>
+        </button>
+
+        <p v-if="!results.length && !createLabel" class="text-muted-foreground px-1.5 py-2 text-xs">
           Nothing matches “{{ query }}”.
         </p>
       </div>

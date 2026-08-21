@@ -77,7 +77,7 @@ import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { PALETTE, type PaletteItem } from '@/features/diagram/data/palette'
 import { NODE_TYPE_GROUPS } from '@/features/diagram/data/node-types'
-import { TECH_CATEGORIES } from '@/features/diagram/data/tech'
+import { techCategoriesWithCustom } from '@/features/diagram/data/tech'
 import { COLOR_HEX, COLOR_SWATCHES, diagramTheme } from '@/features/diagram/lib/theme'
 import { exportJson } from '@/features/diagram/lib/export'
 import {
@@ -380,7 +380,7 @@ function copySelectionIds() {
             No technology
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuSub v-for="category in TECH_CATEGORIES" :key="category.id">
+          <ContextMenuSub v-for="category in techCategoriesWithCustom" :key="category.id">
             <ContextMenuSubTrigger>{{ category.label }}</ContextMenuSubTrigger>
             <ContextMenuSubContent class="max-h-80">
               <ContextMenuRadioGroup :model-value="node.data?.tech">
@@ -739,7 +739,7 @@ function copySelectionIds() {
         <ContextMenuSubContent class="max-h-80">
           <ContextMenuItem @select="act(() => applyTech(''))">No technology</ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuSub v-for="category in TECH_CATEGORIES" :key="category.id">
+          <ContextMenuSub v-for="category in techCategoriesWithCustom" :key="category.id">
             <ContextMenuSubTrigger>{{ category.label }}</ContextMenuSubTrigger>
             <ContextMenuSubContent class="max-h-80">
               <ContextMenuItem
