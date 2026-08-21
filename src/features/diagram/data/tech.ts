@@ -11,6 +11,9 @@
  * dropped. See `techLabel`.
  */
 
+import { computed, reactive } from 'vue'
+import { slugify, uniqueId } from '@/model'
+
 export interface TechItem {
   /** Stable snake_case id, written to the diagram file as `tech`. */
   id: string
@@ -42,6 +45,9 @@ export const TECH_CATEGORIES: TechCategory[] = [
       { id: 'mysql', label: 'MySQL' },
       { id: 'mariadb', label: 'MariaDB' },
       { id: 'oracle_database', label: 'Oracle Database', aliases: ['oracle'] },
+      { id: 'oracle_database_11g', label: 'Oracle Database 11g', aliases: ['oracle 11g'] },
+      { id: 'oracle_database_12c', label: 'Oracle Database 12c', aliases: ['oracle 12c'] },
+      { id: 'oracle_database_19c', label: 'Oracle Database 19c', aliases: ['oracle 19c'] },
       { id: 'ibm_db2', label: 'IBM DB2', aliases: ['db2'] },
       { id: 'microsoft_sql_server', label: 'Microsoft SQL Server', aliases: ['mssql', 't-sql'] },
       { id: 'sqlite', label: 'SQLite' },
@@ -194,7 +200,12 @@ export const TECH_CATEGORIES: TechCategory[] = [
     nodeType: 'esb',
     items: [
       { id: 'tibco_businessworks', label: 'TIBCO BusinessWorks', aliases: ['bw'] },
+      { id: 'tibco_businessworks_5', label: 'TIBCO BusinessWorks 5', aliases: ['bw5', 'bw 5'] },
+      { id: 'tibco_businessworks_6', label: 'TIBCO BusinessWorks 6', aliases: ['bw6', 'bw 6'] },
+      { id: 'tibco_platform', label: 'TIBCO Platform' },
       { id: 'tibco_flogo', label: 'TIBCO Flogo' },
+      { id: 'sap_ecc', label: 'SAP ECC', aliases: ['sap erp', 'r/3', 'sap r3'] },
+      { id: 'sap_s4hana', label: 'SAP S/4HANA', aliases: ['s4hana', 's/4', 's4/hana'] },
       { id: 'mulesoft', label: 'MuleSoft Anypoint', aliases: ['mule'] },
       { id: 'apache_camel', label: 'Apache Camel' },
       { id: 'spring_integration', label: 'Spring Integration' },
@@ -247,6 +258,10 @@ export const TECH_CATEGORIES: TechCategory[] = [
     nodeType: 'service',
     items: [
       { id: 'java', label: 'Java', aliases: ['jvm'] },
+      { id: 'java_8', label: 'Java 8', aliases: ['jdk 8', 'java se 8'] },
+      { id: 'java_11', label: 'Java 11', aliases: ['jdk 11', 'java se 11'] },
+      { id: 'java_17', label: 'Java 17', aliases: ['jdk 17', 'java se 17'] },
+      { id: 'java_21', label: 'Java 21', aliases: ['jdk 21', 'java se 21'] },
       { id: 'spring_boot', label: 'Spring Boot', aliases: ['spring'] },
       { id: 'jakarta_ee', label: 'Jakarta EE', aliases: ['java ee', 'j2ee'] },
       { id: 'quarkus', label: 'Quarkus' },
@@ -254,7 +269,8 @@ export const TECH_CATEGORIES: TechCategory[] = [
       { id: 'kotlin', label: 'Kotlin' },
       { id: 'scala', label: 'Scala' },
       { id: 'groovy', label: 'Groovy' },
-      { id: 'dotnet', label: '.NET', aliases: ['c#', 'csharp'] },
+      { id: 'dotnet', label: '.NET', aliases: ['c#', 'csharp', '.net core', '.net 5', '.net 6', '.net 8'] },
+      { id: 'dotnet_framework', label: '.NET Framework', aliases: ['.net fx', 'classic .net', '.net 4.8'] },
       { id: 'aspnet_core', label: 'ASP.NET Core' },
       { id: 'node_js', label: 'Node.js', aliases: ['node'] },
       { id: 'typescript', label: 'TypeScript', aliases: ['ts'] },
@@ -316,7 +332,8 @@ export const TECH_CATEGORIES: TechCategory[] = [
       { id: 'eclipse_jetty', label: 'Eclipse Jetty' },
       { id: 'wildfly', label: 'WildFly', aliases: ['jboss'] },
       { id: 'red_hat_jboss_eap', label: 'Red Hat JBoss EAP', aliases: ['jboss eap'] },
-      { id: 'ibm_websphere', label: 'IBM WebSphere', aliases: ['was'] },
+      { id: 'ibm_websphere', label: 'IBM WebSphere Application Server', aliases: ['was', 'websphere traditional'] },
+      { id: 'ibm_websphere_liberty', label: 'IBM WebSphere Liberty', aliases: ['liberty'] },
       { id: 'oracle_weblogic', label: 'Oracle WebLogic' },
       { id: 'microsoft_iis', label: 'Microsoft IIS' },
       { id: 'caddy', label: 'Caddy' },
@@ -545,8 +562,67 @@ const categoryByTech = new Map(
   TECH_CATEGORIES.flatMap((category) => category.items.map((item) => [item.id, category])),
 )
 
+/**
+ * Technologies a user typed in that the built-in catalogue does not carry —
+ * "Add as technology" in the picker pushes here instead of being lost the
+ * moment the node is deselected. Kept in the browser, not the diagram file:
+ * a node that uses one still just stores its id like any other tech.
+ */
+export const CUSTOM_TECH_CATEGORY_ID = 'custom'
+const CUSTOM_STORAGE_KEY = 'baugraph:custom-tech:v1'
+
+function readCustomTech(): TechItem[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_STORAGE_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (entry): entry is TechItem =>
+        !!entry && typeof entry.id === 'string' && typeof entry.label === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
+function writeCustomTech() {
+  try {
+    localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(customTech))
+  } catch {
+    // Quota or private-mode failures are not worth interrupting the user for.
+  }
+}
+
+export const customTech = reactive<TechItem[]>(readCustomTech())
+
+/** Adds a user-typed technology and returns it, reusing an existing one of the same name. */
+export function addCustomTech(label: string): TechItem {
+  const trimmed = label.trim()
+  const existing = [...TECH_ITEMS, ...customTech].find(
+    (item) => item.label.toLowerCase() === trimmed.toLowerCase(),
+  )
+  if (existing) return existing
+
+  const id = uniqueId(
+    slugify(trimmed, 'tech').replace(/-/g, '_'),
+    [...byId.keys(), ...customTech.map((item) => item.id)],
+  )
+  const item: TechItem = { id, label: trimmed }
+  customTech.push(item)
+  writeCustomTech()
+  return item
+}
+
+export function removeCustomTech(id: string) {
+  const index = customTech.findIndex((item) => item.id === id)
+  if (index < 0) return
+  customTech.splice(index, 1)
+  writeCustomTech()
+}
+
 export function techItem(id?: string | null): TechItem | undefined {
-  return id ? byId.get(id) : undefined
+  if (!id) return undefined
+  return byId.get(id) ?? customTech.find((item) => item.id === id)
 }
 
 export function techCategory(id?: string | null): TechCategory | undefined {
@@ -570,7 +646,7 @@ export function humanise(id: string): string {
 /** Display name for a technology id. Unknown ids are humanised, never dropped. */
 export function techLabel(id?: string | null): string {
   if (!id) return ''
-  return byId.get(id)?.label ?? humanise(id)
+  return techItem(id)?.label ?? humanise(id)
 }
 
 /** Every term a search box should match an entry on. */
@@ -604,3 +680,23 @@ export function searchTech(query: string, first?: string | null): TechCategory[]
   })).filter((category) => category.items.length > 0)
   return categoryFirst(matched, first)
 }
+
+/**
+ * The built-in catalogue plus a trailing "Custom" category for whatever a user
+ * has typed in — wherever a technology is picked from a list of categories,
+ * this is that list, so a custom entry is reachable the same way a built-in
+ * one is.
+ */
+export const techCategoriesWithCustom = computed<TechCategory[]>(() =>
+  customTech.length
+    ? [
+        ...TECH_CATEGORIES,
+        {
+          id: CUSTOM_TECH_CATEGORY_ID,
+          label: 'Custom',
+          nodeType: 'service',
+          items: customTech,
+        },
+      ]
+    : TECH_CATEGORIES,
+)
