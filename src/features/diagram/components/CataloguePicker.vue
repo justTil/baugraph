@@ -200,7 +200,7 @@ watch(open, (isOpen) => {
             <button
               type="button"
               :title="item.id"
-              class="flex min-w-0 flex-1 items-center gap-1.5"
+              class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
               @click="select(item.id)"
             >
               <component
