@@ -2,12 +2,12 @@
  * Legal texts (Datenschutzerklärung, Haftungsausschluss).
  *
  * The Impressum itself is *not* maintained here: it is hosted by
- * online-impressum.de and embedded verbatim by the Impressum view, so it stays
- * correct without a redeploy. See `imprintUrl` below.
+ * online-impressum.de, and the sidebar's "Impressum" entry links to it
+ * directly, so it stays correct without a redeploy. See `imprintUrl` below.
  *
  * German law requires an Impressum to be "leicht erkennbar, unmittelbar
- * erreichbar und ständig verfügbar" (§ 5 DDG), which is why both the Impressum
- * and these texts are first-class views rather than a dialog.
+ * erreichbar und ständig verfügbar" (§ 5 DDG), which is why it is a direct,
+ * always-visible sidebar link rather than something buried in a dialog.
  *
  * ─────────────────────────────────────────────────────────────────────────
  * Values marked with `TODO:` are still placeholders; the Legal view renders a
@@ -25,9 +25,9 @@ export type LegalLocale = 'de' | 'en'
 const TODO = 'TODO:'
 
 /**
- * Externally hosted Impressum, embedded by `ImprintView`.
- * Single source of truth for the § 5 DDG details — edit it at online-impressum.de,
- * not here.
+ * Externally hosted Impressum, linked directly from the sidebar's "Impressum"
+ * entry (opens in a new tab). Single source of truth for the § 5 DDG details —
+ * edit it at online-impressum.de, not here.
  */
 export const imprintUrl = 'https://mein.online-impressum.de/baugraph/'
 
@@ -519,9 +519,9 @@ const en: LegalDocument[] = [
 export const legalDocuments: Record<LegalLocale, LegalDocument[]> = { de, en }
 
 /**
- * Shown below the embedded Impressum. The hosted page covers § 5 DDG and
- * consumer dispute resolution; this only adds what it cannot know — that the
- * service is private and non-commercial.
+ * Shown on the Legal page, next to the link to the hosted Impressum. The
+ * hosted page covers § 5 DDG and consumer dispute resolution; this only adds
+ * what it cannot know — that the service is private and non-commercial.
  */
 export const imprintNotice: Record<LegalLocale, string> = {
   de: `${site.name} ist ein privates, nicht-kommerzielles Projekt. Die Anwendung wird `

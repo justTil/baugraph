@@ -171,6 +171,11 @@ const SHORTCUTS: [string, string][] = [
             <code class="bg-muted rounded px-1 font-mono text-xs">/schema/baugraph-v1.schema.json</code>.
           </p>
           <p>Exports from the original single-file tool are recognised and converted on open.</p>
+          <p class="text-muted-foreground text-xs">
+            The <em>Copy AI skills</em> button in the toolbar hands an AI assistant the file
+            format, both catalogues and the schema as one block of text, so it can write diagrams
+            for you.
+          </p>
         </section>
 
         <section class="space-y-2">

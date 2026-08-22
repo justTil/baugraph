@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
+  Check,
+  Copy,
   Grid3x3,
   Magnet,
   Maximize,
@@ -20,10 +22,12 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { HEADER_ACTIONS_SLOT_SELECTOR } from '@/components/layout/header-slot'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
+import { AI_SKILLS_MARKDOWN } from '@/features/diagram/data/ai-skills.generated'
 
 const emit = defineEmits<{
   (e: 'new' | 'open' | 'save' | 'export' | 'help'): void
@@ -56,6 +60,19 @@ function onTitleInput() {
  * field after a click, and Tailwind's variant order lets the hover rule win.
  */
 const editingTitle = ref(false)
+
+/**
+ * The field reference, both catalogues and the JSON Schema, generated from the
+ * same source the app runs on (see `scripts/generate-ai-skills.ts`) — copies
+ * everything an AI assistant needs to write a `.baugraph.json` by hand.
+ */
+const aiSkillsCopied = ref(false)
+
+async function copyAiSkills() {
+  await navigator.clipboard?.writeText(AI_SKILLS_MARKDOWN).catch(() => {})
+  aiSkillsCopied.value = true
+  setTimeout(() => (aiSkillsCopied.value = false), 1500)
+}
 </script>
 
 <template>
@@ -201,6 +218,35 @@ const editingTitle = ref(false)
 
     <Separator orientation="vertical" class="mx-1 h-4" />
 
+    <Button variant="ghost" size="icon" class="size-8" title="Help (?)" @click="emit('help')">
+      ?
+    </Button>
+  </div>
+
+  <!--
+    File-level actions live in the app-chrome row, next to the title, rather
+    than down here with the rest of the toolbar - they're what you reach for
+    with the least regard for what's on the canvas.
+  -->
+  <Teleport :to="HEADER_ACTIONS_SLOT_SELECTOR">
+    <Separator orientation="vertical" class="mx-1 h-4" />
+
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="sm" class="h-8" @click="copyAiSkills">
+          <Check v-if="aiSkillsCopied" />
+          <Copy v-else />
+          {{ aiSkillsCopied ? 'Copied' : 'Copy AI skills' }}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        The file format, both catalogues and the schema — paste it into an AI assistant so it can
+        write diagrams for you.
+      </TooltipContent>
+    </Tooltip>
+
+    <Separator orientation="vertical" class="mx-1 h-4" />
+
     <Button variant="ghost" size="sm" class="h-8" @click="emit('new')">New</Button>
     <Button variant="ghost" size="sm" class="h-8" @click="emit('open')">Open</Button>
     <Tooltip>
@@ -220,8 +266,5 @@ const editingTitle = ref(false)
       <TooltipContent>{{ saveHint }}</TooltipContent>
     </Tooltip>
     <Button variant="outline" size="sm" class="h-8" @click="emit('export')">Export</Button>
-    <Button variant="ghost" size="icon" class="size-8" title="Help (?)" @click="emit('help')">
-      ?
-    </Button>
-  </div>
+  </Teleport>
 </template>

@@ -3,7 +3,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
-import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type {
   Connection,
   EdgeMouseEvent,
@@ -15,9 +15,11 @@ import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import { Check, Waypoints } from '@lucide/vue'
-import type { ColorKey } from '@/model'
+import type { ColorKey, DiagramParseError } from '@/model'
+import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Switch } from '@/components/ui/switch'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
@@ -68,6 +70,8 @@ const {
   updateEdgeData,
   nudgeSelection,
   fitRequest,
+  toDocument,
+  replaceDocument,
 } = useDiagram()
 
 const {
@@ -96,6 +100,47 @@ const theme = computed(() => diagramTheme(canvas.theme))
 
 /** The last palette item used, repeated by a double-click on empty canvas. */
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
+
+/* ---------------------------------------------------------------- JSON view */
+
+/** Monaco is a couple of megabytes; nothing pulls it in until the tab is opened. */
+const JsonEditor = defineAsyncComponent({
+  loader: () => import('@/features/diagram/components/JsonEditor.vue'),
+  loadingComponent: {
+    render: () =>
+      h(
+        'div',
+        { class: 'text-muted-foreground flex size-full items-center justify-center font-mono text-xs' },
+        'Loading editor…',
+      ),
+  },
+  delay: 150,
+})
+
+const viewMode = ref<'diagram' | 'json'>('diagram')
+const jsonDraft = ref('')
+const jsonError = ref<DiagramParseError | null>(null)
+
+/**
+ * Switching to JSON snapshots the current document as text; switching back
+ * applies whatever was typed there. Invalid JSON keeps the tab open with the
+ * error shown rather than silently discarding the edit or the diagram.
+ */
+function setViewMode(next: string | undefined) {
+  if (!next || next === viewMode.value) return
+  if (next === 'diagram') {
+    const result = safeParse(jsonDraft.value)
+    if (!result.ok) {
+      jsonError.value = result.error
+      return
+    }
+    if (stringify(result.document) !== stringify(toDocument())) replaceDocument(result.document)
+  } else {
+    jsonDraft.value = stringify(toDocument())
+    jsonError.value = null
+  }
+  viewMode.value = next as 'diagram' | 'json'
+}
 
 /** Minimap swatches echo each node's own colour instead of a flat grey. */
 function minimapNodeColor(node: { data?: { color?: ColorKey }; type?: string }) {
@@ -434,7 +479,12 @@ function isTyping(target: EventTarget | null): boolean {
   if (!el) return false
   return (
     el.isContentEditable ||
-    ['input', 'textarea', 'select'].includes(el.tagName?.toLowerCase() ?? '')
+    ['input', 'textarea', 'select'].includes(el.tagName?.toLowerCase() ?? '') ||
+    // Monaco's newer input strategy focuses a plain, non-editable
+    // `.native-edit-context` div rather than a textarea, so without this a
+    // shortcut like ⌘V or ⌘A reaches this handler instead of the editor -
+    // pasting into (or selecting) the diagram behind it instead of the text.
+    !!el.closest?.('.monaco-editor')
   )
 }
 
@@ -607,19 +657,19 @@ watch(isVisible, (visible) => {
 
 <template>
   <ContextMenu @update:open="menuOpen = $event">
+    <div
+      class="relative min-h-0 flex-1"
+      :style="{
+        '--bg-canvas': theme.bg,
+        '--bg-selection': theme.selection,
+        '--bg-connect': theme.connect,
+        background: theme.bg,
+      }"
+      @dragover="onDragOver"
+      @drop="onDrop"
+    >
     <ContextMenuTrigger as-child>
-      <div
-        class="relative min-h-0 flex-1"
-        :style="{
-          '--bg-canvas': theme.bg,
-          '--bg-selection': theme.selection,
-          '--bg-connect': theme.connect,
-          background: theme.bg,
-        }"
-        @dragover="onDragOver"
-        @drop="onDrop"
-        @contextmenu.capture="onContextMenuCapture"
-      >
+      <div v-show="viewMode === 'diagram'" class="absolute inset-0" @contextmenu.capture="onContextMenuCapture">
         <!--
           `elevate-nodes-on-select` is off on purpose: Vue Flow would otherwise lift
           a selected node 1000 layers up, so selecting a zone made it jump in front
@@ -778,6 +828,49 @@ watch(isVisible, (visible) => {
         </div>
       </div>
     </ContextMenuTrigger>
+
+    <!-- The diagram's document as editable text — the way in for JSON pasted from an AI assistant. -->
+    <div
+      v-if="viewMode === 'json'"
+      class="absolute inset-0 z-10 flex flex-col gap-3 p-4"
+    >
+      <div class="min-h-0 flex-1 overflow-hidden rounded-md border" :style="{ borderColor: theme.line }">
+        <JsonEditor v-model="jsonDraft" :dark="theme.dark" />
+      </div>
+      <div
+        v-if="jsonError"
+        class="space-y-1 rounded-md border p-2"
+        :style="{ borderColor: theme.selection, background: theme.surface }"
+      >
+        <p class="text-destructive text-xs font-medium">{{ jsonError.message }}</p>
+        <ul
+          v-if="jsonError.issues.length"
+          class="text-muted-foreground max-h-24 space-y-0.5 overflow-y-auto font-mono text-[11px]"
+        >
+          <li v-for="issue in jsonError.issues" :key="`${issue.path}:${issue.message}`">
+            <span class="text-foreground">{{ issue.path }}</span> — {{ issue.message }}
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Always on top, so there is a way back from JSON however it was reached. -->
+    <label
+      class="absolute top-4 right-4 z-40 flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm select-none"
+      :style="{ background: theme.surface, borderColor: theme.line }"
+    >
+      <span :style="{ color: viewMode === 'diagram' ? theme.ink : undefined }" class="text-muted-foreground">
+        Diagram
+      </span>
+      <Switch
+        :model-value="viewMode === 'json'"
+        @update:model-value="setViewMode($event ? 'json' : 'diagram')"
+      />
+      <span :style="{ color: viewMode === 'json' ? theme.ink : undefined }" class="text-muted-foreground">
+        JSON
+      </span>
+    </label>
+    </div>
 
     <CanvasContextMenu
       :target="menuTarget"

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { AlertTriangle } from '@lucide/vue'
+import { AlertTriangle, ExternalLink } from '@lucide/vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import LegalBlockText from '@/features/legal/components/LegalBlockText.vue'
 import type { LegalLocale } from '@/config/legal'
-import { bindingLocaleNotice, hasPlaceholders, legalDocuments } from '@/config/legal'
+import { bindingLocaleNotice, hasPlaceholders, imprintNotice, imprintUrl, legalDocuments } from '@/config/legal'
 
 const locale = ref<LegalLocale>('de')
 const documents = computed(() => legalDocuments[locale.value])
@@ -18,9 +18,25 @@ const activeTab = ref(legalDocuments.de[0]?.id ?? '')
 <template>
   <div class="mx-auto w-full max-w-3xl space-y-4 overflow-y-auto p-6">
     <!--
+      The Impressum itself is hosted at online-impressum.de and opens directly
+      from the sidebar; this only adds what the hosted page cannot know.
+    -->
+    <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+      <p class="text-muted-foreground">{{ imprintNotice[locale] }}</p>
+      <a
+        :href="imprintUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1.5 text-xs underline underline-offset-4"
+      >
+        Impressum
+        <ExternalLink class="size-3.5" />
+      </a>
+    </div>
+
+    <!--
       Placeholders would ship as an invalid privacy policy, which is exactly the
       kind of thing nobody notices until it is cited at them. Say so loudly.
-      (The Impressum itself is embedded from online-impressum.de, see ImprintView.)
     -->
     <div
       v-if="hasPlaceholders"

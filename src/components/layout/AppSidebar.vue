@@ -18,6 +18,8 @@ import { useNavigation } from '@/composables/useNavigation'
 import PalettePanel from '@/features/diagram/components/PalettePanel.vue'
 
 const { groups, isActive, isOpen, isVisible, setActiveItem } = useNavigation()
+
+const version = __APP_VERSION__
 </script>
 
 <template>
@@ -39,6 +41,7 @@ const { groups, isActive, isOpen, isVisible, setActiveItem } = useNavigation()
               <span class="truncate font-semibold">Baugraph</span>
               <span class="text-muted-foreground truncate text-xs">Architecture diagrams</span>
             </div>
+            <span class="text-muted-foreground shrink-0 font-mono text-[11px]">v{{ version }}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
@@ -53,10 +56,14 @@ const { groups, isActive, isOpen, isVisible, setActiveItem } = useNavigation()
           <SidebarMenu>
             <SidebarMenuItem v-for="item in group.items" :key="item.id">
               <SidebarMenuButton
+                :as="item.href ? 'a' : 'button'"
+                :href="item.href"
+                :target="item.href ? '_blank' : undefined"
+                :rel="item.href ? 'noopener noreferrer' : undefined"
                 :is-active="isActive(item.id)"
                 :disabled="item.disabled"
                 :tooltip="item.label"
-                @click="setActiveItem(item.id)"
+                @click="!item.href && setActiveItem(item.id)"
               >
                 <component :is="item.icon" v-if="item.icon" />
                 <span>{{ item.label }}</span>

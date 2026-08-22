@@ -11,7 +11,8 @@
     "type-check": "vue-tsc --build",
     "schema:generate": "vite-node scripts/generate-schema.ts",
     "icons:generate": "vite-node scripts/generate-icons.ts",
-    "generate": "run-s schema:generate icons:generate"
+    "ai-skills:generate": "vite-node scripts/generate-ai-skills.ts",
+    "generate": "run-s schema:generate icons:generate ai-skills:generate"
   },
   "dependencies": {
     "@lucide/vue": "^1.28.0",
@@ -26,6 +27,7 @@
     "clsx": "^2.1.1",
     "dockview-vue": "^8.1.0",
     "gsap": "^3.15.0",
+    "monaco-editor": "^0.56.0",
     "reka-ui": "^2.10.1",
     "shadcn-vue": "^2.8.1",
     "tailwind-merge": "^3.6.0",

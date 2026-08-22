@@ -1460,6 +1460,14 @@ function createDiagramStore(documentId: string) {
     fitRequest.value++
   }
 
+  /** Replaces the document from an in-place edit (the JSON view), keeping it undoable. */
+  function replaceDocument(doc: DiagramDocument) {
+    commit()
+    applyDocument(doc)
+    endCoalesce()
+    fitRequest.value++
+  }
+
   scope.run(() => {
     watch([nodes, edges, flows, meta, canvas], persist, { deep: true })
     // The canvas settings and the flows are ours alone — nothing but an edit
@@ -1526,6 +1534,7 @@ function createDiagramStore(documentId: string) {
     alignSelection,
     nudgeSelection,
     loadDocument,
+    replaceDocument,
     toDocument,
     sizeOf,
     restorePersisted: restore,
