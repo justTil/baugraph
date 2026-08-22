@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { FileText, Trash2, Upload } from '@lucide/vue'
+import { ClipboardPaste, FileText, Trash2, Upload } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,6 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
 import type { DiagramParseError } from '@/model'
 import { safeParse } from '@/model'
 import { linkDocumentFile } from '@/features/diagram/composables/useDocumentFile'
@@ -35,6 +37,8 @@ const { documents } = useDocuments()
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
 const error = ref<DiagramParseError | null>(null)
+const source = ref<'upload' | 'paste'>('upload')
+const pasted = ref('')
 
 /**
  * Takes the parsed diagram into its own tab, so opening a file never puts the
@@ -102,6 +106,12 @@ function onPick(event: Event) {
   void ingest(input.files?.[0])
   input.value = ''
 }
+
+/** Same pipeline as file ingestion, just fed from the textarea instead of a File. */
+function loadPasted() {
+  error.value = null
+  adopt(pasted.value, null)
+}
 </script>
 
 <template>
@@ -115,26 +125,53 @@ function onPick(event: Event) {
         </DialogDescription>
       </DialogHeader>
 
-      <div
-        class="rounded-lg border-2 border-dashed p-8 text-center transition-colors"
-        :class="dragging ? 'border-primary bg-accent' : 'border-muted'"
-        @dragover.prevent="dragging = true"
-        @dragleave="dragging = false"
-        @drop.prevent="onDrop"
-      >
-        <Upload class="text-muted-foreground mx-auto mb-3 size-6" />
-        <p class="text-muted-foreground mb-3 text-sm">Drop a file here</p>
-        <Button variant="outline" size="sm" @click="canOverwriteFiles ? choose() : fileInput?.click()">
-          Choose file…
-        </Button>
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".json,application/json"
-          class="hidden"
-          @change="onPick"
-        />
-      </div>
+      <Tabs v-model="source">
+        <TabsList class="w-full">
+          <TabsTrigger value="upload" class="flex-1">
+            <Upload class="size-3.5" />
+            Upload
+          </TabsTrigger>
+          <TabsTrigger value="paste" class="flex-1">
+            <ClipboardPaste class="size-3.5" />
+            Paste JSON
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="upload">
+          <div
+            class="rounded-lg border-2 border-dashed p-8 text-center transition-colors"
+            :class="dragging ? 'border-primary bg-accent' : 'border-muted'"
+            @dragover.prevent="dragging = true"
+            @dragleave="dragging = false"
+            @drop.prevent="onDrop"
+          >
+            <Upload class="text-muted-foreground mx-auto mb-3 size-6" />
+            <p class="text-muted-foreground mb-3 text-sm">Drop a file here</p>
+            <Button variant="outline" size="sm" @click="canOverwriteFiles ? choose() : fileInput?.click()">
+              Choose file…
+            </Button>
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".json,application/json"
+              class="hidden"
+              @change="onPick"
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="paste" class="space-y-2">
+          <Textarea
+            v-model="pasted"
+            placeholder="Paste diagram JSON here…"
+            class="min-h-40 font-mono text-xs"
+            spellcheck="false"
+          />
+          <Button variant="outline" size="sm" :disabled="!pasted.trim()" @click="loadPasted">
+            Load
+          </Button>
+        </TabsContent>
+      </Tabs>
 
       <div v-if="documents.length" class="space-y-2">
         <p class="text-muted-foreground text-xs font-medium">Stored in this browser</p>
