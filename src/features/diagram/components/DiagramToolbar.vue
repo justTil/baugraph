@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
+  Check,
+  Copy,
   Grid3x3,
   Magnet,
   Maximize,
@@ -24,6 +26,7 @@ import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
+import { AI_SKILLS_MARKDOWN } from '@/features/diagram/data/ai-skills.generated'
 
 const emit = defineEmits<{
   (e: 'new' | 'open' | 'save' | 'export' | 'help'): void
@@ -56,6 +59,19 @@ function onTitleInput() {
  * field after a click, and Tailwind's variant order lets the hover rule win.
  */
 const editingTitle = ref(false)
+
+/**
+ * The field reference, both catalogues and the JSON Schema, generated from the
+ * same source the app runs on (see `scripts/generate-ai-skills.ts`) — copies
+ * everything an AI assistant needs to write a `.baugraph.json` by hand.
+ */
+const aiSkillsCopied = ref(false)
+
+async function copyAiSkills() {
+  await navigator.clipboard?.writeText(AI_SKILLS_MARKDOWN).catch(() => {})
+  aiSkillsCopied.value = true
+  setTimeout(() => (aiSkillsCopied.value = false), 1500)
+}
 </script>
 
 <template>
@@ -197,6 +213,22 @@ const editingTitle = ref(false)
         </Button>
       </TooltipTrigger>
       <TooltipContent>Diagram theme</TooltipContent>
+    </Tooltip>
+
+    <Separator orientation="vertical" class="mx-1 h-4" />
+
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="sm" class="h-8" @click="copyAiSkills">
+          <Check v-if="aiSkillsCopied" />
+          <Copy v-else />
+          {{ aiSkillsCopied ? 'Copied' : 'Copy AI skills' }}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        The file format, both catalogues and the schema — paste it into an AI assistant so it can
+        write diagrams for you.
+      </TooltipContent>
     </Tooltip>
 
     <Separator orientation="vertical" class="mx-1 h-4" />

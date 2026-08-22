@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Check, Copy } from '@lucide/vue'
-import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -10,23 +7,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ICONS } from '@/features/diagram/data/icons'
-import { AI_SKILLS_MARKDOWN } from '@/features/diagram/data/ai-skills.generated'
 
 const open = defineModel<boolean>('open', { required: true })
-
-/**
- * Everything an AI assistant needs to write a `.baugraph.json` by hand — the
- * field reference, both catalogues and the JSON Schema, generated from the
- * same source the app runs on (see `scripts/generate-ai-skills.ts`), so it
- * never drifts from what a new palette entry or field actually is.
- */
-const copied = ref(false)
-
-async function copyAiSkills() {
-  await navigator.clipboard?.writeText(AI_SKILLS_MARKDOWN).catch(() => {})
-  copied.value = true
-  setTimeout(() => (copied.value = false), 1500)
-}
 
 const SHORTCUTS: [string, string][] = [
   ['Shift + drag', 'rubber-band select'],
@@ -189,17 +171,11 @@ const SHORTCUTS: [string, string][] = [
             <code class="bg-muted rounded px-1 font-mono text-xs">/schema/baugraph-v1.schema.json</code>.
           </p>
           <p>Exports from the original single-file tool are recognised and converted on open.</p>
-          <div class="flex items-center gap-2 pt-1">
-            <Button variant="outline" size="sm" class="h-7" @click="copyAiSkills">
-              <Check v-if="copied" />
-              <Copy v-else />
-              {{ copied ? 'Copied' : 'Copy AI skills' }}
-            </Button>
-            <p class="text-muted-foreground text-xs">
-              The file format, both catalogues and the schema, as one block of text — paste it
-              into an AI assistant so it can write diagrams for you.
-            </p>
-          </div>
+          <p class="text-muted-foreground text-xs">
+            The <em>Copy AI skills</em> button in the toolbar hands an AI assistant the file
+            format, both catalogues and the schema as one block of text, so it can write diagrams
+            for you.
+          </p>
         </section>
 
         <section class="space-y-2">
