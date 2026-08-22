@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { HEADER_ACTIONS_SLOT_SELECTOR } from '@/components/layout/header-slot'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
@@ -217,6 +218,19 @@ async function copyAiSkills() {
 
     <Separator orientation="vertical" class="mx-1 h-4" />
 
+    <Button variant="ghost" size="icon" class="size-8" title="Help (?)" @click="emit('help')">
+      ?
+    </Button>
+  </div>
+
+  <!--
+    File-level actions live in the app-chrome row, next to the title, rather
+    than down here with the rest of the toolbar - they're what you reach for
+    with the least regard for what's on the canvas.
+  -->
+  <Teleport :to="HEADER_ACTIONS_SLOT_SELECTOR">
+    <Separator orientation="vertical" class="mx-1 h-4" />
+
     <Tooltip>
       <TooltipTrigger as-child>
         <Button variant="ghost" size="sm" class="h-8" @click="copyAiSkills">
@@ -252,8 +266,5 @@ async function copyAiSkills() {
       <TooltipContent>{{ saveHint }}</TooltipContent>
     </Tooltip>
     <Button variant="outline" size="sm" class="h-8" @click="emit('export')">Export</Button>
-    <Button variant="ghost" size="icon" class="size-8" title="Help (?)" @click="emit('help')">
-      ?
-    </Button>
-  </div>
+  </Teleport>
 </template>

@@ -479,7 +479,12 @@ function isTyping(target: EventTarget | null): boolean {
   if (!el) return false
   return (
     el.isContentEditable ||
-    ['input', 'textarea', 'select'].includes(el.tagName?.toLowerCase() ?? '')
+    ['input', 'textarea', 'select'].includes(el.tagName?.toLowerCase() ?? '') ||
+    // Monaco's newer input strategy focuses a plain, non-editable
+    // `.native-edit-context` div rather than a textarea, so without this a
+    // shortcut like ⌘V or ⌘A reaches this handler instead of the editor -
+    // pasting into (or selecting) the diagram behind it instead of the text.
+    !!el.closest?.('.monaco-editor')
   )
 }
 

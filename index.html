@@ -5,10 +5,51 @@
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Baugraph</title>
+    <title>Baugraph — architecture diagrams that live in your repository</title>
+    <meta
+      name="description"
+      content="Baugraph is a free, browser-based editor for architecture diagrams — flows, queues, integrations. Diagrams are saved as plain .baugraph.json files meant to be committed next to the code they describe. No account, no server, nothing uploaded."
+    >
+    <link rel="canonical" href="https://baugraph.com/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Baugraph">
+    <meta property="og:title" content="Baugraph — architecture diagrams that live in your repository">
+    <meta
+      property="og:description"
+      content="A free, browser-based editor for architecture diagrams. Diagrams are plain JSON files you commit next to your code — no account, no server, nothing uploaded."
+    >
+    <meta property="og:url" content="https://baugraph.com/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Baugraph — architecture diagrams that live in your repository">
+    <meta
+      name="twitter:description"
+      content="A free, browser-based editor for architecture diagrams. Diagrams are plain JSON files you commit next to your code — no account, no server, nothing uploaded."
+    >
   </head>
   <body>
     <div id="app"></div>
+    <!--
+      Baugraph is a client-rendered editor, so a crawler or a browser without
+      JavaScript would otherwise see an empty page. This is real, static
+      content — not a cloak for something different once scripts load — kept
+      in sync by hand with `src/features/about/views/AboutView.vue`.
+    -->
+    <noscript>
+      <main style="max-width: 40rem; margin: 3rem auto; padding: 0 1.5rem; font: 16px/1.6 system-ui, sans-serif; color: #1c1c1c;">
+        <h1>Baugraph</h1>
+        <p>Architecture diagrams — flows, queues, integrations — that live in your repository.</p>
+        <p>
+          Baugraph is a browser-based diagram editor built on Vue Flow. Diagrams are stored as
+          plain <code>.baugraph.json</code> files designed to be committed next to the code they
+          describe, so a diff shows exactly what changed. Everything runs locally in your
+          browser: there is no account, no server-side storage, and nothing is ever uploaded.
+        </p>
+        <p>The editor itself needs JavaScript enabled to run. Learn more, or browse the source, on
+          <a href="https://github.com/justTil/baugraph">GitHub</a>.
+        </p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
