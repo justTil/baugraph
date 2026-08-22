@@ -1,0 +1,1 @@
+docker build -t baugraph:1.26.0 .
