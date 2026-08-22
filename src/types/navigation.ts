@@ -10,6 +10,11 @@ export interface NavItem {
   icon?: Component
   badge?: string | number
   disabled?: boolean
+  /**
+   * External URL. When set, the item is a plain link that opens in a new tab
+   * instead of switching the active view — for pages that live outside the app.
+   */
+  href?: string
 }
 
 /** A labelled section of the sidebar containing one or more items. */

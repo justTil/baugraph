@@ -11,7 +11,8 @@
     "type-check": "vue-tsc --build",
     "schema:generate": "vite-node scripts/generate-schema.ts",
     "icons:generate": "vite-node scripts/generate-icons.ts",
-    "generate": "run-s schema:generate icons:generate"
+    "ai-skills:generate": "vite-node scripts/generate-ai-skills.ts",
+    "generate": "run-s schema:generate icons:generate ai-skills:generate"
   },
   "dependencies": {
     "@lucide/vue": "^1.28.0",

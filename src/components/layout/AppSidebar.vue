@@ -53,10 +53,14 @@ const { groups, isActive, isOpen, isVisible, setActiveItem } = useNavigation()
           <SidebarMenu>
             <SidebarMenuItem v-for="item in group.items" :key="item.id">
               <SidebarMenuButton
+                :as="item.href ? 'a' : 'button'"
+                :href="item.href"
+                :target="item.href ? '_blank' : undefined"
+                :rel="item.href ? 'noopener noreferrer' : undefined"
                 :is-active="isActive(item.id)"
                 :disabled="item.disabled"
                 :tooltip="item.label"
-                @click="setActiveItem(item.id)"
+                @click="!item.href && setActiveItem(item.id)"
               >
                 <component :is="item.icon" v-if="item.icon" />
                 <span>{{ item.label }}</span>

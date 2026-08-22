@@ -1,5 +1,6 @@
 import type { NavGroup, NavItem } from '@/types/navigation'
 import { Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
+import { imprintUrl } from '@/config/legal'
 
 /**
  * Single source of truth for the sidebar navigation.
@@ -14,7 +15,9 @@ export const navigation: NavGroup[] = [
       // Labelled "Impressum": § 5 DDG wants the entry to be recognisable at a
       // glance, and German case law treats that exact word as unambiguous.
       // Everything else (privacy, liability, copyright) lives under "Legal".
-      { id: 'imprint', label: 'Impressum', icon: Scale },
+      // Opens the hosted Impressum directly in a new tab rather than an
+      // in-app view — "unmittelbar erreichbar" without a redundant embed.
+      { id: 'imprint', label: 'Impressum', icon: Scale, href: imprintUrl },
       { id: 'legal', label: 'Legal', icon: ScrollText },
     ],
   },
