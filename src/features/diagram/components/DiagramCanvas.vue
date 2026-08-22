@@ -3,7 +3,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
-import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type {
   Connection,
   EdgeMouseEvent,
@@ -19,8 +19,7 @@ import type { ColorKey, DiagramParseError } from '@/model'
 import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Textarea } from '@/components/ui/textarea'
-import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
+import { Switch } from '@/components/ui/switch'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
@@ -103,6 +102,20 @@ const theme = computed(() => diagramTheme(canvas.theme))
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
 
 /* ---------------------------------------------------------------- JSON view */
+
+/** Monaco is a couple of megabytes; nothing pulls it in until the tab is opened. */
+const JsonEditor = defineAsyncComponent({
+  loader: () => import('@/features/diagram/components/JsonEditor.vue'),
+  loadingComponent: {
+    render: () =>
+      h(
+        'div',
+        { class: 'text-muted-foreground flex size-full items-center justify-center font-mono text-xs' },
+        'Loading editor…',
+      ),
+  },
+  delay: 150,
+})
 
 const viewMode = ref<'diagram' | 'json'>('diagram')
 const jsonDraft = ref('')
@@ -813,15 +826,12 @@ watch(isVisible, (visible) => {
 
     <!-- The diagram's document as editable text — the way in for JSON pasted from an AI assistant. -->
     <div
-      v-show="viewMode === 'json'"
+      v-if="viewMode === 'json'"
       class="absolute inset-0 z-10 flex flex-col gap-3 p-4"
     >
-      <Textarea
-        v-model="jsonDraft"
-        spellcheck="false"
-        class="min-h-0 flex-1 resize-none font-mono text-xs"
-        :style="{ background: theme.surface, borderColor: theme.line, color: theme.ink }"
-      />
+      <div class="min-h-0 flex-1 overflow-hidden rounded-md border" :style="{ borderColor: theme.line }">
+        <JsonEditor v-model="jsonDraft" :dark="theme.dark" />
+      </div>
       <div
         v-if="jsonError"
         class="space-y-1 rounded-md border p-2"
@@ -840,19 +850,21 @@ watch(isVisible, (visible) => {
     </div>
 
     <!-- Always on top, so there is a way back from JSON however it was reached. -->
-    <div
-      class="absolute top-4 right-4 z-40 rounded-lg border p-0.75 shadow-sm"
+    <label
+      class="absolute top-4 right-4 z-40 flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm select-none"
       :style="{ background: theme.surface, borderColor: theme.line }"
     >
-      <SegmentedField
-        :model-value="viewMode"
-        :options="[
-          { value: 'diagram', label: 'Diagram' },
-          { value: 'json', label: 'JSON' },
-        ]"
-        @update:model-value="setViewMode"
+      <span :style="{ color: viewMode === 'diagram' ? theme.ink : undefined }" class="text-muted-foreground">
+        Diagram
+      </span>
+      <Switch
+        :model-value="viewMode === 'json'"
+        @update:model-value="setViewMode($event ? 'json' : 'diagram')"
       />
-    </div>
+      <span :style="{ color: viewMode === 'json' ? theme.ink : undefined }" class="text-muted-foreground">
+        JSON
+      </span>
+    </label>
     </div>
 
     <CanvasContextMenu
