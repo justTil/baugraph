@@ -1,1 +1,1 @@
-docker build -t justTil/baugraph:1.25.0 .
+docker build -t baugraph:1.26.0 .
