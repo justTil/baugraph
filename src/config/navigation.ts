@@ -1,5 +1,5 @@
 import type { NavGroup, NavItem } from '@/types/navigation'
-import { Info, Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
+import { Copyright, Info, Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
 import { imprintUrl } from '@/config/legal'
 
 /**
@@ -12,13 +12,23 @@ export const navigation: NavGroup[] = [
     items: [
       { id: 'editor', label: 'Diagram', icon: Workflow },
       { id: 'settings', label: 'Settings', icon: Settings },
-      // Labelled "Impressum": § 5 DDG wants the entry to be recognisable at a
-      // glance, and German case law treats that exact word as unambiguous.
-      // Everything else (privacy, liability, copyright) lives under "Legal".
-      // Opens the hosted Impressum directly in a new tab rather than an
-      // in-app view — "unmittelbar erreichbar" without a redundant embed.
-      { id: 'imprint', label: 'Impressum', icon: Scale, href: imprintUrl },
-      { id: 'legal', label: 'Legal', icon: ScrollText },
+      // Impressum and Legal identify Til Schwarze as the site operator (§ 5
+      // DDG / GDPR controller, see `config/legal.ts`) and only apply to the
+      // baugraph.com deployment — a self-hosted instance has a different
+      // operator, so both entries are dropped from that build entirely
+      // rather than shown with someone else's legal details.
+      ...(__SELF_HOSTED__
+        ? []
+        : [
+            // Labelled "Impressum": § 5 DDG wants the entry to be recognisable at a
+            // glance, and German case law treats that exact word as unambiguous.
+            // Everything else (privacy, liability, copyright) lives under "Legal".
+            // Opens the hosted Impressum directly in a new tab rather than an
+            // in-app view — "unmittelbar erreichbar" without a redundant embed.
+            { id: 'imprint', label: 'Impressum', icon: Scale, href: imprintUrl },
+            { id: 'legal', label: 'Legal', icon: ScrollText },
+          ]),
+      { id: 'license', label: 'License', icon: Copyright },
       { id: 'about', label: 'About', icon: Info },
     ],
   },

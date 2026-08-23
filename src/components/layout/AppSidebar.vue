@@ -20,6 +20,7 @@ import PalettePanel from '@/features/diagram/components/PalettePanel.vue'
 const { groups, isActive, isOpen, isVisible, setActiveItem } = useNavigation()
 
 const version = __APP_VERSION__
+const selfHosted = __SELF_HOSTED__
 </script>
 
 <template>
@@ -39,7 +40,10 @@ const version = __APP_VERSION__
             </div>
             <div class="grid flex-1 text-left leading-tight">
               <span class="truncate font-semibold">Baugraph</span>
-              <span class="text-muted-foreground truncate text-xs">Architecture diagrams</span>
+              <span class="text-muted-foreground truncate text-xs">
+                <template v-if="selfHosted">Self-hosted</template>
+                <template v-else>Architecture diagrams</template>
+              </span>
             </div>
             <span class="text-muted-foreground shrink-0 font-mono text-[11px]">v{{ version }}</span>
           </SidebarMenuButton>
