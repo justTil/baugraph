@@ -1,5 +1,5 @@
 import type { NavGroup, NavItem } from '@/types/navigation'
-import { Info, Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
+import { Copyright, Info, Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
 import { imprintUrl } from '@/config/legal'
 
 /**
@@ -19,6 +19,7 @@ export const navigation: NavGroup[] = [
       // in-app view — "unmittelbar erreichbar" without a redundant embed.
       { id: 'imprint', label: 'Impressum', icon: Scale, href: imprintUrl },
       { id: 'legal', label: 'Legal', icon: ScrollText },
+      { id: 'license', label: 'License', icon: Copyright },
       { id: 'about', label: 'About', icon: Info },
     ],
   },
