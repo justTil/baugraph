@@ -1,5 +1,5 @@
 import type { NavGroup, NavItem } from '@/types/navigation'
-import { Copyright, Info, Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
+import { BookOpen, Copyright, Info, Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
 import { imprintUrl } from '@/config/legal'
 
 /**
@@ -12,6 +12,10 @@ export const navigation: NavGroup[] = [
     items: [
       { id: 'editor', label: 'Diagram', icon: Workflow },
       { id: 'settings', label: 'Settings', icon: Settings },
+      // A real page at its own URI (built by VitePress, see docs/) rather than
+      // an in-app dockview panel — so a docs link can be shared or bookmarked
+      // on its own, and works without the app's JS at all.
+      { id: 'docs', label: 'Docs', icon: BookOpen, href: '/docs/' },
       // Impressum and Legal identify Til Schwarze as the site operator (§ 5
       // DDG / GDPR controller, see `config/legal.ts`) and only apply to the
       // baugraph.com deployment — a self-hosted instance has a different

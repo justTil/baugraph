@@ -4,15 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "run-p type-check \"build-only {@}\" --",
+    "dev": "run-p dev:app docs:dev",
+    "dev:app": "vite",
+    "build": "run-p type-check \"build-only {@}\" -- && npm run docs:build",
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "schema:generate": "vite-node scripts/generate-schema.ts",
     "icons:generate": "vite-node scripts/generate-icons.ts",
     "ai-skills:generate": "vite-node scripts/generate-ai-skills.ts",
-    "generate": "run-s schema:generate icons:generate ai-skills:generate"
+    "generate": "run-s schema:generate icons:generate ai-skills:generate",
+    "docs:dev": "vitepress dev docs --port 5174",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@lucide/vue": "^1.28.0",
@@ -46,6 +50,7 @@
     "vite": "^8.1.5",
     "vite-node": "^6.0.0",
     "vite-plugin-vue-devtools": "^8.1.5",
+    "vitepress": "^1.6.4",
     "vue-tsc": "^3.3.7"
   },
   "engines": {

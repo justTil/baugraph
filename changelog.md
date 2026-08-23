@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.28.0]
+
+### Added
+
+- Docs
+
+## [1.27.0]
+
+### Added
+
+- Created amd64 docker image (before it was only arm)
+
+## [1.26.0]
+
+### Added
+
+- Created first docker image
 
 ## [1.25.0] - 2026-08-22
 
@@ -52,5 +68,7 @@ before this one, so everything built since the initial commit is listed here.
 - Diagram edge rendering, node editing, panel and sidebar layout issues found
   along the way.
 
-[unreleased]: https://github.com/justTil/baugraph/compare/v1.25.0...HEAD
-[1.25.0]: https://github.com/justTil/baugraph/releases/tag/v1.25.0
+[1.28.0]: https://github.com/justTil/baugraph/releases/tag/1.28.0
+[1.27.0]: https://github.com/justTil/baugraph/releases/tag/1.27.0
+[1.26.0]: https://github.com/justTil/baugraph/releases/tag/1.26.0
+[1.25.0]: https://github.com/justTil/baugraph/releases/tag/1.25.0

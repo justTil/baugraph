@@ -23,6 +23,20 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    // In dev, /docs is its own VitePress dev server (see `npm run docs:dev`,
+    // launched alongside this one by `npm run dev`) rather than a build
+    // output — proxy through to it so the Docs link works without a build.
+    // VitePress applies the same `base: '/docs/'` in dev, so the path needs
+    // no rewrite.
+    proxy: {
+      '/docs': {
+        target: 'http://localhost:5174',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
     // Set by the self-hosted Docker build (see Dockerfile / build_docker_image_self_hosted.sh)
