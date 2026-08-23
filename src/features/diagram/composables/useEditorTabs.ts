@@ -47,12 +47,19 @@ export function openDocumentTab(documentId: string): IDockviewPanel | undefined 
  *
  * One at a time: the prompt is modal, so a second tab cannot be closed while it
  * is up. The editor panel for this document renders the dialog, because that is
- * the component that can actually write the file.
+ * the component that can actually write the file. Others asked about in the
+ * same breath — a "close all" sweeping up several dirty tabs at once — queue
+ * behind it instead of clobbering which one is showing.
  */
 const pendingClose = ref<string | null>(null)
+const closeQueue: string[] = []
 
 export function useCloseRequest() {
   return { pendingClose }
+}
+
+function advanceCloseQueue() {
+  pendingClose.value = closeQueue[0] ?? null
 }
 
 /**
@@ -62,13 +69,16 @@ export function useCloseRequest() {
  */
 export function requestCloseDocument(documentId: string | undefined): boolean {
   if (!documentId || !diagramStore(documentId).dirty.value) return true
-  pendingClose.value = documentId
+  if (!closeQueue.includes(documentId)) closeQueue.push(documentId)
+  if (pendingClose.value === null) advanceCloseQueue()
   return false
 }
 
 /** Answers the prompt: close the tab, or leave it open. */
 export function resolveCloseRequest(documentId: string, close: boolean) {
-  pendingClose.value = null
+  const index = closeQueue.indexOf(documentId)
+  if (index !== -1) closeQueue.splice(index, 1)
+  if (pendingClose.value === documentId) advanceCloseQueue()
   if (close) closePanel(editorPanelId(documentId))
 }
 

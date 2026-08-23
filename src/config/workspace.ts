@@ -1,4 +1,5 @@
 import type { WorkspacePolicy } from '@/features/workspace/composables/useWorkspace'
+import { diagramStore } from '@/features/diagram/composables/useDiagram'
 import {
   EDITOR_VIEW_ID,
   canRestoreEditor,
@@ -16,4 +17,8 @@ export const workspacePolicy: WorkspacePolicy = {
     params.viewId !== EDITOR_VIEW_ID || canRestoreEditor(params.documentId),
   confirmClose: (params) =>
     params.viewId !== EDITOR_VIEW_ID || requestCloseDocument(params.documentId),
+  isDirty: (params) =>
+    params.viewId === EDITOR_VIEW_ID &&
+    !!params.documentId &&
+    diagramStore(params.documentId).dirty.value,
 }

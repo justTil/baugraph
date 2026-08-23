@@ -37,6 +37,8 @@ export interface WorkspacePolicy {
    * which it closes the panel itself.
    */
   confirmClose: (params: PanelParams) => boolean
+  /** Whether the tab holds changes nothing has captured yet — what "close saved" skips. */
+  isDirty: (params: PanelParams) => boolean
 }
 
 const STORAGE_KEY = 'baugraph:workspace:v1'
@@ -48,6 +50,7 @@ let policy: WorkspacePolicy = {
   defaultLayout: () => {},
   canRestore: () => true,
   confirmClose: () => true,
+  isDirty: () => false,
 }
 
 const openViewIds = ref<string[]>([])
@@ -187,6 +190,46 @@ export function requestClosePanel(panelId: string) {
 /** Renames an open tab, for a view whose title follows its content. */
 export function setPanelTitle(panelId: string, title: string) {
   dock.value?.getPanel(panelId)?.api.setTitle(title)
+}
+
+/** Every panel sharing a tab strip with `panelId`, left to right. */
+function groupOf(panelId: string): IDockviewPanel[] {
+  return dock.value?.getPanel(panelId)?.group.panels ?? []
+}
+
+/** Closes every other tab in the same group as `panelId`. */
+export function closeOtherPanels(panelId: string) {
+  groupOf(panelId)
+    .filter((p) => p.id !== panelId)
+    .forEach((p) => requestClosePanel(p.id))
+}
+
+/** Closes every tab to the right of `panelId` in its group. */
+export function closePanelsToTheRight(panelId: string) {
+  const panels = groupOf(panelId)
+  const index = panels.findIndex((p) => p.id === panelId)
+  if (index === -1) return
+  panels.slice(index + 1).forEach((p) => requestClosePanel(p.id))
+}
+
+/** Closes every tab to the left of `panelId` in its group. */
+export function closePanelsToTheLeft(panelId: string) {
+  const panels = groupOf(panelId)
+  const index = panels.findIndex((p) => p.id === panelId)
+  if (index <= 0) return
+  panels.slice(0, index).forEach((p) => requestClosePanel(p.id))
+}
+
+/** Closes every tab across the whole dock that has no unsaved changes. */
+export function closeSavedPanels() {
+  dock.value?.panels
+    .filter((p) => !policy.isDirty(paramsOf(p)))
+    .forEach((p) => requestClosePanel(p.id))
+}
+
+/** Closes every tab in the dock. */
+export function closeAllPanels() {
+  dock.value?.panels.forEach((p) => requestClosePanel(p.id))
 }
 
 /** The arrangement the dock falls back to when there is nothing to restore. */
