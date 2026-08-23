@@ -6,6 +6,7 @@ import { openView } from '@/features/workspace/composables/useWorkspace'
 import { site } from '@/config/legal'
 
 const version = __APP_VERSION__
+const selfHosted = __SELF_HOSTED__
 const repoUrl = 'https://github.com/justTil/baugraph'
 
 const credits = [
@@ -66,10 +67,26 @@ const credits = [
           GitHub
           <ExternalLink class="size-3.5" />
         </Button>
-        <Button variant="ghost" size="sm" @click="openView('legal')">
+        <Button v-if="!selfHosted" variant="ghost" size="sm" @click="openView('legal')">
           Legal &amp; privacy
         </Button>
       </CardContent>
+    </Card>
+
+    <Card v-if="selfHosted">
+      <CardHeader>
+        <CardTitle>Self-hosted instance</CardTitle>
+        <CardDescription>
+          This is your own deployment of {{ site.name }}, built from the public source at
+          <a
+            :href="repoUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-foreground underline underline-offset-2 hover:no-underline"
+          >{{ repoUrl.replace('https://', '') }}</a>. It runs entirely under your control — Til
+          Schwarze's Impressum and legal notices at baugraph.com don't apply here.
+        </CardDescription>
+      </CardHeader>
     </Card>
 
     <Card>

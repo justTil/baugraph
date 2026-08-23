@@ -4,6 +4,11 @@
 FROM node:26-alpine AS build
 WORKDIR /app
 
+# Set to "true" to build the self-hosted variant: drops the operator-specific
+# Impressum/Legal links and shows a "self-hosted" marker instead.
+ARG SELF_HOSTED=false
+ENV SELF_HOSTED=$SELF_HOSTED
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
