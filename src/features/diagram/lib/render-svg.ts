@@ -18,6 +18,8 @@ import {
 import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
 import type { FrameOptions } from '@/features/diagram/lib/frame'
 import { frameLayout, frameParts, framed } from '@/features/diagram/lib/frame'
+import type { WatermarkOptions } from '@/features/diagram/lib/watermark'
+import { watermarkMarkup, watermarked } from '@/features/diagram/lib/watermark'
 
 /**
  * Standalone SVG renderer used for export.
@@ -684,6 +686,11 @@ export interface SvgOptions {
    * is going somewhere it has to look like a screenshot.
    */
   frame?: FrameOptions
+  /**
+   * Repeats a line of text diagonally across the whole export, the way a PDF
+   * watermark does. Off by default: nothing here is stamped unless asked for.
+   */
+  watermark?: WatermarkOptions
 }
 
 /** Distinguishes one render's gradient and clip ids from another's on the page. */
@@ -825,7 +832,13 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
     (parts?.behind ?? '') +
     (layout ? `<g transform="translate(${round2(layout.x - bounds.x)},${round2(layout.y - bounds.y)})">` : '')
 
-  const close = (layout ? '</g>' : '') + (parts?.ahead ?? '') + '</svg>'
+  // Stamped last, over the frame dressing included, so it reads as marking the
+  // whole exported picture rather than just the diagram inside it.
+  const watermark = watermarked(options.watermark)
+    ? watermarkMarkup(box, options.watermark, theme, String(++renderCount))
+    : ''
+
+  const close = (layout ? '</g>' : '') + (parts?.ahead ?? '') + watermark + '</svg>'
 
   return {
     bounds: box,

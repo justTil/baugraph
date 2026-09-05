@@ -2,6 +2,7 @@ import type { DiagramDocument } from '@/model'
 import { stringify } from '@/model'
 import { documentFrames, renderDocumentSvg } from '@/features/diagram/lib/render-svg'
 import type { FrameOptions } from '@/features/diagram/lib/frame'
+import type { WatermarkOptions } from '@/features/diagram/lib/watermark'
 import { gifPalette, gifWriter } from '@/features/diagram/lib/gif'
 import { diagramTheme } from '@/features/diagram/lib/theme'
 
@@ -126,11 +127,16 @@ export function exportJson(doc: DiagramDocument) {
 
 export function exportSvg(
   doc: DiagramDocument,
-  { transparent = false, animate = true, frame }: { transparent?: boolean; animate?: boolean; frame?: FrameOptions } = {},
+  {
+    transparent = false,
+    animate = true,
+    frame,
+    watermark,
+  }: { transparent?: boolean; animate?: boolean; frame?: FrameOptions; watermark?: WatermarkOptions } = {},
 ) {
   download(
     `${slug(doc)}.svg`,
-    new Blob([renderDocumentSvg(doc, { transparent, animate, frame })], { type: 'image/svg+xml' }),
+    new Blob([renderDocumentSvg(doc, { transparent, animate, frame, watermark })], { type: 'image/svg+xml' }),
   )
 }
 
@@ -165,11 +171,15 @@ function context(width: number, height: number): CanvasRenderingContext2D {
 export async function exportPng(
   doc: DiagramDocument,
   scale = 2,
-  { transparent = false, frame }: { transparent?: boolean; frame?: FrameOptions } = {},
+  {
+    transparent = false,
+    frame,
+    watermark,
+  }: { transparent?: boolean; frame?: FrameOptions; watermark?: WatermarkOptions } = {},
 ) {
   // Through the frames rather than `contentBounds`, because a dressed export is
   // larger than its content and the canvas has to be the size of the picture.
-  const frames = documentFrames(doc, { animate: false, transparent, frame })
+  const frames = documentFrames(doc, { animate: false, transparent, frame, watermark })
   const bounds = frames.bounds
   let svg: string
   try {
@@ -219,6 +229,7 @@ export interface GifExportOptions {
   fps?: number
   scale?: number
   frame?: FrameOptions
+  watermark?: WatermarkOptions
   /** Called with 0 → 1 as the frames are drawn; a GIF takes long enough to say so. */
   onProgress?: (done: number) => void
 }
@@ -237,7 +248,7 @@ export interface GifExportOptions {
  */
 export async function exportGif(doc: DiagramDocument, options: GifExportOptions = {}) {
   const { scale = 1, onProgress } = options
-  const frames = documentFrames(doc, { frame: options.frame })
+  const frames = documentFrames(doc, { frame: options.frame, watermark: options.watermark })
 
   try {
     if (frames.duration <= 0) {
