@@ -178,6 +178,12 @@ or flow's \`data\` object instead, which is free-form and never interpreted.
   theme's neutral edge colour (the default — most edges should leave this
   \`null\` and reserve colour for edges that mean something different, like a
   failure path).
+- \`waypoints\` — optional. A list of \`{ "x": number, "y": number }\` points,
+  source to target. Omit for automatic routing (the default, and normally the
+  right choice). Give an edge waypoints only when the layout genuinely needs
+  a hand-drawn path — the connector is then drawn straight through them with
+  no obstacle avoidance at all, so a badly placed point can run the line
+  through another node.
 - \`data\` — free-form.
 
 ## Flows (animated messages) — optional

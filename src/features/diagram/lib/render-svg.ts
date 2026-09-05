@@ -753,6 +753,7 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
         targetPort: edge.targetPort,
         route: edge.route,
         obstacles,
+        waypoints: edge.waypoints,
       }),
     )
   }

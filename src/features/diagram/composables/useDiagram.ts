@@ -20,6 +20,7 @@ import type {
   Route,
   ShapeKey,
   Side,
+  Vec2,
 } from '@/model'
 import {
   DEFAULT_CANVAS,
@@ -82,6 +83,8 @@ export interface EdgeData {
   width: LineWidth
   arrows: ArrowMode
   color: ColorKey | null
+  /** See `DiagramEdge.waypoints`. Absent or empty means auto-routed. */
+  waypoints?: Vec2[]
   meta?: Metadata
 }
 
@@ -247,6 +250,7 @@ function createDiagramStore(documentId: string) {
         width: edge.width ?? 'regular',
         arrows: edge.arrows,
         color: edge.color ?? null,
+        waypoints: edge.waypoints,
         meta: edge.data,
       },
     }
@@ -306,6 +310,7 @@ function createDiagramStore(documentId: string) {
       width: edge.data?.width ?? 'regular',
       arrows: edge.data?.arrows ?? 'target',
       color: edge.data?.color ?? null,
+      waypoints: edge.data?.waypoints?.length ? edge.data.waypoints : undefined,
       data: edge.data?.meta,
     }
   }

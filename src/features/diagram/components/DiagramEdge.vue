@@ -7,14 +7,21 @@ import type { EdgeData, NodeData } from '@/features/diagram/composables/useDiagr
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
-import { arrowHeadPath, dashArray, edgeGeometry, endpointOf } from '@/features/diagram/lib/edge-path'
+import {
+  arrowHeadPath,
+  dashArray,
+  edgeGeometry,
+  endpointOf,
+  nearestSegmentIndex,
+} from '@/features/diagram/lib/edge-path'
 import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
 import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
-const { canvas, reconnectEdge, reconnectingEdge, commit, endCoalesce } = useDiagram()
-const { getNodes } = useVueFlow()
+const { canvas, reconnectEdge, reconnectingEdge, commit, endCoalesce, updateEdgeData } =
+  useDiagram()
+const { getNodes, screenToFlowCoordinate } = useVueFlow()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 
 const theme = computed(() => diagramTheme(canvas.theme))
@@ -53,6 +60,7 @@ const geometry = computed(() =>
     targetPort: props.data.targetPort,
     route: props.data.route,
     obstacles: obstacles.value,
+    waypoints: props.data.waypoints,
   }),
 )
 
@@ -125,6 +133,8 @@ const GRAB_SAMPLES = 20
 
 const nearSourcePath = ref('')
 const nearTargetPath = ref('')
+/** The stretch between the two reconnect grab zones — where a drag adds a bend point instead. */
+const midPath = ref('')
 
 /** A subpath of `el`, from length `from` to `to`, as its own polyline `d`. */
 function sampleRange(el: SVGPathElement, from: number, to: number): string {
@@ -150,6 +160,7 @@ function updateGrabZones() {
   const reach = Math.min(len * GRAB_FRACTION, len / 2)
   nearSourcePath.value = sampleRange(el, 0, reach)
   nearTargetPath.value = sampleRange(el, len - reach, len)
+  midPath.value = sampleRange(el, reach, len - reach)
 }
 
 watch([pathEl, () => geometry.value.path], updateGrabZones, { flush: 'post' })
@@ -224,6 +235,81 @@ function startReconnect(event: MouseEvent, end: 'source' | 'target') {
   dragFixedEnd.value = end === 'source' ? 'target' : 'source'
   handlePointerDown(event)
 }
+
+/* --------------------------------------------------------- manual routing */
+
+/**
+ * Bend points this connection is routed through by hand — see
+ * `DiagramEdge.waypoints`. Present and non-empty is what "manual routing"
+ * means; empty or absent is today's fully automatic behavior.
+ */
+const waypoints = computed(() => props.data.waypoints ?? [])
+
+/** Index into `waypoints` currently being dragged, while a drag is live. */
+const draggingWaypoint = ref<number | null>(null)
+
+function flowPoint(event: PointerEvent) {
+  return screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+}
+
+function onWaypointPointerMove(event: PointerEvent) {
+  if (draggingWaypoint.value === null) return
+  const next = [...waypoints.value]
+  next[draggingWaypoint.value] = flowPoint(event)
+  updateEdgeData(props.id, { waypoints: next })
+}
+
+function stopDraggingWaypoint() {
+  draggingWaypoint.value = null
+  window.removeEventListener('pointermove', onWaypointPointerMove)
+  window.removeEventListener('pointerup', stopDraggingWaypoint)
+}
+
+function beginDraggingWaypoint(index: number) {
+  draggingWaypoint.value = index
+  window.addEventListener('pointermove', onWaypointPointerMove)
+  window.addEventListener('pointerup', stopDraggingWaypoint, { once: true })
+}
+
+/** Picks up an existing bend point to drag it elsewhere. */
+function startDragWaypoint(event: PointerEvent, index: number) {
+  if (event.button !== 0) return
+  event.stopPropagation()
+  commit()
+  endCoalesce()
+  beginDraggingWaypoint(index)
+}
+
+/** Removes a bend point; removing the last one returns the edge to automatic routing. */
+function removeWaypoint(index: number) {
+  commit()
+  endCoalesce()
+  const next = waypoints.value.filter((_, i) => i !== index)
+  updateEdgeData(props.id, { waypoints: next.length ? next : undefined })
+}
+
+/**
+ * Grabbing the line itself, anywhere along its middle stretch, drops a new
+ * bend point right there and picks it straight up for dragging — the literal
+ * "move the connection" gesture this feature is for. Works on an already-
+ * automatic edge too: that is how an edge becomes manually routed in the
+ * first place.
+ */
+function startAddWaypoint(event: PointerEvent) {
+  if (event.button !== 0) return
+  event.stopPropagation()
+  commit()
+  endCoalesce()
+  const point = flowPoint(event)
+  const points = [geometry.value.start, ...waypoints.value, geometry.value.end]
+  const index = nearestSegmentIndex(points, point)
+  const next = [...waypoints.value]
+  next.splice(index, 0, point)
+  updateEdgeData(props.id, { waypoints: next })
+  beginDraggingWaypoint(index)
+}
+
+onBeforeUnmount(stopDraggingWaypoint)
 
 /**
  * Lit while the inspector points at a flow that runs over this connection. The
@@ -348,6 +434,51 @@ const label = computed(() => {
     class="bg-edge__grab"
     @mousedown="startReconnect($event, 'target')"
   />
+
+  <!--
+    Manual routing: only while the connection is selected, so an unselected
+    diagram is not covered in editing chrome. Grabbing the line itself drops
+    a new bend point and starts dragging it; the dots are the bend points
+    already placed, draggable to move and double-clickable to remove.
+  -->
+  <template v-if="props.selected && !dragging">
+    <path
+      v-if="midPath"
+      :d="midPath"
+      fill="none"
+      stroke-width="20"
+      stroke-linecap="round"
+      class="bg-edge__grab"
+      @pointerdown="startAddWaypoint($event)"
+    />
+    <template v-for="(point, index) in waypoints" :key="index">
+      <!--
+        Bigger than the dot itself: a 5px dot is not a reliable click target on
+        its own. `fill="transparent"` alone will not do here — Chrome treats an
+        SVG shape with no actual paint as unhittable, same as `fill="none"`, so
+        the click falls through to the add-point strip underneath; forcing
+        `pointer-events: all` in the stylesheet is what actually makes it grabbable.
+      -->
+      <circle
+        :cx="point.x"
+        :cy="point.y"
+        r="10"
+        fill="transparent"
+        class="bg-edge__waypoint-hit"
+        @pointerdown="startDragWaypoint($event, index)"
+        @dblclick.stop="removeWaypoint(index)"
+      />
+      <circle
+        :cx="point.x"
+        :cy="point.y"
+        r="5"
+        :fill="theme.bg"
+        :stroke="theme.selection"
+        stroke-width="2"
+        class="pointer-events-none"
+      />
+    </template>
+  </template>
 </template>
 
 <style scoped>
@@ -367,5 +498,10 @@ const label = computed(() => {
 
 .bg-edge__grab:hover {
   stroke-opacity: 0.25;
+}
+
+.bg-edge__waypoint-hit {
+  cursor: grab;
+  pointer-events: all;
 }
 </style>

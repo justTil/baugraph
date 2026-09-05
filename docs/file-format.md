@@ -42,6 +42,12 @@ committed next to the code it describes.
       "sourceSide": "bottom",
       "targetSide": "top",
       "label": "POST /orders"
+    },
+    {
+      "id": "order-service--billing-adapter",
+      "source": "order-service",
+      "target": "billing-adapter",
+      "waypoints": [{ "x": 640, "y": 220 }, { "x": 640, "y": 340 }]
     }
   ],
   "flows": [
@@ -116,6 +122,15 @@ All in service of readable diffs:
   connection it described.
 - **`data` on any node or edge is yours** — free-form metadata, round-tripped
   untouched. Use it for ticket links, ownership, team conventions.
+- **An edge routes itself unless `waypoints` says otherwise.** Every
+  connection is auto-routed around obstacles by default, the only behavior
+  this format had before manual routing existed. Giving an edge one or more
+  `waypoints` switches it to manual: the line is drawn straight through them,
+  source to target, with no obstacle avoidance at all — the file is stating
+  a route, not asking for one. Omitting the key, or writing `[]`, means
+  automatic. Each point stays on its own line, the same reasoning as
+  `position` and `size`: reshaping a connection should touch one line, not
+  four.
 
 ## Validating a diagram
 
