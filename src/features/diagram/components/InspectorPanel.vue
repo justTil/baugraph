@@ -651,7 +651,7 @@ function setRouting(
               "
             />
             <p v-if="edge.data!.waypoints?.length" class="text-muted-foreground text-[11px]">
-              Drag the line on the canvas to reshape it.
+              Drag a solid point to move it, a dashed one to add a new bend.
             </p>
           </div>
           <div class="space-y-1.5">

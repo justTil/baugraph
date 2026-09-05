@@ -7,6 +7,7 @@ import type { EdgeData, NodeData } from '@/features/diagram/composables/useDiagr
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
+import type { Vec } from '@/features/diagram/lib/edge-path'
 import {
   arrowHeadPath,
   dashArray,
@@ -311,6 +312,35 @@ function startAddWaypoint(event: PointerEvent) {
   beginDraggingWaypoint(index)
 }
 
+/**
+ * Where dragging would add the *next* bend point — the midpoint of each leg
+ * of an already-manual connection. Shown as small dashed hints once there is
+ * at least one real point, so "you can add more here" does not depend on the
+ * user discovering the invisible drag-anywhere strip on their own. Not shown
+ * on a still-automatic edge: that one's only "leg" is the whole line, and the
+ * strip already covers it.
+ */
+const insertionPoints = computed(() => {
+  if (!waypoints.value.length) return []
+  const points = [geometry.value.start, ...waypoints.value, geometry.value.end]
+  return points.slice(1).map((point, index) => ({
+    index,
+    point: { x: (points[index]!.x + point.x) / 2, y: (points[index]!.y + point.y) / 2 },
+  }))
+})
+
+/** Turns one of the hinted insertion points into a real bend point and picks it up. */
+function startInsertWaypoint(event: PointerEvent, index: number, point: Vec) {
+  if (event.button !== 0) return
+  event.stopPropagation()
+  commit()
+  endCoalesce()
+  const next = [...waypoints.value]
+  next.splice(index, 0, point)
+  updateEdgeData(props.id, { waypoints: next })
+  beginDraggingWaypoint(index)
+}
+
 onBeforeUnmount(stopDraggingWaypoint)
 
 /**
@@ -480,6 +510,27 @@ const label = computed(() => {
         class="pointer-events-none"
       />
     </template>
+    <!--
+      Dashed hints for where dragging would add the *next* point — visible by
+      default, not just on hover, since the whole reason for these is to show
+      that more can be added without the user having to find the invisible
+      strip on their own. Deliberately drawn hollow and muted, next to the
+      solid, selection-coloured dots above, so "not placed yet" reads at a
+      glance.
+    -->
+    <circle
+      v-for="ip in insertionPoints"
+      :key="`insert-${ip.index}`"
+      :cx="ip.point.x"
+      :cy="ip.point.y"
+      r="4"
+      :fill="theme.bg"
+      :stroke="theme.muted"
+      stroke-width="1.5"
+      stroke-dasharray="2 2"
+      class="bg-edge__waypoint-insert"
+      @pointerdown="startInsertWaypoint($event, ip.index, ip.point)"
+    />
   </template>
 </template>
 
@@ -505,5 +556,24 @@ const label = computed(() => {
 .bg-edge__waypoint-hit {
   cursor: grab;
   pointer-events: all;
+}
+
+/*
+ * Visible at rest, unlike the other affordances here — the point is to show
+ * an already-manual connection can take more bends without the user first
+ * having to stumble onto the invisible drag-anywhere strip underneath.
+ */
+.bg-edge__waypoint-insert {
+  cursor: copy;
+  pointer-events: all;
+  opacity: 0.55;
+  transition:
+    opacity 120ms ease,
+    r 120ms ease;
+}
+
+.bg-edge__waypoint-insert:hover {
+  opacity: 1;
+  r: 5;
 }
 </style>
