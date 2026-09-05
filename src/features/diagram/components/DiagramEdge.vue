@@ -126,9 +126,11 @@ onBeforeUnmount(() => unregisterEdgePath(props.id))
  * different node — dragging the drawn line itself near its tip, rather than
  * a dot only findable by first hovering exactly over it. Capped at half the
  * connector's own length, so the two ends of a short connector meet in the
- * middle instead of trying to overlap.
+ * middle instead of trying to overlap. Kept fairly small: the rest of the
+ * line, in between, is where dragging adds a manual bend point instead (see
+ * `startAddWaypoint`), and a wide reconnect zone would crowd that out.
  */
-const GRAB_FRACTION = 0.35
+const GRAB_FRACTION = 0.2
 const GRAB_SAMPLES = 20
 
 const nearSourcePath = ref('')
