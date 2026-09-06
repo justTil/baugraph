@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Docs
+- "Self host with Docker" link in the app header, pointing at the Docker Hub image
+- Two more worked example diagrams (a CI/CD pipeline and a three-tier web app),
+  opened as their own tabs alongside the order-processing example on a first visit
+
+### Changed
+
+- Privacy policy now names Cloudflare as the DNS/CDN provider in front of the
+  GitHub Pages host
 
 ## [1.27.0]
 

@@ -62,6 +62,19 @@ export const hosting = {
 }
 
 /**
+ * The domain baugraph.com is registered with, and its DNS served by, Cloudflare,
+ * which also sits in front of GitHub Pages as a reverse proxy / CDN: every
+ * request reaches Cloudflare first and is forwarded from there to GitHub Pages.
+ * Cloudflare therefore processes connection data on our behalf — a processor
+ * under Art. 28 GDPR, like the host itself.
+ */
+export const network = {
+  provider: 'Cloudflare',
+  company: 'Cloudflare, Inc., 101 Townsend Street, San Francisco, CA 94107, USA',
+  privacyUrl: 'https://www.cloudflare.com/privacypolicy/',
+}
+
+/**
  * Data protection authority of the operator's Bundesland (Art. 77 GDPR).
  * Optional — the generic right to complain is stated either way.
  */
@@ -78,7 +91,7 @@ export const supervisoryAuthority = {
 export const usesGoogleFonts = true
 
 /** Shown as "Stand" / "Last updated". ISO date. */
-export const lastUpdated = '2026-08-12'
+export const lastUpdated = '2026-09-06'
 
 /** True while any placeholder is still unresolved. */
 export const hasPlaceholders = [
@@ -103,6 +116,9 @@ export interface LegalDocument {
   title: string
   blocks: LegalBlock[]
 }
+
+/** Bare hostname of the public site, e.g. "baugraph.com". */
+const siteHost = new URL(site.url).hostname
 
 const address = [
   operator.name,
@@ -158,6 +174,24 @@ const de: LegalDocument[] = [
           + '(Angemessenheitsbeschluss zum EU-U.S. Data Privacy Framework bzw. '
           + `Standardvertragsklauseln) entnehmen Sie der Datenschutzerklärung des Hosters: `
           + `${hosting.privacyUrl}`,
+        ],
+      },
+      {
+        heading: 'Content-Delivery-Netzwerk und DNS (Cloudflare)',
+        paragraphs: [
+          `Die Domain ${siteHost} wird über ${network.provider} verwaltet. Anbieter ist `
+          + `${network.company}. Cloudflare betreibt die DNS-Auflösung der Domain und ist der `
+          + 'Website als Reverse-Proxy und CDN vorgeschaltet: Jeder Aufruf erreicht zunächst einen '
+          + 'Server von Cloudflare und wird von dort an GitHub Pages weitergeleitet.',
+          'Dabei verarbeitet Cloudflare Verbindungsdaten wie IP-Adresse, Datum und Uhrzeit des '
+          + 'Zugriffs, die angefragte URL sowie Browser- und Betriebssystemkennung, um die '
+          + 'Auslieferung technisch zu ermöglichen, den Datenverkehr zu beschleunigen und die '
+          + 'Website gegen Angriffe (etwa DDoS) abzusichern. Rechtsgrundlage ist Art. 6 Abs. 1 '
+          + 'lit. f DSGVO; das berechtigte Interesse liegt in der sicheren und performanten '
+          + 'Bereitstellung der Website.',
+          'Die Verarbeitung findet auch auf Servern in den USA statt. Grundlage der Übermittlung '
+          + 'sind der Angemessenheitsbeschluss zum EU-U.S. Data Privacy Framework bzw. '
+          + `Standardvertragsklauseln. Einzelheiten: ${network.privacyUrl}`,
         ],
       },
       ...(usesGoogleFonts
@@ -361,6 +395,23 @@ const en: LegalDocument[] = [
           + 'processing and the basis for third-country transfers (the EU-U.S. Data Privacy '
           + 'Framework adequacy decision and/or standard contractual clauses), see the host’s '
           + `privacy statement: ${hosting.privacyUrl}`,
+        ],
+      },
+      {
+        heading: 'Content delivery network and DNS (Cloudflare)',
+        paragraphs: [
+          `The domain ${siteHost} is managed through ${network.provider}, operated by `
+          + `${network.company}. Cloudflare provides DNS for the domain and sits in front of the `
+          + 'site as a reverse proxy and CDN: every request first reaches a Cloudflare server and '
+          + 'is forwarded from there to GitHub Pages.',
+          'In doing so, Cloudflare processes connection data such as your IP address, the date '
+          + 'and time of access, the requested URL and browser and operating system identifiers, '
+          + 'in order to deliver the site, speed up traffic and protect it against attacks '
+          + '(e.g. DDoS). The legal basis is Art. 6(1)(f) GDPR; the legitimate interest is the '
+          + 'secure and performant provision of the site.',
+          'Processing also takes place on servers in the United States, on the basis of the '
+          + 'EU-U.S. Data Privacy Framework adequacy decision and/or standard contractual '
+          + `clauses. For details, see ${network.privacyUrl}`,
         ],
       },
       ...(usesGoogleFonts
