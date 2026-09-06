@@ -54,6 +54,12 @@ export function openDocumentTab(documentId: string): IDockviewPanel | undefined 
 const pendingClose = ref<string | null>(null)
 const closeQueue: string[] = []
 
+/**
+ * The worked-example tabs opened on a first run. They are a welcome mat, not the
+ * user's work, so closing one never stops to ask about unsaved changes.
+ */
+const startupSampleIds = new Set<string>()
+
 export function useCloseRequest() {
   return { pendingClose }
 }
@@ -68,7 +74,8 @@ function advanceCloseQueue() {
  * answer comes back through {@link resolveCloseRequest}.
  */
 export function requestCloseDocument(documentId: string | undefined): boolean {
-  if (!documentId || !diagramStore(documentId).dirty.value) return true
+  if (!documentId || startupSampleIds.has(documentId)) return true
+  if (!diagramStore(documentId).dirty.value) return true
   if (!closeQueue.includes(documentId)) closeQueue.push(documentId)
   if (pendingClose.value === null) advanceCloseQueue()
   return false
@@ -87,6 +94,7 @@ export function resolveCloseRequest(documentId: string, close: boolean) {
  * left open on a discarded document would be editing a store nothing saves.
  */
 export function discardDocument(documentId: string) {
+  startupSampleIds.delete(documentId)
   closePanel(editorPanelId(documentId))
   unlinkDocumentFile(documentId)
   forgetDocument(documentId)
@@ -144,6 +152,7 @@ export function openStartupEditor() {
   // with the font it will be drawn in — which the tab cannot wait around for.
   const ids = startupSamples.map((sample) => {
     const id = adoptDocument(blankDocument(sample.title))
+    startupSampleIds.add(id)
     void fontsReady().then(() => diagramStore(id).loadDocument(sample.build()))
     return id
   })
