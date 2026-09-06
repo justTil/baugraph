@@ -27,12 +27,13 @@ const {
   commit,
   endCoalesce,
   updateEdgeData,
+  selectedWaypoints,
   isWaypointSelected,
   selectWaypoint,
   shiftWaypointSelectionForInsert,
   shiftWaypointSelectionForRemove,
 } = useDiagram()
-const { getNodes, screenToFlowCoordinate } = useVueFlow()
+const { getNodes, screenToFlowCoordinate, findEdge } = useVueFlow()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 
 const theme = computed(() => diagramTheme(canvas.theme))
@@ -316,38 +317,88 @@ function closestPointOnPath(target: Vec): Vec {
   return { x: p.x, y: p.y }
 }
 
+/** Where the cursor sat when the drag began, to measure the drag as an offset. */
+const dragOrigin = ref<Vec | null>(null)
+/**
+ * Every bend point travelling with the current drag and where each started —
+ * the whole waypoint selection when the grabbed point belongs to it, otherwise
+ * just the grabbed point. Snapshotted at grab time so the move stays an offset
+ * from a fixed baseline rather than compounding frame to frame.
+ */
+const dragGroup = ref<{ edgeId: string; index: number; from: Vec }[]>([])
+
+/** A connection's bend points, this one's straight off `props`, another's looked up. */
+function waypointsOf(edgeId: string): Vec[] {
+  if (edgeId === props.id) return waypoints.value
+  return ((findEdge(edgeId)?.data as EdgeData | undefined)?.waypoints ?? []) as Vec[]
+}
+
 function onWaypointPointerMove(event: PointerEvent) {
-  if (draggingWaypoint.value === null) return
-  const next = [...waypoints.value]
-  next[draggingWaypoint.value] = flowPoint(event)
-  updateEdgeData(props.id, { waypoints: next })
+  if (draggingWaypoint.value === null || !dragOrigin.value) return
+  const now = flowPoint(event)
+  const dx = now.x - dragOrigin.value.x
+  const dy = now.y - dragOrigin.value.y
+
+  const movedByEdge = new Map<string, Map<number, Vec>>()
+  for (const { edgeId, index, from } of dragGroup.value) {
+    const moved = movedByEdge.get(edgeId) ?? new Map<number, Vec>()
+    moved.set(index, { x: from.x + dx, y: from.y + dy })
+    movedByEdge.set(edgeId, moved)
+  }
+  for (const [edgeId, moved] of movedByEdge) {
+    const next = waypointsOf(edgeId).map((p, i) => moved.get(i) ?? p)
+    updateEdgeData(edgeId, { waypoints: next })
+  }
 }
 
 function stopDraggingWaypoint() {
   draggingWaypoint.value = null
+  dragOrigin.value = null
+  dragGroup.value = []
   window.removeEventListener('pointermove', onWaypointPointerMove)
   window.removeEventListener('pointerup', stopDraggingWaypoint)
 }
 
-function beginDraggingWaypoint(index: number) {
+function beginDraggingWaypoint(
+  index: number,
+  event: PointerEvent,
+  group?: { edgeId: string; index: number; from: Vec }[],
+) {
   draggingWaypoint.value = index
+  dragOrigin.value = flowPoint(event)
+  // `group` is passed when the caller already knows the baseline — a just-
+  // inserted point whose array update has not propagated back through `props`
+  // yet. Otherwise it is read from the live waypoint selection.
+  dragGroup.value =
+    group ??
+    (isWaypointSelected(props.id, index)
+      ? selectedWaypoints.value
+      : [{ edgeId: props.id, index }]
+    ).flatMap(({ edgeId, index }) => {
+      const from = waypointsOf(edgeId)[index]
+      return from ? [{ edgeId, index, from: { x: from.x, y: from.y } }] : []
+    })
   window.addEventListener('pointermove', onWaypointPointerMove)
   window.addEventListener('pointerup', stopDraggingWaypoint, { once: true })
 }
 
 /**
- * Picks up an existing bend point to drag it elsewhere. Also selects it —
- * plainly, or added to the running selection with shift/ctrl/cmd held — so a
- * point can be picked out for aligning without needing a separate click just
- * to select it.
+ * Picks up an existing bend point to drag it elsewhere. A plain drag on a
+ * point already part of a multi-point selection moves that whole selection at
+ * once; any other drag settles the selection on this point first (shift/
+ * ctrl/cmd toggling it), so a point can be picked out for aligning without a
+ * separate click just to select it.
  */
 function startDragWaypoint(event: PointerEvent, index: number) {
   if (event.button !== 0) return
   event.stopPropagation()
-  selectWaypoint(props.id, index, event.shiftKey || event.ctrlKey || event.metaKey)
+  const additive = event.shiftKey || event.ctrlKey || event.metaKey
+  if (additive || !isWaypointSelected(props.id, index)) {
+    selectWaypoint(props.id, index, additive)
+  }
   commit()
   endCoalesce()
-  beginDraggingWaypoint(index)
+  beginDraggingWaypoint(index, event)
 }
 
 /** Removes a bend point; removing the last one returns the edge to automatic routing. */
@@ -385,7 +436,7 @@ function startAddWaypoint(event: PointerEvent) {
   const next = [...waypoints.value]
   next.splice(index, 0, point)
   updateEdgeData(props.id, { waypoints: next })
-  beginDraggingWaypoint(index)
+  beginDraggingWaypoint(index, event, [{ edgeId: props.id, index, from: point }])
 }
 
 /**
