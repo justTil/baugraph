@@ -322,6 +322,7 @@ function startAddWaypoint(event: PointerEvent) {
   event.stopPropagation()
   commit()
   endCoalesce()
+  hoverPoint.value = null
   const point = flowPoint(event)
   const points = [geometry.value.start, ...waypoints.value, geometry.value.end]
   const index = nearestSegmentIndex(points, point)
@@ -331,6 +332,25 @@ function startAddWaypoint(event: PointerEvent) {
   next.splice(index, 0, point)
   updateEdgeData(props.id, { waypoints: next })
   beginDraggingWaypoint(index)
+}
+
+/**
+ * Where a new bend point would land — exactly the cursor's own position, the
+ * same value `startAddWaypoint` would use if clicked right now. Only tracked
+ * once the connection is already manually routed: on a still-automatic edge,
+ * the first drag is what turns it manual in the first place, and previewing
+ * a dot before that decision is made would be showing something that is not
+ * yet true.
+ */
+const hoverPoint = ref<Vec | null>(null)
+
+function onHoverAddWaypoint(event: PointerEvent) {
+  if (draggingWaypoint.value !== null || !waypoints.value.length) return
+  hoverPoint.value = flowPoint(event)
+}
+
+function clearHoverPoint() {
+  hoverPoint.value = null
 }
 
 /**
@@ -474,9 +494,9 @@ const label = computed(() => {
   -->
   <template v-if="props.selected && !dragging">
     <!--
-      Same colour family as the reconnect zones below and the bend points
-      themselves — everything about this connector that a drag can pick up
-      reads as one kind of thing.
+      Its own colour, distinct from the blue reconnect zones below: this drags
+      a bend point into being, not an endpoint onto a different node, and the
+      two should not read as the same gesture.
     -->
     <path
       v-if="midPath"
@@ -486,6 +506,18 @@ const label = computed(() => {
       stroke-linecap="round"
       class="bg-edge__grab-add"
       @pointerdown="startAddWaypoint($event)"
+      @pointermove="onHoverAddWaypoint($event)"
+      @pointerleave="clearHoverPoint"
+    />
+    <!-- Live preview of exactly where clicking now would drop a bend point. -->
+    <circle
+      v-if="hoverPoint"
+      :cx="hoverPoint.x"
+      :cy="hoverPoint.y"
+      r="5"
+      :fill="theme.waypoint"
+      fill-opacity="0.45"
+      class="pointer-events-none"
     />
     <template v-for="(point, index) in waypoints" :key="index">
       <!--
@@ -570,12 +602,12 @@ const label = computed(() => {
  * exactly how much of the end is grabbable — a node's own dots follow the
  * same rule, and for the same reason: shown all the time, one of these at
  * both ends of every connection on the canvas would be its own kind of
- * clutter. Purple, like every other draggable part of a connection — moving
- * an end onto a different node and dragging a bend point into being read as
- * the same kind of gesture, so they share the same colour.
+ * clutter. The same blue as a node's own selection outline — reconnecting an
+ * end is a selection-level move, not a routing one, which is what the purple
+ * below is for.
  */
 .bg-edge__grab {
-  stroke: var(--bg-waypoint);
+  stroke: var(--bg-selection);
   stroke-opacity: 0;
   cursor: crosshair;
   transition: stroke-opacity 120ms ease;
@@ -585,7 +617,7 @@ const label = computed(() => {
   stroke-opacity: 0.25;
 }
 
-/* Same idea as `.bg-edge__grab`, with its own cursor: this adds a bend point rather than reconnecting an end. */
+/* Same idea as `.bg-edge__grab`, in the waypoint colour: this adds a bend point rather than reconnecting an end. */
 .bg-edge__grab-add {
   stroke: var(--bg-waypoint);
   stroke-opacity: 0;
