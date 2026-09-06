@@ -267,6 +267,55 @@ function flowPoint(event: PointerEvent) {
   return screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
 }
 
+/**
+ * The point on the drawn connection nearest `target` — a coarse walk of the
+ * rendered path followed by a few halving steps around the best sample.
+ *
+ * A new bend point is placed *on* the line, not wherever the cursor happens
+ * to be next to it: the preview dot and the point it commits both ride the
+ * connection, so adding one reads as pinning the line where it already runs
+ * rather than yanking it sideways on the first pixel of the drag.
+ */
+function closestPointOnPath(target: Vec): Vec {
+  const el = pathEl.value
+  if (!el) return target
+  const total = el.getTotalLength()
+  if (!total) return target
+
+  const distSq = (len: number) => {
+    const p = el.getPointAtLength(len)
+    return (p.x - target.x) ** 2 + (p.y - target.y) ** 2
+  }
+
+  const steps = Math.min(200, Math.max(2, Math.ceil(total / 6)))
+  let bestLen = 0
+  let bestDist = Infinity
+  for (let i = 0; i <= steps; i++) {
+    const len = (total * i) / steps
+    const d = distSq(len)
+    if (d < bestDist) {
+      bestDist = d
+      bestLen = len
+    }
+  }
+
+  let span = total / steps
+  for (let iter = 0; iter < 6; iter++) {
+    span /= 2
+    for (const len of [bestLen - span, bestLen + span]) {
+      if (len < 0 || len > total) continue
+      const d = distSq(len)
+      if (d < bestDist) {
+        bestDist = d
+        bestLen = len
+      }
+    }
+  }
+
+  const p = el.getPointAtLength(bestLen)
+  return { x: p.x, y: p.y }
+}
+
 function onWaypointPointerMove(event: PointerEvent) {
   if (draggingWaypoint.value === null) return
   const next = [...waypoints.value]
@@ -311,23 +360,28 @@ function removeWaypoint(index: number) {
 }
 
 /**
- * Grabbing the line itself, anywhere along its middle stretch, drops a new
- * bend point right there and picks it straight up for dragging — the literal
- * "move the connection" gesture this feature is for. Works on an already-
- * automatic edge too: that is how an edge becomes manually routed in the
- * first place.
+ * Shift-dragging the line itself, anywhere along its middle stretch, drops a
+ * new bend point right there and picks it straight up for dragging — the
+ * literal "move the connection" gesture this feature is for.
+ *
+ * Only on a connection already switched to manual routing (from the inspector,
+ * or by having placed a point before), and only with shift held: a plain click
+ * on a connection selects it and nothing more. Adding a bend point is a
+ * deliberate act, not something an ordinary click should trigger by accident.
  */
 function startAddWaypoint(event: PointerEvent) {
-  if (event.button !== 0) return
+  if (event.button !== 0 || !event.shiftKey || !waypoints.value.length) return
   event.stopPropagation()
   commit()
   endCoalesce()
   hoverPoint.value = null
-  const point = flowPoint(event)
+  const point = closestPointOnPath(flowPoint(event))
   const points = [geometry.value.start, ...waypoints.value, geometry.value.end]
   const index = nearestSegmentIndex(points, point)
   shiftWaypointSelectionForInsert(props.id, index)
-  selectWaypoint(props.id, index, event.shiftKey || event.ctrlKey || event.metaKey)
+  // Sole-selected, not added to any running selection: shift is the add-point
+  // modifier here, so it is always down and cannot also mean "extend selection".
+  selectWaypoint(props.id, index, false)
   const next = [...waypoints.value]
   next.splice(index, 0, point)
   updateEdgeData(props.id, { waypoints: next })
@@ -335,53 +389,25 @@ function startAddWaypoint(event: PointerEvent) {
 }
 
 /**
- * Where a new bend point would land — exactly the cursor's own position, the
- * same value `startAddWaypoint` would use if clicked right now. Only tracked
- * once the connection is already manually routed: on a still-automatic edge,
- * the first drag is what turns it manual in the first place, and previewing
- * a dot before that decision is made would be showing something that is not
- * yet true.
+ * Where a new bend point would land if shift-clicked right now — the point on
+ * the line nearest the cursor, the same value `startAddWaypoint` would use, so
+ * the dot slides along the connection instead of floating beside it. Only
+ * tracked while shift is held over a connection that is already manually
+ * routed: without shift a click just selects, so previewing a point it would
+ * not place would be a lie.
  */
 const hoverPoint = ref<Vec | null>(null)
 
 function onHoverAddWaypoint(event: PointerEvent) {
-  if (draggingWaypoint.value !== null || !waypoints.value.length) return
-  hoverPoint.value = flowPoint(event)
+  if (draggingWaypoint.value !== null || !waypoints.value.length || !event.shiftKey) {
+    hoverPoint.value = null
+    return
+  }
+  hoverPoint.value = closestPointOnPath(flowPoint(event))
 }
 
 function clearHoverPoint() {
   hoverPoint.value = null
-}
-
-/**
- * Where dragging would add the *next* bend point — the midpoint of each leg
- * of an already-manual connection. Shown as small dashed hints once there is
- * at least one real point, so "you can add more here" does not depend on the
- * user discovering the invisible drag-anywhere strip on their own. Not shown
- * on a still-automatic edge: that one's only "leg" is the whole line, and the
- * strip already covers it.
- */
-const insertionPoints = computed(() => {
-  if (!waypoints.value.length) return []
-  const points = [geometry.value.start, ...waypoints.value, geometry.value.end]
-  return points.slice(1).map((point, index) => ({
-    index,
-    point: { x: (points[index]!.x + point.x) / 2, y: (points[index]!.y + point.y) / 2 },
-  }))
-})
-
-/** Turns one of the hinted insertion points into a real bend point and picks it up. */
-function startInsertWaypoint(event: PointerEvent, index: number, point: Vec) {
-  if (event.button !== 0) return
-  event.stopPropagation()
-  commit()
-  endCoalesce()
-  shiftWaypointSelectionForInsert(props.id, index)
-  selectWaypoint(props.id, index, event.shiftKey || event.ctrlKey || event.metaKey)
-  const next = [...waypoints.value]
-  next.splice(index, 0, point)
-  updateEdgeData(props.id, { waypoints: next })
-  beginDraggingWaypoint(index)
 }
 
 onBeforeUnmount(stopDraggingWaypoint)
@@ -394,6 +420,19 @@ onBeforeUnmount(stopDraggingWaypoint)
 const highlight = computed(() => {
   const color = highlightOf(props.id)
   return color ? COLOR_HEX[color] : null
+})
+
+/**
+ * The route the halo traces — the raw polyline, corners unrounded, so a wide
+ * translucent stroke bends cleanly with a round line-join instead of
+ * ballooning into a blob over the tight curve a sharp corner rounds to.
+ * Falls back to the drawn path for curved and self-loop connectors, which
+ * carry no polyline of their own and have no sharp joins to spoil.
+ */
+const haloPath = computed(() => {
+  const points = geometry.value.points
+  if (!points || points.length < 2) return geometry.value.path
+  return points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join('')
 })
 
 const label = computed(() => {
@@ -430,7 +469,7 @@ const label = computed(() => {
     <!-- Halo for a flow the inspector is pointing at; under the line it belongs to. -->
     <path
       v-if="highlight"
-      :d="geometry.path"
+      :d="haloPath"
       fill="none"
       :stroke="highlight"
       stroke-width="9"
@@ -487,16 +526,19 @@ const label = computed(() => {
   </template>
 
   <!--
-    Manual routing: only while the connection is selected, so an unselected
-    diagram is not covered in editing chrome. Grabbing the line itself drops
-    a new bend point and starts dragging it; the dots are the bend points
-    already placed, draggable to move and double-clickable to remove.
+    Manual routing: only while the connection is selected, and only once it has
+    been switched to manual routing (from the inspector, or by already carrying
+    a bend point), so an automatic connection stays free of editing chrome.
+    Shift-dragging the line itself drops a new bend point and starts dragging
+    it; the dots are the bend points already placed, draggable to move and
+    double-clickable to remove.
   -->
-  <template v-if="props.selected && !dragging">
+  <template v-if="props.selected && !dragging && waypoints.length">
     <!--
       Its own colour, distinct from the blue reconnect zones below: this drags
       a bend point into being, not an endpoint onto a different node, and the
-      two should not read as the same gesture.
+      two should not read as the same gesture. Lit only while shift is held —
+      an ordinary click on the line selects it and does not bend it.
     -->
     <path
       v-if="midPath"
@@ -505,11 +547,12 @@ const label = computed(() => {
       stroke-width="20"
       stroke-linecap="round"
       class="bg-edge__grab-add"
+      :class="{ 'bg-edge__grab-add--armed': !!hoverPoint }"
       @pointerdown="startAddWaypoint($event)"
       @pointermove="onHoverAddWaypoint($event)"
       @pointerleave="clearHoverPoint"
     />
-    <!-- Live preview of exactly where clicking now would drop a bend point. -->
+    <!-- Live preview of exactly where shift-clicking now would drop a bend point. -->
     <circle
       v-if="hoverPoint"
       :cx="hoverPoint.x"
@@ -548,27 +591,6 @@ const label = computed(() => {
         class="pointer-events-none"
       />
     </template>
-    <!--
-      Dashed hints for where dragging would add the *next* point — visible by
-      default, not just on hover, since the whole reason for these is to show
-      that more can be added without the user having to find the invisible
-      strip on their own. Deliberately drawn hollow, next to the solid dots
-      above, so "not placed yet" reads at a glance even though both now share
-      the same colour family.
-    -->
-    <circle
-      v-for="ip in insertionPoints"
-      :key="`insert-${ip.index}`"
-      :cx="ip.point.x"
-      :cy="ip.point.y"
-      r="4"
-      :fill="theme.bg"
-      :stroke="theme.waypoint"
-      stroke-width="1.5"
-      stroke-dasharray="2 2"
-      class="bg-edge__waypoint-insert"
-      @pointerdown="startInsertWaypoint($event, ip.index, ip.point)"
-    />
   </template>
 
   <!--
@@ -617,39 +639,25 @@ const label = computed(() => {
   stroke-opacity: 0.25;
 }
 
-/* Same idea as `.bg-edge__grab`, in the waypoint colour: this adds a bend point rather than reconnecting an end. */
+/*
+ * Same idea as `.bg-edge__grab`, in the waypoint colour: this adds a bend
+ * point rather than reconnecting an end. Unlike the reconnect zones it does
+ * not light up on a plain hover — only once shift is held (`--armed`), since
+ * that is the only time a click here does anything.
+ */
 .bg-edge__grab-add {
   stroke: var(--bg-waypoint);
   stroke-opacity: 0;
-  cursor: copy;
   transition: stroke-opacity 120ms ease;
 }
 
-.bg-edge__grab-add:hover {
+.bg-edge__grab-add--armed {
   stroke-opacity: 0.25;
+  cursor: copy;
 }
 
 .bg-edge__waypoint-hit {
   cursor: grab;
   pointer-events: all;
-}
-
-/*
- * Visible at rest, unlike the other affordances here — the point is to show
- * an already-manual connection can take more bends without the user first
- * having to stumble onto the invisible drag-anywhere strip underneath.
- */
-.bg-edge__waypoint-insert {
-  cursor: copy;
-  pointer-events: all;
-  opacity: 0.55;
-  transition:
-    opacity 120ms ease,
-    r 120ms ease;
-}
-
-.bg-edge__waypoint-insert:hover {
-  opacity: 1;
-  r: 5;
 }
 </style>

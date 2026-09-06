@@ -25,6 +25,15 @@ export interface Vec {
 export interface EdgeGeometry {
   /** SVG path data for the connector. */
   path: string
+  /**
+   * The connector's polyline vertices, before the corners are rounded off —
+   * for anything that has to re-trace the route at a different width, the flow
+   * halo above all: a wide translucent stroke over the tight quadratic a sharp
+   * corner rounds to balloons into a blob, where the same stroke over the raw
+   * polyline with a round line-join just bends cleanly. Absent for curved and
+   * self-loop connectors, which have no sharp joins to begin with.
+   */
+  points?: Vec[]
   /** Midpoint of the path, where the label sits. */
   mid: Vec
   start: Vec
@@ -729,6 +738,7 @@ function fromPolyline(points: Vec[], radius: number): EdgeGeometry {
 
   return {
     path: polylinePath(cleaned, radius),
+    points: cleaned,
     mid: polylineMid(cleaned),
     start: first,
     end: last,
@@ -904,6 +914,7 @@ export function edgeGeometry(
     const len = Math.hypot(dx, dy) || 1
     return {
       path: `M${s.x},${s.y}L${t.x},${t.y}`,
+      points: [s, t],
       mid: { x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 },
       start: s,
       end: t,

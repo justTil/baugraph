@@ -60,6 +60,7 @@ const {
   clearWaypointSelection,
   removeSelectedWaypoints,
   selectedNodes,
+  selectedEdges,
   commit,
   endCoalesce,
   undo,
@@ -120,6 +121,19 @@ const resizingNode = computed(() => {
 
 /** Aligning needs two points to have something to line up against. */
 const canAlignWaypoints = computed(() => selectedWaypoints.value.length >= 2)
+
+/**
+ * Shown while a single manually-routed connection is selected: adding a bend
+ * point is a shift-click, and nothing on the canvas says so on its own. Held
+ * back while an end is being dragged loose — that gesture has its own indicator
+ * and the hint would only crowd it.
+ */
+const showWaypointHint = computed(
+  () =>
+    !reconnectingEdge.value &&
+    selectedEdges.value.length === 1 &&
+    !!(selectedEdges.value[0]!.data as { waypoints?: unknown[] } | undefined)?.waypoints?.length,
+)
 
 /** The last palette item used, repeated by a double-click on empty canvas. */
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
@@ -794,6 +808,28 @@ watch(isVisible, (visible) => {
             >
               <Scaling :size="14" :style="{ color: theme.selection }" />
               Resizing {{ resizingNode.label }} — {{ resizingNode.width }} × {{ resizingNode.height }}
+            </div>
+          </div>
+        </Transition>
+
+        <!-- Bottom-centre hint while a manually-routed connection is selected. -->
+        <Transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="translate-y-1 opacity-0"
+          leave-active-class="transition duration-150 ease-in"
+          leave-to-class="translate-y-1 opacity-0"
+        >
+          <div
+            v-if="showWaypointHint"
+            class="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2"
+          >
+            <div
+              class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
+              :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
+            >
+              <Waypoints :size="14" :style="{ color: theme.selection }" />
+              Hold <kbd class="rounded border px-1 font-sans text-[11px]">Shift</kbd> and click the line to
+              add a bend point
             </div>
           </div>
         </Transition>
