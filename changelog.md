@@ -2,13 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [1.28.0]
 
 ### Added
 
+- **Manual edge routing with waypoints.** Drag anywhere along a connection to
+  drop a bend point; the line is then drawn straight through your points instead
+  of auto-routing around obstacles. Move several waypoints at once, delete them
+  one at a time, or pick **Reset routing** from an edge's context menu to hand
+  it back to the auto-router. Waypoints round-trip through `.baugraph.json` as a
+  per-edge `waypoints` list (one point per line) and are covered by the JSON
+  Schema and the generated AI skills.
+- **Watermarks on exports.** SVG, PNG and GIF exports can carry a diagonally
+  tiled caption — a `DRAFT` stamp, or a short issued-to id from the **Random**
+  button. It is drawn as one rotated SVG pattern so it covers the whole image
+  edge to edge, scales to the export size, and — like every export — never
+  leaves the browser.
+- **In-app changelog.** A **What's New** entry in the sidebar renders this file
+  as a formatted release history.
 - Docs
 - "Self host with Docker" link in the app header, pointing at the Docker Hub image
 - Two more worked example diagrams (a CI/CD pipeline and a three-tier web app),

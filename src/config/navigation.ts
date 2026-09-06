@@ -1,5 +1,5 @@
 import type { NavGroup, NavItem } from '@/types/navigation'
-import { BookOpen, Copyright, Info, Scale, ScrollText, Settings, Workflow } from '@lucide/vue'
+import { BookOpen, Copyright, Info, Scale, ScrollText, Settings, Sparkles, Workflow } from '@lucide/vue'
 import { imprintUrl } from '@/config/legal'
 
 /**
@@ -34,6 +34,8 @@ export const navigation: NavGroup[] = [
           ]),
       { id: 'license', label: 'License', icon: Copyright },
       { id: 'about', label: 'About', icon: Info },
+      // Renders `changelog.md` in-app as a formatted release history.
+      { id: 'changelog', label: "What's New", icon: Sparkles },
     ],
   },
 ]
