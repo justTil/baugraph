@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Plus, Settings2, Waypoints, X } from '@lucide/vue'
+import { Plus, Waypoints, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { MessageFlow } from '@/model'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
@@ -79,12 +79,12 @@ function hover(flow: MessageFlow | null) {
         </span>
         <Button
           variant="ghost"
-          size="icon"
-          class="text-muted-foreground -my-1 size-6 shrink-0"
+          size="sm"
+          class="text-muted-foreground -my-1 h-6 shrink-0 px-2 text-xs"
           title="Edit this flow, and how it looks on this connection"
           @click="openFlowEditor(flow.id, props.edgeId)"
         >
-          <Settings2 />
+          Edit
         </Button>
         <Button
           variant="ghost"

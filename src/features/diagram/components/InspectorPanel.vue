@@ -617,6 +617,41 @@ function setRouting(
           />
         </section>
 
+        <!--
+          How this one connection animates. It sits right under the label because
+          what a connection carries is usually what you came here to change; the
+          styling that follows is how it should look while carrying it.
+        -->
+        <EdgeFlowSection :edge-id="edge.id" />
+
+        <section class="space-y-3 border-b p-3">
+          <Label class="text-xs">Colour</Label>
+          <ColorSwatches
+            :model-value="edge.data!.color"
+            allow-default
+            :default-hex="defaultEdgeHex"
+            @update:model-value="withCommit(() => updateEdgeData(edge!.id, { color: $event }))"
+          />
+          <div class="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              @click="withCommit(() => reverseEdge(edge!.id))"
+            >
+              Reverse
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              @click="withCommit(removeSelection)"
+            >
+              Delete
+            </Button>
+          </div>
+        </section>
+
         <section class="space-y-3 border-b p-3">
           <div class="space-y-1.5">
             <Label class="text-xs">Route</Label>
@@ -723,41 +758,6 @@ function setRouting(
             />
           </div>
         </section>
-
-        <section class="space-y-3 border-b p-3">
-          <Label class="text-xs">Colour</Label>
-          <ColorSwatches
-            :model-value="edge.data!.color"
-            allow-default
-            :default-hex="defaultEdgeHex"
-            @update:model-value="withCommit(() => updateEdgeData(edge!.id, { color: $event }))"
-          />
-          <div class="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              class="flex-1"
-              @click="withCommit(() => reverseEdge(edge!.id))"
-            >
-              Reverse
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              class="flex-1"
-              @click="withCommit(removeSelection)"
-            >
-              Delete
-            </Button>
-          </div>
-        </section>
-
-        <!--
-          How this one connection animates. It lives on the connection because
-          that is the thing being designed: two paths out of the same node mean
-          different things and are meant to look it.
-        -->
-        <EdgeFlowSection :edge-id="edge.id" />
       </template>
 
       <!-- ------------------------------------------------------- selection -->
