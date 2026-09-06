@@ -274,6 +274,35 @@ function createDiagramStore(documentId: string) {
   }
 
   /**
+   * Removes every selected bend point — the Delete-key counterpart to
+   * double-clicking or right-clicking one on the canvas, but able to clear a
+   * cross-connection selection in one step. Filters each edge's `waypoints`
+   * in a single pass rather than removing indices one at a time, so deleting
+   * several points from the same connection cannot shift the others out from
+   * under it.
+   */
+  function removeSelectedWaypoints(): void {
+    if (!selectedWaypoints.value.length) return
+    const byEdge = new Map<string, Set<number>>()
+    for (const { edgeId, index } of selectedWaypoints.value) {
+      const indices = byEdge.get(edgeId) ?? new Set<number>()
+      indices.add(index)
+      byEdge.set(edgeId, indices)
+    }
+
+    commit()
+    endCoalesce()
+    for (const [edgeId, indices] of byEdge) {
+      const points = (edges.value.find((e) => e.id === edgeId)?.data as EdgeData | undefined)
+        ?.waypoints
+      if (!points) continue
+      const next = points.filter((_, i) => !indices.has(i))
+      updateEdgeData(edgeId, { waypoints: next.length ? next : undefined })
+    }
+    selectedWaypoints.value = []
+  }
+
+  /**
    * Whether this diagram has edits that are not in a file yet.
    *
    * The autosave below means nothing is *lost* when a tab closes — the diagram
@@ -1624,6 +1653,7 @@ function createDiagramStore(documentId: string) {
     shiftWaypointSelectionForInsert,
     shiftWaypointSelectionForRemove,
     alignWaypoints,
+    removeSelectedWaypoints,
     // actions
     markSaved,
     commit,

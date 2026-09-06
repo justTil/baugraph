@@ -58,6 +58,7 @@ const {
   selectedWaypoints,
   alignWaypoints,
   clearWaypointSelection,
+  removeSelectedWaypoints,
   selectedNodes,
   commit,
   endCoalesce,
@@ -565,6 +566,12 @@ function onKeyDown(event: KeyboardEvent) {
     case 'Backspace':
     case 'Delete':
       event.preventDefault()
+      // Bend points are their own selection, separate from the node/edge one
+      // — Delete clears whichever the user was actually just pointing at.
+      if (selectedWaypoints.value.length) {
+        removeSelectedWaypoints()
+        break
+      }
       commit()
       endCoalesce()
       removeSelection()

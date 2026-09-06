@@ -135,13 +135,15 @@ onBeforeUnmount(() => unregisterEdgePath(props.id))
 /**
  * How much of the connector, at each end, can be grabbed and dragged onto a
  * different node — dragging the drawn line itself near its tip, rather than
- * a dot only findable by first hovering exactly over it. Capped at half the
+ * a dot only findable by first hovering exactly over it. A fixed length
+ * rather than a fraction of the connector: a percentage would hand a long
+ * connector a huge reconnect zone at each end (and a short one almost
+ * nothing), where what actually matters is how far a hand can miss the tip by
+ * — the same regardless of how long the line runs. Capped at half the
  * connector's own length, so the two ends of a short connector meet in the
- * middle instead of trying to overlap. Kept fairly small: the rest of the
- * line, in between, is where dragging adds a manual bend point instead (see
- * `startAddWaypoint`), and a wide reconnect zone would crowd that out.
+ * middle instead of trying to overlap.
  */
-const GRAB_FRACTION = 0.2
+const GRAB_LENGTH = 28
 const GRAB_SAMPLES = 20
 
 const nearSourcePath = ref('')
@@ -161,7 +163,7 @@ function sampleRange(el: SVGPathElement, from: number, to: number): string {
 }
 
 /**
- * Rebuilds the two grab zones from the line actually on screen, rather than
+ * Rebuilds the grab zones from the line actually on screen, rather than
  * re-deriving them from `geometry` — sampling the rendered path is one
  * implementation that works whether that geometry is a straight run, a
  * curve, or a routed polyline, with no case to add when routing grows one.
@@ -170,7 +172,7 @@ function updateGrabZones() {
   const el = pathEl.value
   if (!el) return
   const len = el.getTotalLength()
-  const reach = Math.min(len * GRAB_FRACTION, len / 2)
+  const reach = Math.min(GRAB_LENGTH, len / 2)
   nearSourcePath.value = sampleRange(el, 0, reach)
   nearTargetPath.value = sampleRange(el, len - reach, len)
   midPath.value = sampleRange(el, reach, len - reach)
@@ -465,30 +467,6 @@ const label = computed(() => {
   </template>
 
   <!--
-    Where the connection itself can be picked up and dragged onto a different
-    node — the last stretch of the line at each end, not just its exact tip.
-    Invisible until hovered, same as a node's own dots (see `ShapeNode`).
-  -->
-  <path
-    v-if="nearSourcePath"
-    :d="nearSourcePath"
-    fill="none"
-    stroke-width="20"
-    stroke-linecap="round"
-    class="bg-edge__grab"
-    @mousedown="startReconnect($event, 'source')"
-  />
-  <path
-    v-if="nearTargetPath"
-    :d="nearTargetPath"
-    fill="none"
-    stroke-width="20"
-    stroke-linecap="round"
-    class="bg-edge__grab"
-    @mousedown="startReconnect($event, 'target')"
-  />
-
-  <!--
     Manual routing: only while the connection is selected, so an unselected
     diagram is not covered in editing chrome. Grabbing the line itself drops
     a new bend point and starts dragging it; the dots are the bend points
@@ -496,9 +474,9 @@ const label = computed(() => {
   -->
   <template v-if="props.selected && !dragging">
     <!--
-      Its own colour, distinct from the blue reconnect zones above: this drags
-      a bend point into being, not an endpoint onto a different node, and the
-      two should not read as the same gesture.
+      Same colour family as the reconnect zones below and the bend points
+      themselves — everything about this connector that a drag can pick up
+      reads as one kind of thing.
     -->
     <path
       v-if="midPath"
@@ -525,6 +503,7 @@ const label = computed(() => {
         class="bg-edge__waypoint-hit"
         @pointerdown="startDragWaypoint($event, index)"
         @dblclick.stop="removeWaypoint(index)"
+        @contextmenu.prevent.stop="removeWaypoint(index)"
       />
       <!-- Filled once selected, hollow otherwise — the same distinction a node's own selection makes. -->
       <circle
@@ -559,6 +538,30 @@ const label = computed(() => {
       @pointerdown="startInsertWaypoint($event, ip.index, ip.point)"
     />
   </template>
+
+  <!--
+    Where the connection itself can be picked up and dragged onto a different
+    node — a fixed stretch of the line at each end, not just its exact tip.
+    Invisible until hovered, same as a node's own dots (see `ShapeNode`).
+  -->
+  <path
+    v-if="nearSourcePath"
+    :d="nearSourcePath"
+    fill="none"
+    stroke-width="20"
+    stroke-linecap="round"
+    class="bg-edge__grab"
+    @mousedown="startReconnect($event, 'source')"
+  />
+  <path
+    v-if="nearTargetPath"
+    :d="nearTargetPath"
+    fill="none"
+    stroke-width="20"
+    stroke-linecap="round"
+    class="bg-edge__grab"
+    @mousedown="startReconnect($event, 'target')"
+  />
 </template>
 
 <style scoped>
@@ -567,10 +570,12 @@ const label = computed(() => {
  * exactly how much of the end is grabbable — a node's own dots follow the
  * same rule, and for the same reason: shown all the time, one of these at
  * both ends of every connection on the canvas would be its own kind of
- * clutter.
+ * clutter. Purple, like every other draggable part of a connection — moving
+ * an end onto a different node and dragging a bend point into being read as
+ * the same kind of gesture, so they share the same colour.
  */
 .bg-edge__grab {
-  stroke: var(--bg-selection);
+  stroke: var(--bg-waypoint);
   stroke-opacity: 0;
   cursor: crosshair;
   transition: stroke-opacity 120ms ease;
@@ -580,7 +585,7 @@ const label = computed(() => {
   stroke-opacity: 0.25;
 }
 
-/* Same idea as `.bg-edge__grab`, in the waypoint colour instead of the reconnect one. */
+/* Same idea as `.bg-edge__grab`, with its own cursor: this adds a bend point rather than reconnecting an end. */
 .bg-edge__grab-add {
   stroke: var(--bg-waypoint);
   stroke-opacity: 0;
