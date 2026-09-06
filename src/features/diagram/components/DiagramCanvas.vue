@@ -14,7 +14,7 @@ import type {
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { Check, Waypoints } from '@lucide/vue'
+import { Check, Scaling, Waypoints } from '@lucide/vue'
 import type { ColorKey, DiagramParseError } from '@/model'
 import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
@@ -52,6 +52,7 @@ const {
   canvas,
   dirty,
   reconnectingEdge,
+  resizingNodeId,
   selectedNodes,
   commit,
   endCoalesce,
@@ -97,6 +98,19 @@ const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
 const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
 const theme = computed(() => diagramTheme(canvas.theme))
+
+/** Live label/size of whichever node is being resized, for the canvas's own indicator. */
+const resizingNode = computed(() => {
+  if (!resizingNodeId.value) return null
+  const node = getNodes.value.find((n) => n.id === resizingNodeId.value)
+  if (!node) return null
+  const label = (node.data as { label?: string } | undefined)?.label
+  return {
+    label: label || (node.type === 'zone' ? 'Zone' : 'Node'),
+    width: Math.round(node.dimensions?.width ?? 0),
+    height: Math.round(node.dimensions?.height ?? 0),
+  }
+})
 
 /** The last palette item used, repeated by a double-click on empty canvas. */
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
@@ -742,6 +756,27 @@ watch(isVisible, (visible) => {
             >
               <Waypoints :size="14" :style="{ color: theme.selection }" />
               Moving connection — drop it on a node to reconnect
+            </div>
+          </div>
+        </Transition>
+
+        <!-- Top-centre indicator, up for as long as a node's own resize handles are held. -->
+        <Transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="-translate-y-1 opacity-0"
+          leave-active-class="transition duration-150 ease-in"
+          leave-to-class="-translate-y-1 opacity-0"
+        >
+          <div
+            v-if="resizingNode"
+            class="pointer-events-none absolute top-4 left-1/2 z-30 -translate-x-1/2"
+          >
+            <div
+              class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
+              :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
+            >
+              <Scaling :size="14" :style="{ color: theme.selection }" />
+              Resizing {{ resizingNode.label }} — {{ resizingNode.width }} × {{ resizingNode.height }}
             </div>
           </div>
         </Transition>

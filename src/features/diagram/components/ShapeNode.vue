@@ -17,7 +17,7 @@ import { useConnectionTarget } from '@/features/diagram/composables/useConnectio
 
 const props = defineProps<NodeProps<NodeData>>()
 
-const { canvas, commit, endCoalesce, setNodesLocked } = useDiagram()
+const { canvas, commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
 const { connecting, from: connectFrom, to: connectTo } = useConnectionTarget()
 
 /** The badge is the only way back: a locked node cannot be selected. */
@@ -25,6 +25,15 @@ function unlock() {
   commit()
   endCoalesce()
   setNodesLocked([props.id], false)
+}
+
+function onResizeStart() {
+  commit()
+  resizingNodeId.value = props.id
+}
+
+function onResizeEnd() {
+  resizingNodeId.value = null
 }
 
 const width = computed(() => props.dimensions.width || DEFAULT_NODE_SIZE.width)
@@ -156,7 +165,8 @@ const handles = computed(() => {
       borderRadius: '3px',
       borderWidth: '1.5px',
     }"
-    @resize-start="commit()"
+    @resize-start="onResizeStart"
+    @resize-end="onResizeEnd"
   />
 
   <div

@@ -167,6 +167,14 @@ function createDiagramStore(documentId: string) {
   const reconnectingEdge = ref(false)
 
   /**
+   * Id of the node whose own resize handles are being dragged, so the canvas
+   * can show a live "resizing" indicator without a node component needing to
+   * know anything about that indicator itself — the same split as
+   * `reconnectingEdge` above, one level up.
+   */
+  const resizingNodeId = ref<string | null>(null)
+
+  /**
    * Whether this diagram has edits that are not in a file yet.
    *
    * The autosave below means nothing is *lost* when a tab closes — the diagram
@@ -1496,6 +1504,7 @@ function createDiagramStore(documentId: string) {
     fitRequest,
     dirty,
     reconnectingEdge,
+    resizingNodeId,
     // actions
     markSaved,
     commit,
