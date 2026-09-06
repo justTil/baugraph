@@ -20,8 +20,18 @@ import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
-const { canvas, reconnectEdge, reconnectingEdge, commit, endCoalesce, updateEdgeData } =
-  useDiagram()
+const {
+  canvas,
+  reconnectEdge,
+  reconnectingEdge,
+  commit,
+  endCoalesce,
+  updateEdgeData,
+  isWaypointSelected,
+  selectWaypoint,
+  shiftWaypointSelectionForInsert,
+  shiftWaypointSelectionForRemove,
+} = useDiagram()
 const { getNodes, screenToFlowCoordinate } = useVueFlow()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 
@@ -274,10 +284,16 @@ function beginDraggingWaypoint(index: number) {
   window.addEventListener('pointerup', stopDraggingWaypoint, { once: true })
 }
 
-/** Picks up an existing bend point to drag it elsewhere. */
+/**
+ * Picks up an existing bend point to drag it elsewhere. Also selects it —
+ * plainly, or added to the running selection with shift/ctrl/cmd held — so a
+ * point can be picked out for aligning without needing a separate click just
+ * to select it.
+ */
 function startDragWaypoint(event: PointerEvent, index: number) {
   if (event.button !== 0) return
   event.stopPropagation()
+  selectWaypoint(props.id, index, event.shiftKey || event.ctrlKey || event.metaKey)
   commit()
   endCoalesce()
   beginDraggingWaypoint(index)
@@ -287,6 +303,7 @@ function startDragWaypoint(event: PointerEvent, index: number) {
 function removeWaypoint(index: number) {
   commit()
   endCoalesce()
+  shiftWaypointSelectionForRemove(props.id, index)
   const next = waypoints.value.filter((_, i) => i !== index)
   updateEdgeData(props.id, { waypoints: next.length ? next : undefined })
 }
@@ -306,6 +323,8 @@ function startAddWaypoint(event: PointerEvent) {
   const point = flowPoint(event)
   const points = [geometry.value.start, ...waypoints.value, geometry.value.end]
   const index = nearestSegmentIndex(points, point)
+  shiftWaypointSelectionForInsert(props.id, index)
+  selectWaypoint(props.id, index, event.shiftKey || event.ctrlKey || event.metaKey)
   const next = [...waypoints.value]
   next.splice(index, 0, point)
   updateEdgeData(props.id, { waypoints: next })
@@ -335,6 +354,8 @@ function startInsertWaypoint(event: PointerEvent, index: number, point: Vec) {
   event.stopPropagation()
   commit()
   endCoalesce()
+  shiftWaypointSelectionForInsert(props.id, index)
+  selectWaypoint(props.id, index, event.shiftKey || event.ctrlKey || event.metaKey)
   const next = [...waypoints.value]
   next.splice(index, 0, point)
   updateEdgeData(props.id, { waypoints: next })
@@ -474,13 +495,18 @@ const label = computed(() => {
     already placed, draggable to move and double-clickable to remove.
   -->
   <template v-if="props.selected && !dragging">
+    <!--
+      Its own colour, distinct from the blue reconnect zones above: this drags
+      a bend point into being, not an endpoint onto a different node, and the
+      two should not read as the same gesture.
+    -->
     <path
       v-if="midPath"
       :d="midPath"
       fill="none"
       stroke-width="20"
       stroke-linecap="round"
-      class="bg-edge__grab"
+      class="bg-edge__grab-add"
       @pointerdown="startAddWaypoint($event)"
     />
     <template v-for="(point, index) in waypoints" :key="index">
@@ -500,12 +526,13 @@ const label = computed(() => {
         @pointerdown="startDragWaypoint($event, index)"
         @dblclick.stop="removeWaypoint(index)"
       />
+      <!-- Filled once selected, hollow otherwise — the same distinction a node's own selection makes. -->
       <circle
         :cx="point.x"
         :cy="point.y"
         r="5"
-        :fill="theme.bg"
-        :stroke="theme.selection"
+        :fill="isWaypointSelected(id, index) ? theme.waypoint : theme.bg"
+        :stroke="theme.waypoint"
         stroke-width="2"
         class="pointer-events-none"
       />
@@ -514,9 +541,9 @@ const label = computed(() => {
       Dashed hints for where dragging would add the *next* point — visible by
       default, not just on hover, since the whole reason for these is to show
       that more can be added without the user having to find the invisible
-      strip on their own. Deliberately drawn hollow and muted, next to the
-      solid, selection-coloured dots above, so "not placed yet" reads at a
-      glance.
+      strip on their own. Deliberately drawn hollow, next to the solid dots
+      above, so "not placed yet" reads at a glance even though both now share
+      the same colour family.
     -->
     <circle
       v-for="ip in insertionPoints"
@@ -525,7 +552,7 @@ const label = computed(() => {
       :cy="ip.point.y"
       r="4"
       :fill="theme.bg"
-      :stroke="theme.muted"
+      :stroke="theme.waypoint"
       stroke-width="1.5"
       stroke-dasharray="2 2"
       class="bg-edge__waypoint-insert"
@@ -550,6 +577,18 @@ const label = computed(() => {
 }
 
 .bg-edge__grab:hover {
+  stroke-opacity: 0.25;
+}
+
+/* Same idea as `.bg-edge__grab`, in the waypoint colour instead of the reconnect one. */
+.bg-edge__grab-add {
+  stroke: var(--bg-waypoint);
+  stroke-opacity: 0;
+  cursor: copy;
+  transition: stroke-opacity 120ms ease;
+}
+
+.bg-edge__grab-add:hover {
   stroke-opacity: 0.25;
 }
 

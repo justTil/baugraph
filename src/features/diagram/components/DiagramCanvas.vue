@@ -14,12 +14,14 @@ import type {
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { Check, Scaling, Waypoints } from '@lucide/vue'
+import { AlignCenterHorizontal, AlignCenterVertical, Check, Scaling, Waypoints } from '@lucide/vue'
 import type { ColorKey, DiagramParseError } from '@/model'
 import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
@@ -53,6 +55,9 @@ const {
   dirty,
   reconnectingEdge,
   resizingNodeId,
+  selectedWaypoints,
+  alignWaypoints,
+  clearWaypointSelection,
   selectedNodes,
   commit,
   endCoalesce,
@@ -111,6 +116,9 @@ const resizingNode = computed(() => {
     height: Math.round(node.dimensions?.height ?? 0),
   }
 })
+
+/** Aligning needs two points to have something to line up against. */
+const canAlignWaypoints = computed(() => selectedWaypoints.value.length >= 2)
 
 /** The last palette item used, repeated by a double-click on empty canvas. */
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
@@ -677,6 +685,7 @@ watch(isVisible, (visible) => {
         '--bg-canvas': theme.bg,
         '--bg-selection': theme.selection,
         '--bg-connect': theme.connect,
+        '--bg-waypoint': theme.waypoint,
         background: theme.bg,
       }"
       @dragover="onDragOver"
@@ -723,6 +732,7 @@ watch(isVisible, (visible) => {
           @edge-context-menu="onEdgeContextMenu"
           @selection-context-menu="onSelectionContextMenu"
           @pane-context-menu="onPaneContextMenu"
+          @pane-click="clearWaypointSelection"
           @pane-ready="fitView({ padding: 0.2 })"
           @nodes-initialized="fitLoaded"
           @dblclick.self="onPaneDoubleClick"
@@ -890,21 +900,52 @@ watch(isVisible, (visible) => {
     </div>
 
     <!-- Always on top, so there is a way back from JSON however it was reached. -->
-    <label
-      class="absolute top-4 right-4 z-40 flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm select-none"
-      :style="{ background: theme.surface, borderColor: theme.line }"
-    >
-      <span :style="{ color: viewMode === 'diagram' ? theme.ink : undefined }" class="text-muted-foreground">
-        Diagram
-      </span>
-      <Switch
-        :model-value="viewMode === 'json'"
-        @update:model-value="setViewMode($event ? 'json' : 'diagram')"
-      />
-      <span :style="{ color: viewMode === 'json' ? theme.ink : undefined }" class="text-muted-foreground">
-        JSON
-      </span>
-    </label>
+    <div class="absolute top-4 right-4 z-40 flex items-center gap-2">
+      <!--
+        Only up while two or more bend points are selected — aligning one
+        point against itself means nothing. Sits beside the JSON switch
+        rather than in a menu, since it only matters for as long as that
+        selection lasts.
+      -->
+      <div
+        v-if="canAlignWaypoints"
+        class="flex items-center gap-0.5 rounded-lg border p-1 shadow-sm"
+        :style="{ background: theme.surface, borderColor: theme.line }"
+      >
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon" class="size-7" @click="alignWaypoints('y')">
+              <AlignCenterHorizontal :size="15" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Align bend points horizontally</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon" class="size-7" @click="alignWaypoints('x')">
+              <AlignCenterVertical :size="15" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Align bend points vertically</TooltipContent>
+        </Tooltip>
+      </div>
+
+      <label
+        class="flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm select-none"
+        :style="{ background: theme.surface, borderColor: theme.line }"
+      >
+        <span :style="{ color: viewMode === 'diagram' ? theme.ink : undefined }" class="text-muted-foreground">
+          Diagram
+        </span>
+        <Switch
+          :model-value="viewMode === 'json'"
+          @update:model-value="setViewMode($event ? 'json' : 'diagram')"
+        />
+        <span :style="{ color: viewMode === 'json' ? theme.ink : undefined }" class="text-muted-foreground">
+          JSON
+        </span>
+      </label>
+    </div>
     </div>
 
     <CanvasContextMenu

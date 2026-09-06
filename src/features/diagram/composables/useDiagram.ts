@@ -88,6 +88,12 @@ export interface EdgeData {
   meta?: Metadata
 }
 
+/** One manual bend point, addressed by the connection it belongs to and its position in `waypoints`. */
+export interface WaypointRef {
+  edgeId: string
+  index: number
+}
+
 // `any` for the custom-events slot mirrors Vue Flow's own default; narrowing it
 // makes the node type incompatible with the library's internal `GraphNode`.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -173,6 +179,99 @@ function createDiagramStore(documentId: string) {
    * `reconnectingEdge` above, one level up.
    */
   const resizingNodeId = ref<string | null>(null)
+
+  /**
+   * Manual bend points currently selected, so several can be aligned at once —
+   * across different connections, since a bend point has no other selection
+   * model of its own to piggyback on (it is not a node or an edge). Cleared
+   * defensively whenever `edges` changes (see the watcher below), so deleting
+   * a connection or its last bend point cannot leave a stale reference in
+   * here that the alignment actions or the toolbar would trip over.
+   */
+  const selectedWaypoints = ref<WaypointRef[]>([])
+
+  function isWaypointSelected(edgeId: string, index: number): boolean {
+    return selectedWaypoints.value.some((w) => w.edgeId === edgeId && w.index === index)
+  }
+
+  /** Plain click replaces the selection; shift/ctrl/cmd-click toggles a point into or out of it. */
+  function selectWaypoint(edgeId: string, index: number, additive: boolean): void {
+    if (!additive) {
+      selectedWaypoints.value = [{ edgeId, index }]
+      return
+    }
+    const i = selectedWaypoints.value.findIndex((w) => w.edgeId === edgeId && w.index === index)
+    selectedWaypoints.value =
+      i >= 0
+        ? selectedWaypoints.value.filter((_, j) => j !== i)
+        : [...selectedWaypoints.value, { edgeId, index }]
+  }
+
+  function clearWaypointSelection(): void {
+    selectedWaypoints.value = []
+  }
+
+  /**
+   * Splicing a bend point in or out of `waypoints` shifts every later point's
+   * index — selection is stored by index, so it has to shift right along with
+   * them or it silently starts pointing at a different point than the one the
+   * user actually selected.
+   */
+  function shiftWaypointSelectionForInsert(edgeId: string, at: number): void {
+    selectedWaypoints.value = selectedWaypoints.value.map((w) =>
+      w.edgeId === edgeId && w.index >= at ? { ...w, index: w.index + 1 } : w,
+    )
+  }
+
+  /** See `shiftWaypointSelectionForInsert`. The removed point drops out of the selection entirely. */
+  function shiftWaypointSelectionForRemove(edgeId: string, at: number): void {
+    selectedWaypoints.value = selectedWaypoints.value
+      .filter((w) => !(w.edgeId === edgeId && w.index === at))
+      .map((w) => (w.edgeId === edgeId && w.index > at ? { ...w, index: w.index - 1 } : w))
+  }
+
+  /**
+   * Pulls every selected bend point onto one shared line — the same axis onto
+   * the same value, whatever connections they belong to. The value is the
+   * average of where they already sit, so aligning does not also go hunting
+   * for which one was "first."
+   */
+  function alignWaypoints(axis: 'x' | 'y'): void {
+    if (selectedWaypoints.value.length < 2) return
+    const byEdge = new Map<string, number[]>()
+    for (const { edgeId, index } of selectedWaypoints.value) {
+      const indices = byEdge.get(edgeId) ?? []
+      indices.push(index)
+      byEdge.set(edgeId, indices)
+    }
+
+    let sum = 0
+    let count = 0
+    for (const [edgeId, indices] of byEdge) {
+      const points = (edges.value.find((e) => e.id === edgeId)?.data as EdgeData | undefined)
+        ?.waypoints
+      for (const i of indices) {
+        const p = points?.[i]
+        if (p) {
+          sum += p[axis]
+          count++
+        }
+      }
+    }
+    if (!count) return
+    const target = Math.round(sum / count)
+
+    commit()
+    endCoalesce()
+    for (const [edgeId, indices] of byEdge) {
+      const points = (edges.value.find((e) => e.id === edgeId)?.data as EdgeData | undefined)
+        ?.waypoints
+      if (!points) continue
+      updateEdgeData(edgeId, {
+        waypoints: points.map((p, i) => (indices.includes(i) ? { ...p, [axis]: target } : p)),
+      })
+    }
+  }
 
   /**
    * Whether this diagram has edits that are not in a file yet.
@@ -1487,6 +1586,19 @@ function createDiagramStore(documentId: string) {
     // moves them — so they can be watched directly for what `commit` misses:
     // the toolbar's theme and grid toggles.
     watch([flows, meta, canvas], () => (dirty.value = true), { deep: true })
+    // A bend point's selection outlives the edge it came from only by accident
+    // — deleting a connection, undoing its creation, or clearing its last
+    // waypoint should not leave a phantom entry the alignment buttons still
+    // count. `edges` is replaced wholesale by every mutation that could
+    // invalidate a reference, so a shallow watch catches all of them.
+    watch(edges, () => {
+      if (!selectedWaypoints.value.length) return
+      selectedWaypoints.value = selectedWaypoints.value.filter(({ edgeId, index }) => {
+        const points = (edges.value.find((e) => e.id === edgeId)?.data as EdgeData | undefined)
+          ?.waypoints
+        return !!points && index < points.length
+      })
+    })
   })
 
   return {
@@ -1505,6 +1617,13 @@ function createDiagramStore(documentId: string) {
     dirty,
     reconnectingEdge,
     resizingNodeId,
+    selectedWaypoints,
+    isWaypointSelected,
+    selectWaypoint,
+    clearWaypointSelection,
+    shiftWaypointSelectionForInsert,
+    shiftWaypointSelectionForRemove,
+    alignWaypoints,
     // actions
     markSaved,
     commit,

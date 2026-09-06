@@ -32,6 +32,13 @@ export interface DiagramTheme {
   selection: string
   /** Says a gesture has found its mark: the connection point a drag would land on. */
   connect: string
+  /**
+   * Manual edge routing's own colour — bend points, and anything that drags
+   * one into existence. Deliberately not `selection`: that blue already means
+   * "reconnecting this end to a different node," and a bend point is neither
+   * end.
+   */
+  waypoint: string
 }
 
 export function diagramTheme(mode: 'light' | 'dark'): DiagramTheme {
@@ -49,6 +56,9 @@ export function diagramTheme(mode: 'light' | 'dark'): DiagramTheme {
     // Lifted on a dark canvas: the palette's green is chosen to sit on white and
     // goes muddy against near-black, where this has to read at a glance.
     connect: dark ? '#3fd18a' : '#12995d',
+    // Same purple as the `purple` node/edge colour, lightened for dark the
+    // same way `selection` is — legible on near-black without turning garish.
+    waypoint: dark ? '#a488ea' : '#7a52d1',
   }
 }
 
