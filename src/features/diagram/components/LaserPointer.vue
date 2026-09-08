@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 
 /**
@@ -46,6 +46,28 @@ const cursor = ref<{ x: number; y: number } | null>(null)
 const drawing = ref(false)
 
 let raf = 0
+
+/**
+ * The pointer's last screen position, tracked whether or not the laser is on, so
+ * the dot can appear the instant it is switched on rather than waiting for the
+ * first move.
+ */
+const last = { x: 0, y: 0, known: false }
+
+function track(event: PointerEvent) {
+  last.x = event.clientX
+  last.y = event.clientY
+  last.known = true
+}
+
+/** Places the dot at wherever the pointer already is, if that is over the canvas. */
+function seed() {
+  const rect = props.host?.getBoundingClientRect()
+  if (!rect || !last.known) return
+  const x = last.x - rect.left
+  const y = last.y - rect.top
+  if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height) cursor.value = { x, y }
+}
 
 const maxAgeOf = (p: Point) => (p.ink ? INK_MS : TAIL_MS)
 
@@ -124,6 +146,7 @@ const CAPTURED: [keyof WindowEventMap, EventListener][] = [
 
 function bind() {
   for (const [type, fn] of CAPTURED) window.addEventListener(type, fn, true)
+  seed()
 }
 
 function unbind() {
@@ -136,7 +159,12 @@ function unbind() {
 }
 
 watch(active, (on) => (on ? bind() : unbind()), { immediate: true })
-onBeforeUnmount(unbind)
+
+onMounted(() => window.addEventListener('pointermove', track, true))
+onBeforeUnmount(() => {
+  window.removeEventListener('pointermove', track, true)
+  unbind()
+})
 
 /** The tail and any drawn strokes, as fading line segments. */
 const segments = computed(() => {
