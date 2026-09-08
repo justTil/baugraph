@@ -2,10 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.28.0]
 
-## [Unreleased]
+### Added
+
+- **Manual edge routing with waypoints.** Drag anywhere along a connection to
+  drop a bend point; the line is then drawn straight through your points instead
+  of auto-routing around obstacles. Move several waypoints at once, delete them
+  one at a time, or pick **Reset routing** from an edge's context menu to hand
+  it back to the auto-router. Waypoints round-trip through `.baugraph.json` as a
+  per-edge `waypoints` list (one point per line) and are covered by the JSON
+  Schema and the generated AI skills.
+- **Watermarks on exports.** SVG, PNG and GIF exports can carry a diagonally
+  tiled caption — a `DRAFT` stamp, or a short issued-to id from the **Random**
+  button. It is drawn as one rotated SVG pattern so it covers the whole image
+  edge to edge, scales to the export size, and — like every export — never
+  leaves the browser.
+- **In-app changelog.** A **What's New** entry in the sidebar renders this file
+  as a formatted release history.
+- **Laser pointer.** A presentation aid — toggle it from the toolbar or press
+  **L** and the cursor becomes a glowing dot that follows you over the canvas;
+  hold and drag to draw a stroke that fades after a couple of seconds, for
+  circling something in a meeting. Scroll-to-pan and pinch-to-zoom still work;
+  presses on the canvas draw instead of moving anything. **Esc** turns it off.
+- Docs
+- "Self host with Docker" link in the app header, pointing at the Docker Hub image
+- Two more worked example diagrams (a CI/CD pipeline and a three-tier web app),
+  opened as their own tabs alongside the order-processing example on a first visit
+
+### Changed
+
+- Privacy policy now names Cloudflare as the DNS/CDN provider in front of the
+  GitHub Pages host
+
+## [1.27.0]
+
+### Added
+
+- Created amd64 docker image (before it was only arm)
+
+## [1.26.0]
+
+### Added
+
+- Created first docker image
 
 ## [1.25.0] - 2026-08-22
 
@@ -52,5 +92,7 @@ before this one, so everything built since the initial commit is listed here.
 - Diagram edge rendering, node editing, panel and sidebar layout issues found
   along the way.
 
-[unreleased]: https://github.com/justTil/baugraph/compare/v1.25.0...HEAD
-[1.25.0]: https://github.com/justTil/baugraph/releases/tag/v1.25.0
+[1.28.0]: https://github.com/justTil/baugraph/releases/tag/1.28.0
+[1.27.0]: https://github.com/justTil/baugraph/releases/tag/1.27.0
+[1.26.0]: https://github.com/justTil/baugraph/releases/tag/1.26.0
+[1.25.0]: https://github.com/justTil/baugraph/releases/tag/1.25.0

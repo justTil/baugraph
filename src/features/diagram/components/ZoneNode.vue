@@ -15,7 +15,7 @@ import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 
 const props = defineProps<NodeProps<NodeData>>()
 
-const { canvas, commit, endCoalesce, setNodesLocked } = useDiagram()
+const { canvas, commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
 const { findNode, getNodes } = useCanvas()
 
 /**
@@ -74,6 +74,7 @@ let origin: { x: number; y: number } | null = null
 function onResizeStart() {
   commit()
   endCoalesce()
+  resizingNodeId.value = props.id
   const node = findNode(props.id)
   origin = node ? { x: node.position.x, y: node.position.y } : null
 }
@@ -93,6 +94,7 @@ function onResize({ params }: OnResize) {
 
 function onResizeEnd() {
   origin = null
+  resizingNodeId.value = null
 }
 </script>
 

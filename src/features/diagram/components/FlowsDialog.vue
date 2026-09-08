@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ChevronRight, Pause, Play, Plus, RotateCcw, Trash2, X } from '@lucide/vue'
+import { Check, ChevronRight, Pause, Play, Plus, RotateCcw, Trash2, X } from '@lucide/vue'
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,29 @@ const {
 const { paused, reduced, highlighted, editorOpen, editing, editingEdge, planOf } = useFlows()
 
 const current = computed(() => flows.value.find((flow) => flow.id === editing.value) ?? null)
+
+/**
+ * Flow edits already apply live and autosave, so Save is a confirmation rather
+ * than a write: it takes a snapshot of the flows as they now stand, and the two
+ * buttons grey out until an edit moves away from that snapshot again — a plain
+ * signal that there is nothing outstanding to keep.
+ */
+const savedShot = ref('')
+const snapshot = () => JSON.stringify(flows.value)
+const dirty = computed(() => snapshot() !== savedShot.value)
+
+function keep() {
+  savedShot.value = snapshot()
+}
+
+function keepAndClose() {
+  keep()
+  editorOpen.value = false
+}
+
+watch(editorOpen, (open) => {
+  if (open) savedShot.value = snapshot()
+}, { immediate: true })
 
 const labelOf = (id: string) => nodes.value.find((n) => n.id === id)?.data?.label || id
 
@@ -138,6 +161,13 @@ function drop(id: string) {
   })
 }
 
+/** Flows switched off, and the one action that turns every one of them back on. */
+const stopped = computed(() => flows.value.filter((flow) => !flow.enabled))
+
+function resumeAll() {
+  act(() => stopped.value.forEach((flow) => updateFlow(flow.id, { enabled: true })))
+}
+
 function hover(flow: MessageFlow | null) {
   highlighted.value = flow
     ? { id: flow.id, color: flow.color, edges: planOf(flow).edges }
@@ -185,12 +215,37 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
 <template>
   <Dialog v-model:open="editorOpen">
     <DialogContent class="flex h-[80vh] flex-col gap-0 p-0 sm:max-w-3xl">
-      <DialogHeader class="border-b px-5 py-4">
+      <DialogHeader class="border-b py-4 pl-5" :class="current ? 'pr-56' : 'pr-5'">
         <DialogTitle>Message flows</DialogTitle>
         <DialogDescription>
           A message travelling the connections you picked, multiplying wherever the path
           forks — one message into a topic, three out of it.
         </DialogDescription>
+        <!--
+          Edits already apply live; Save is the reassurance that they stuck.
+          Sat on the same line as the close button, and greyed once the flows
+          match the last snapshot — nothing outstanding to keep.
+        -->
+        <div v-if="current" class="absolute top-2 right-11 flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            :disabled="!dirty"
+            title="Keep these changes, leave the editor open"
+            @click="keep"
+          >
+            <Check />
+            Save
+          </Button>
+          <Button
+            size="sm"
+            :disabled="!dirty"
+            title="Keep these changes and close the editor"
+            @click="keepAndClose"
+          >
+            Save and close
+          </Button>
+        </div>
       </DialogHeader>
 
       <div class="flex min-h-0 flex-1">
@@ -281,6 +336,23 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
             >
               <component :is="paused ? Play : Pause" />
               {{ paused ? 'Play all' : 'Pause all' }}
+            </Button>
+
+            <!--
+              Distinct from Play all above: that lifts the global freeze, this
+              switches flows that were individually turned off back on, so a round
+              of stopping single flows has one way back.
+            -->
+            <Button
+              v-if="stopped.length"
+              variant="ghost"
+              size="sm"
+              class="text-muted-foreground w-full justify-start"
+              :title="`Switch all ${stopped.length} stopped flows back on`"
+              @click="resumeAll"
+            >
+              <Play />
+              Resume all ({{ stopped.length }})
             </Button>
           </div>
         </aside>

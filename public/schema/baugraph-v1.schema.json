@@ -358,6 +358,25 @@
               }
             ]
           },
+          "waypoints": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ]
+            }
+          },
           "data": {
             "type": "object",
             "propertyNames": {

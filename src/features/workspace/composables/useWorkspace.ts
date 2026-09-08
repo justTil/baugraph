@@ -245,6 +245,20 @@ export function resetLayout() {
   applyDefaultLayout()
 }
 
+/**
+ * Opens the view named by the URL hash on load, e.g. `baugraph.com/#legal` —
+ * how the docs site's footer links back to a specific tab that otherwise has
+ * no URL of its own. Silently does nothing for a missing or unrecognised
+ * hash, and clears it afterwards so it doesn't linger in the address bar or
+ * fight the restored layout on a later reload.
+ */
+function openViewFromHash() {
+  const id = window.location.hash.slice(1)
+  if (!id || !views[id]) return
+  openView(id)
+  history.replaceState(null, '', window.location.pathname + window.location.search)
+}
+
 /* ------------------------------------------------------------------- setup */
 
 /**
@@ -268,6 +282,7 @@ export function registerDock(api: DockviewApi, workspacePolicy: WorkspacePolicy)
   ]
 
   if (!restore()) applyDefaultLayout()
+  openViewFromHash()
   sync()
 
   return [
