@@ -182,6 +182,14 @@ export interface DiagramEdge {
   arrows: ArrowMode
   /** `null` = follow the theme's neutral edge colour. */
   color?: ColorKey | null
+  /**
+   * User-placed bend points the connector is routed through, source to
+   * target, instead of being auto-routed around obstacles. Absent or empty
+   * means automatic — the only behavior this format had before manual
+   * routing existed. Canvas coordinates, the same space as a node's
+   * `position`.
+   */
+  waypoints?: Vec2[]
   data?: Metadata
 }
 

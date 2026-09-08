@@ -114,6 +114,9 @@ export const edgeSchema = z.object({
   width: z.enum(LINE_WIDTHS).default(EDGE_DEFAULTS.width),
   arrows: z.enum(ARROW_MODES).default(EDGE_DEFAULTS.arrows),
   color: z.enum(COLOR_KEYS).nullable().default(EDGE_DEFAULTS.color),
+  // No `.min(1)`: a hand-written `[]` is harmless and means the same as
+  // omitting the key entirely — automatic routing.
+  waypoints: z.array(vec2Schema).max(20).optional(),
   data: metadataSchema.optional(),
 })
 

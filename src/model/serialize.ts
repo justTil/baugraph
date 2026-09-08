@@ -74,6 +74,7 @@ const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'targetPort',
   'label',
   'route',
+  'waypoints',
   'line',
   'width',
   'arrows',
@@ -147,6 +148,12 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
     }
     const trimmed = omitDefaults(placed, EDGE_DEFAULTS)
     if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    // No bend points is automatic routing, which says nothing — same
+    // treatment as an edge's `data` and a flow's `style` above/below.
+    if (trimmed.waypoints) {
+      if (!trimmed.waypoints.length) delete trimmed.waypoints
+      else trimmed.waypoints = trimmed.waypoints.map((p) => ({ x: round(p.x), y: round(p.y) }))
+    }
     return ordered(trimmed as DiagramEdge, EDGE_KEY_ORDER)
   })
 
@@ -187,9 +194,11 @@ const INLINE_KEYS = new Set(['position', 'size', 'ports'])
 /**
  * Keys whose *children* are each one line. A flow's per-connection overrides are
  * keyed by edge id, so the keys cannot be listed above — but each override is
- * one small idea ("this one is red") and reads as one line.
+ * one small idea ("this one is red") and reads as one line. An edge's manual
+ * bend points are a list rather than a map, but the same idea applies: moving
+ * one point should touch one line, not four.
  */
-const INLINE_CHILD_KEYS = new Set(['style'])
+const INLINE_CHILD_KEYS = new Set(['style', 'waypoints'])
 
 function format(value: unknown, indent: string, key?: string, inline = false): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
@@ -202,7 +211,8 @@ function format(value: unknown, indent: string, key?: string, inline = false): s
       return `[${value.map((v) => JSON.stringify(v)).join(', ')}]`
     }
     const inner = indent + '  '
-    return `[\n${value.map((v) => inner + format(v, inner)).join(',\n')}\n${indent}]`
+    const inlineChildren = !!key && INLINE_CHILD_KEYS.has(key)
+    return `[\n${value.map((v) => inner + format(v, inner, undefined, inlineChildren)).join(',\n')}\n${indent}]`
   }
 
   const entries = Object.entries(value).filter(([, v]) => v !== undefined)

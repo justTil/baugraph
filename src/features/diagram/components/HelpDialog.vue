@@ -16,6 +16,7 @@ const SHORTCUTS: [string, string][] = [
   ['Space / middle-drag', 'pan the canvas'],
   ['⌘ + scroll, pinch', 'zoom (plain scroll pans)'],
   ['F', 'fit diagram to window'],
+  ['L', 'laser pointer for presenting (hold to draw, Esc to exit)'],
   ['⇧⌘F', 'size the selection to its own text (all of it, if nothing is selected)'],
   ['Enter', 'rename the selected node'],
   ['right-click', 'context menu for what is under the pointer'],

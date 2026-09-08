@@ -30,7 +30,7 @@ import IconPicker from '@/features/diagram/components/IconPicker.vue'
 import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 import EdgeFlowSection from '@/features/diagram/components/EdgeFlowSection.vue'
-import type { PortSide, Side } from '@/model'
+import type { PortSide, Side, Vec2 } from '@/model'
 import { MAX_PORTS, PORT_SIDES, SHAPE_KEYS, nodePorts } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
 import {
@@ -270,6 +270,63 @@ function withCommit(fn: () => void) {
   commit()
   endCoalesce()
   fn()
+}
+
+/**
+ * A node's `position` is relative to its parent zone (see `DiagramNode.position`),
+ * so finding where it actually sits means walking that chain and summing as it
+ * goes — the same idea as `depthOf` in `useDiagram`, just accumulating offsets
+ * instead of counting them. Guards against a corrupt parent cycle the same way.
+ */
+function absolutePosition(node: { id: string; position: Vec2; parentNode?: string }): Vec2 {
+  let x = node.position.x
+  let y = node.position.y
+  const seen = new Set([node.id])
+  let current = node.parentNode ? nodes.value.find((n) => n.id === node.parentNode) : undefined
+  while (current && !seen.has(current.id)) {
+    const parentId = current.parentNode
+    x += current.position.x
+    y += current.position.y
+    seen.add(current.id)
+    current = parentId ? nodes.value.find((n) => n.id === parentId) : undefined
+  }
+  return { x, y }
+}
+
+/**
+ * A reasonable first bend point when a connection switches to manual routing
+ * with none yet — the midpoint between the two nodes it joins, roughly where
+ * the automatic route already runs. The user drags it from here immediately,
+ * so it only has to be close.
+ */
+function seedWaypoint(sourceId: string, targetId: string): Vec2 {
+  const source = nodes.value.find((n) => n.id === sourceId)
+  const target = nodes.value.find((n) => n.id === targetId)
+  if (!source || !target) return { x: 0, y: 0 }
+  const sPos = absolutePosition(source)
+  const tPos = absolutePosition(target)
+  const sSize = sizeOf(source)
+  const tSize = sizeOf(target)
+  return {
+    x: (sPos.x + sSize.width / 2 + tPos.x + tSize.width / 2) / 2,
+    y: (sPos.y + sSize.height / 2 + tPos.y + tSize.height / 2) / 2,
+  }
+}
+
+/** The explicit auto/manual choice the inspector offers alongside dragging the line itself. */
+function setRouting(
+  id: string,
+  source: string,
+  target: string,
+  mode: 'auto' | 'manual',
+  current?: Vec2[],
+) {
+  if (mode === 'auto') {
+    updateEdgeData(id, { waypoints: undefined })
+    return
+  }
+  if (current?.length) return
+  updateEdgeData(id, { waypoints: [seedWaypoint(source, target)] })
 }
 </script>
 
@@ -560,6 +617,41 @@ function withCommit(fn: () => void) {
           />
         </section>
 
+        <!--
+          How this one connection animates. It sits right under the label because
+          what a connection carries is usually what you came here to change; the
+          styling that follows is how it should look while carrying it.
+        -->
+        <EdgeFlowSection :edge-id="edge.id" />
+
+        <section class="space-y-3 border-b p-3">
+          <Label class="text-xs">Colour</Label>
+          <ColorSwatches
+            :model-value="edge.data!.color"
+            allow-default
+            :default-hex="defaultEdgeHex"
+            @update:model-value="withCommit(() => updateEdgeData(edge!.id, { color: $event }))"
+          />
+          <div class="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              @click="withCommit(() => reverseEdge(edge!.id))"
+            >
+              Reverse
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              @click="withCommit(removeSelection)"
+            >
+              Delete
+            </Button>
+          </div>
+        </section>
+
         <section class="space-y-3 border-b p-3">
           <div class="space-y-1.5">
             <Label class="text-xs">Route</Label>
@@ -572,6 +664,30 @@ function withCommit(fn: () => void) {
               ]"
               @update:model-value="withCommit(() => updateEdgeData(edge!.id, { route: $event as never }))"
             />
+          </div>
+          <div class="space-y-1.5">
+            <Label class="text-xs">Routing</Label>
+            <SegmentedField
+              :model-value="edge.data!.waypoints?.length ? 'manual' : 'auto'"
+              :options="[
+                { value: 'auto', label: 'Auto' },
+                { value: 'manual', label: 'Manual' },
+              ]"
+              @update:model-value="
+                withCommit(() =>
+                  setRouting(
+                    edge!.id,
+                    edge!.source,
+                    edge!.target,
+                    $event as 'auto' | 'manual',
+                    edge!.data!.waypoints,
+                  ),
+                )
+              "
+            />
+            <p v-if="edge.data!.waypoints?.length" class="text-muted-foreground text-[11px]">
+              Drag a solid point to move it, a dashed one to add a new bend.
+            </p>
           </div>
           <div class="space-y-1.5">
             <Label class="text-xs">Line</Label>
@@ -642,41 +758,6 @@ function withCommit(fn: () => void) {
             />
           </div>
         </section>
-
-        <section class="space-y-3 border-b p-3">
-          <Label class="text-xs">Colour</Label>
-          <ColorSwatches
-            :model-value="edge.data!.color"
-            allow-default
-            :default-hex="defaultEdgeHex"
-            @update:model-value="withCommit(() => updateEdgeData(edge!.id, { color: $event }))"
-          />
-          <div class="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              class="flex-1"
-              @click="withCommit(() => reverseEdge(edge!.id))"
-            >
-              Reverse
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              class="flex-1"
-              @click="withCommit(removeSelection)"
-            >
-              Delete
-            </Button>
-          </div>
-        </section>
-
-        <!--
-          How this one connection animates. It lives on the connection because
-          that is the thing being designed: two paths out of the same node mean
-          different things and are meant to look it.
-        -->
-        <EdgeFlowSection :edge-id="edge.id" />
       </template>
 
       <!-- ------------------------------------------------------- selection -->
@@ -841,6 +922,8 @@ function withCommit(fn: () => void) {
             <dd>pan canvas</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">F</kbd></dt>
             <dd>fit view to content</dd>
+            <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">L</kbd></dt>
+            <dd>laser pointer for presenting</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⇧⌘F</kbd></dt>
             <dd>size nodes to their text</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘G</kbd></dt>

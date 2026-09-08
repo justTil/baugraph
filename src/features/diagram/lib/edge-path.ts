@@ -25,6 +25,15 @@ export interface Vec {
 export interface EdgeGeometry {
   /** SVG path data for the connector. */
   path: string
+  /**
+   * The connector's polyline vertices, before the corners are rounded off —
+   * for anything that has to re-trace the route at a different width, the flow
+   * halo above all: a wide translucent stroke over the tight quadratic a sharp
+   * corner rounds to balloons into a blob, where the same stroke over the raw
+   * polyline with a round line-join just bends cleanly. Absent for curved and
+   * self-loop connectors, which have no sharp joins to begin with.
+   */
+  points?: Vec[]
   /** Midpoint of the path, where the label sits. */
   mid: Vec
   start: Vec
@@ -729,6 +738,7 @@ function fromPolyline(points: Vec[], radius: number): EdgeGeometry {
 
   return {
     path: polylinePath(cleaned, radius),
+    points: cleaned,
     mid: polylineMid(cleaned),
     start: first,
     end: last,
@@ -815,7 +825,17 @@ export interface EdgeRouteOptions {
    * over the whole set without picking through it.
    */
   obstacles?: Box[]
+  /**
+   * User-placed bend points, source to target. Their presence *is* "manual
+   * routing": the connector is drawn straight through them from one anchor to
+   * the other with no obstacle avoidance at all — the user has taken over
+   * from the router, not asked it for a second opinion.
+   */
+  waypoints?: Vec[]
 }
+
+/** A single point, as the zero-size `Box` `autoSide`/`autoPort` can face. */
+const pointBox = (p: Vec): Box => ({ x: p.x, y: p.y, width: 0, height: 0 })
 
 export function edgeGeometry(
   source: Box,
@@ -829,30 +849,47 @@ export function edgeGeometry(
     targetPort,
     route,
     obstacles,
+    waypoints,
   }: EdgeRouteOptions,
 ): EdgeGeometry {
-  if (source === target || (source.x === target.x && source.y === target.y && source.width === target.width)) {
+  const manual = !!waypoints?.length
+  if (
+    !manual &&
+    (source === target ||
+      (source.x === target.x && source.y === target.y && source.width === target.width))
+  ) {
     return selfLoop(source)
   }
 
-  const sSide = sourceSide === 'auto' ? autoSide(source, target) : sourceSide
-  const tSide = targetSide === 'auto' ? autoSide(target, source) : targetSide
+  // `auto` faces the nearest waypoint when routing manually — the other node
+  // is no longer what this end has to read as pointing towards.
+  const sourceFacing = manual ? pointBox(waypoints![0]!) : target
+  const targetFacing = manual ? pointBox(waypoints!.at(-1)!) : source
+
+  const sSide = sourceSide === 'auto' ? autoSide(source, sourceFacing) : sourceSide
+  const tSide = targetSide === 'auto' ? autoSide(target, targetFacing) : targetSide
   const sCount = nodePorts(sourcePorts)[sSide]
   const tCount = nodePorts(targetPorts)[tSide]
-  const sPort = sourceSide === 'auto' ? autoPort(source, sSide, sCount, target) : (sourcePort ?? 1)
-  const tPort = targetSide === 'auto' ? autoPort(target, tSide, tCount, source) : (targetPort ?? 1)
+  const sPort =
+    sourceSide === 'auto' ? autoPort(source, sSide, sCount, sourceFacing) : (sourcePort ?? 1)
+  const tPort =
+    targetSide === 'auto' ? autoPort(target, tSide, tCount, targetFacing) : (targetPort ?? 1)
 
   const sa = anchor(source, sSide, sCount, sPort)
   const ta = anchor(target, tSide, tCount, tPort)
   // Only ends that have nowhere else to be get pulled onto a shared line. A side
   // carrying several points was laid out deliberately, and its spacing is finer
   // than the tolerance below — nudging one end would slide a connection onto a
-  // point its node does not say it uses.
-  if (sCount === 1 && tCount === 1) align(source, target, sa, ta)
+  // point its node does not say it uses. Skipped entirely while routing
+  // manually: the user has already placed this line, and snapping the anchor
+  // out from under the first bend point would fight that.
+  if (!manual && sCount === 1 && tCount === 1) align(source, target, sa, ta)
 
   const gap = 2
   const s: Vec = { x: sa.point.x + sa.normal.x * gap, y: sa.point.y + sa.normal.y * gap }
   const t: Vec = { x: ta.point.x + ta.normal.x * gap, y: ta.point.y + ta.normal.y * gap }
+
+  if (manual) return fromPolyline([s, ...waypoints!, t], DETOUR_RADIUS[route])
 
   // A box sitting on top of an endpoint is not something a detour can help
   // with — there is no way out of it — so it is not treated as one.
@@ -877,6 +914,7 @@ export function edgeGeometry(
     const len = Math.hypot(dx, dy) || 1
     return {
       path: `M${s.x},${s.y}L${t.x},${t.y}`,
+      points: [s, t],
       mid: { x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 },
       start: s,
       end: t,
@@ -915,6 +953,41 @@ export function edgeGeometry(
     if (around) return fromPolyline(around, DETOUR_RADIUS.orthogonal)
   }
   return fromPolyline(points, DETOUR_RADIUS.orthogonal)
+}
+
+/** Squared distance from `p` to the segment `a`–`b`. */
+function segmentDistanceSq(p: Vec, a: Vec, b: Vec): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const lenSq = dx * dx + dy * dy
+  const t = lenSq ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq, 0, 1) : 0
+  const px = a.x + dx * t
+  const py = a.y + dy * t
+  return (p.x - px) ** 2 + (p.y - py) ** 2
+}
+
+/**
+ * Which segment of a polyline `p` falls nearest to — as the index of the
+ * point *before* it, so a new waypoint inserted at that segment belongs at
+ * this index in the waypoints array (`points` here is
+ * `[start, ...waypoints, end]`, one longer than `waypoints` itself).
+ *
+ * Used to turn "the user grabbed the line here" into "insert a bend point
+ * there": clicking anywhere along a manually- or auto-routed connector picks
+ * the one existing leg the click actually landed nearest, whatever shape
+ * that leg is drawn in.
+ */
+export function nearestSegmentIndex(points: Vec[], p: Vec): number {
+  let best = 0
+  let bestDist = Infinity
+  for (let i = 0; i < points.length - 1; i++) {
+    const dist = segmentDistanceSq(p, points[i]!, points[i + 1]!)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = i
+    }
+  }
+  return best
 }
 
 /** Triangular arrowhead pointing along `dir`, with its tip at `point`. */

@@ -14,14 +14,17 @@ import type {
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { Check, Waypoints } from '@lucide/vue'
+import { AlignCenterHorizontal, AlignCenterVertical, Check, Scaling, Waypoints } from '@lucide/vue'
 import type { ColorKey, DiagramParseError } from '@/model'
 import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
+import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
 import { usePanel } from '@/features/workspace/composables/usePanel'
 import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile'
@@ -33,6 +36,7 @@ import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
 import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
 import type { MenuTarget } from '@/features/diagram/components/CanvasContextMenu.vue'
 import CanvasContextMenu from '@/features/diagram/components/CanvasContextMenu.vue'
+import LaserPointer from '@/features/diagram/components/LaserPointer.vue'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
 import type { AlignGuide } from '@/features/diagram/lib/align-snap'
 import { alignSnap } from '@/features/diagram/lib/align-snap'
@@ -52,7 +56,13 @@ const {
   canvas,
   dirty,
   reconnectingEdge,
+  resizingNodeId,
+  selectedWaypoints,
+  alignWaypoints,
+  clearWaypointSelection,
+  removeSelectedWaypoints,
   selectedNodes,
+  selectedEdges,
   commit,
   endCoalesce,
   undo,
@@ -89,6 +99,10 @@ const {
 const { place, placeAtScreen } = usePlacement()
 const { to: connectTo } = useConnectionTarget()
 const { installFlowRuntime, stopFlowRuntime } = useFlows()
+const { active: laserActive } = useLaserPointer()
+
+/** The wrapper the laser pointer tracks the cursor against. */
+const canvasHost = ref<HTMLElement | null>(null)
 // Other views can share the screen with the canvas, so the window-level
 // shortcuts below only belong to it while it is the dock's focused panel.
 const { isActive, isVisible } = usePanel()
@@ -97,6 +111,35 @@ const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
 const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
 const theme = computed(() => diagramTheme(canvas.theme))
+
+/** Live label/size of whichever node is being resized, for the canvas's own indicator. */
+const resizingNode = computed(() => {
+  if (!resizingNodeId.value) return null
+  const node = getNodes.value.find((n) => n.id === resizingNodeId.value)
+  if (!node) return null
+  const label = (node.data as { label?: string } | undefined)?.label
+  return {
+    label: label || (node.type === 'zone' ? 'Zone' : 'Node'),
+    width: Math.round(node.dimensions?.width ?? 0),
+    height: Math.round(node.dimensions?.height ?? 0),
+  }
+})
+
+/** Aligning needs two points to have something to line up against. */
+const canAlignWaypoints = computed(() => selectedWaypoints.value.length >= 2)
+
+/**
+ * Shown while a single manually-routed connection is selected: adding a bend
+ * point is a shift-click, and nothing on the canvas says so on its own. Held
+ * back while an end is being dragged loose — that gesture has its own indicator
+ * and the hint would only crowd it.
+ */
+const showWaypointHint = computed(
+  () =>
+    !reconnectingEdge.value &&
+    selectedEdges.value.length === 1 &&
+    !!(selectedEdges.value[0]!.data as { waypoints?: unknown[] } | undefined)?.waypoints?.length,
+)
 
 /** The last palette item used, repeated by a double-click on empty canvas. */
 const lastItem = ref<PaletteItem>(DEFAULT_PALETTE_ITEM)
@@ -543,6 +586,12 @@ function onKeyDown(event: KeyboardEvent) {
     case 'Backspace':
     case 'Delete':
       event.preventDefault()
+      // Bend points are their own selection, separate from the node/edge one
+      // — Delete clears whichever the user was actually just pointing at.
+      if (selectedWaypoints.value.length) {
+        removeSelectedWaypoints()
+        break
+      }
       commit()
       endCoalesce()
       removeSelection()
@@ -550,6 +599,18 @@ function onKeyDown(event: KeyboardEvent) {
     case 'f':
     case 'F':
       fitView({ padding: 0.2 })
+      break
+    case 'l':
+    case 'L':
+      // The presentation laser pointer — no modifier, since it is reached for
+      // mid-talk rather than mid-edit.
+      laserActive.value = !laserActive.value
+      break
+    case 'Escape':
+      if (laserActive.value) {
+        event.preventDefault()
+        laserActive.value = false
+      }
       break
     case 'Enter': {
       const node = selectedNodes.value[0]
@@ -658,11 +719,14 @@ watch(isVisible, (visible) => {
 <template>
   <ContextMenu @update:open="menuOpen = $event">
     <div
+      ref="canvasHost"
       class="relative min-h-0 flex-1"
+      :class="{ 'laser-active': laserActive }"
       :style="{
         '--bg-canvas': theme.bg,
         '--bg-selection': theme.selection,
         '--bg-connect': theme.connect,
+        '--bg-waypoint': theme.waypoint,
         background: theme.bg,
       }"
       @dragover="onDragOver"
@@ -709,6 +773,7 @@ watch(isVisible, (visible) => {
           @edge-context-menu="onEdgeContextMenu"
           @selection-context-menu="onSelectionContextMenu"
           @pane-context-menu="onPaneContextMenu"
+          @pane-click="clearWaypointSelection"
           @pane-ready="fitView({ padding: 0.2 })"
           @nodes-initialized="fitLoaded"
           @dblclick.self="onPaneDoubleClick"
@@ -742,6 +807,49 @@ watch(isVisible, (visible) => {
             >
               <Waypoints :size="14" :style="{ color: theme.selection }" />
               Moving connection — drop it on a node to reconnect
+            </div>
+          </div>
+        </Transition>
+
+        <!-- Top-centre indicator, up for as long as a node's own resize handles are held. -->
+        <Transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="-translate-y-1 opacity-0"
+          leave-active-class="transition duration-150 ease-in"
+          leave-to-class="-translate-y-1 opacity-0"
+        >
+          <div
+            v-if="resizingNode"
+            class="pointer-events-none absolute top-4 left-1/2 z-30 -translate-x-1/2"
+          >
+            <div
+              class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
+              :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
+            >
+              <Scaling :size="14" :style="{ color: theme.selection }" />
+              Resizing {{ resizingNode.label }} — {{ resizingNode.width }} × {{ resizingNode.height }}
+            </div>
+          </div>
+        </Transition>
+
+        <!-- Bottom-centre hint while a manually-routed connection is selected. -->
+        <Transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="translate-y-1 opacity-0"
+          leave-active-class="transition duration-150 ease-in"
+          leave-to-class="translate-y-1 opacity-0"
+        >
+          <div
+            v-if="showWaypointHint"
+            class="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2"
+          >
+            <div
+              class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
+              :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
+            >
+              <Waypoints :size="14" :style="{ color: theme.selection }" />
+              Hold <kbd class="rounded border px-1 font-sans text-[11px]">Shift</kbd> and click the line to
+              add a bend point
             </div>
           </div>
         </Transition>
@@ -855,21 +963,78 @@ watch(isVisible, (visible) => {
     </div>
 
     <!-- Always on top, so there is a way back from JSON however it was reached. -->
-    <label
-      class="absolute top-4 right-4 z-40 flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm select-none"
-      :style="{ background: theme.surface, borderColor: theme.line }"
+    <div class="absolute top-4 right-4 z-40 flex items-center gap-2">
+      <!--
+        Only up while two or more bend points are selected — aligning one
+        point against itself means nothing. Sits beside the JSON switch
+        rather than in a menu, since it only matters for as long as that
+        selection lasts.
+      -->
+      <div
+        v-if="canAlignWaypoints"
+        class="flex items-center gap-0.5 rounded-lg border p-1 shadow-sm"
+        :style="{ background: theme.surface, borderColor: theme.line }"
+      >
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon" class="size-7" @click="alignWaypoints('y')">
+              <AlignCenterHorizontal :size="15" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Align bend points horizontally</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon" class="size-7" @click="alignWaypoints('x')">
+              <AlignCenterVertical :size="15" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Align bend points vertically</TooltipContent>
+        </Tooltip>
+      </div>
+
+      <label
+        class="flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm select-none"
+        :style="{ background: theme.surface, borderColor: theme.line }"
+      >
+        <span :style="{ color: viewMode === 'diagram' ? theme.ink : undefined }" class="text-muted-foreground">
+          Diagram
+        </span>
+        <Switch
+          :model-value="viewMode === 'json'"
+          @update:model-value="setViewMode($event ? 'json' : 'diagram')"
+        />
+        <span :style="{ color: viewMode === 'json' ? theme.ink : undefined }" class="text-muted-foreground">
+          JSON
+        </span>
+      </label>
+    </div>
+
+    <!-- The presentation laser pointer: a cursor-following glow, on top of everything. -->
+    <LaserPointer :host="canvasHost" />
+
+    <!-- Bottom-centre hint while the laser pointer is on. -->
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="translate-y-1 opacity-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-to-class="translate-y-1 opacity-0"
     >
-      <span :style="{ color: viewMode === 'diagram' ? theme.ink : undefined }" class="text-muted-foreground">
-        Diagram
-      </span>
-      <Switch
-        :model-value="viewMode === 'json'"
-        @update:model-value="setViewMode($event ? 'json' : 'diagram')"
-      />
-      <span :style="{ color: viewMode === 'json' ? theme.ink : undefined }" class="text-muted-foreground">
-        JSON
-      </span>
-    </label>
+      <div
+        v-if="laserActive"
+        class="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+      >
+        <div
+          class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
+          :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
+        >
+          <span class="size-2 rounded-full bg-[#ff2d2d] shadow-[0_0_6px_#ff2d2d]" />
+          Laser pointer on — hold to draw, press
+          <kbd class="rounded border px-1 font-sans text-[11px]">L</kbd> or
+          <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
+        </div>
+      </div>
+    </Transition>
     </div>
 
     <CanvasContextMenu
@@ -882,6 +1047,16 @@ watch(isVisible, (visible) => {
 </template>
 
 <style>
+/*
+ * The laser pointer draws its own dot, so nothing under it should show a cursor
+ * of its own — not the pane's grab hand, not a node's move cursor. Blunt on
+ * purpose: while the pointer is on, the canvas is a presentation surface.
+ */
+.laser-active,
+.laser-active * {
+  cursor: none !important;
+}
+
 /* Vue Flow's default node chrome would double up on the shapes we draw. */
 .vue-flow__node-shape,
 .vue-flow__node-zone {
