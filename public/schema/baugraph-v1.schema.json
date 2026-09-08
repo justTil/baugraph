@@ -555,6 +555,66 @@
           "edges"
         ]
       }
+    },
+    "sketch": {
+      "default": {
+        "visible": true,
+        "strokes": []
+      },
+      "type": "object",
+      "properties": {
+        "visible": {
+          "default": true,
+          "type": "boolean"
+        },
+        "strokes": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "color": {
+                "default": "red",
+                "type": "string",
+                "enum": [
+                  "slate",
+                  "blue",
+                  "teal",
+                  "green",
+                  "amber",
+                  "red",
+                  "purple",
+                  "pink"
+                ]
+              },
+              "width": {
+                "default": 3,
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64
+              },
+              "points": {
+                "minItems": 4,
+                "maxItems": 20000,
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "points"
+            ]
+          }
+        }
+      }
     }
   }
 }

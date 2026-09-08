@@ -443,6 +443,7 @@ export function sampleDocument(): DiagramDocument {
         enabled: true,
       },
     ],
+    sketch: { visible: true, strokes: [] },
   }
 }
 
@@ -800,6 +801,7 @@ export function pipelineDocument(): DiagramDocument {
         enabled: true,
       },
     ],
+    sketch: { visible: true, strokes: [] },
   }
 }
 
@@ -1139,5 +1141,6 @@ export function webAppDocument(): DiagramDocument {
         enabled: true,
       },
     ],
+    sketch: { visible: true, strokes: [] },
   }
 }

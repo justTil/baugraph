@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Canvas layer.** A freehand overlay on top of the diagram, drawn with
+  Konva.js. Turn it on from the **Canvas** button in the diagram's top-right
+  corner — the diagram freezes (nothing can be moved, selected or connected) and
+  a pen or stroke eraser takes over, with a colour and three weights. What you
+  draw stays when you leave Canvas mode and can be hidden with the eye button
+  next to the toggle without erasing it. **Esc** exits. Strokes round-trip
+  through `.baugraph.json` in a new top-level `sketch` section — stored in canvas
+  coordinates so they pan and zoom with what they annotate — with complete
+  backwards compatibility: a diagram with nothing drawn writes no `sketch` key
+  and every older file is unchanged. Covered by the JSON Schema and the
+  generated AI skills.
 - **Manual edge routing with waypoints.** Drag anywhere along a connection to
   drop a bend point; the line is then drawn straight through your points instead
   of auto-routing around obstacles. Move several waypoints at once, delete them

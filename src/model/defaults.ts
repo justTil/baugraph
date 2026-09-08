@@ -5,6 +5,8 @@ import type {
   DiagramNode,
   MessageFlow,
   NodePorts,
+  Sketch,
+  SketchStroke,
 } from '@/model/types'
 import { FORMAT_VERSION, MAX_PORTS, PORT_SIDES } from '@/model/types'
 
@@ -24,6 +26,21 @@ export const DEFAULT_CANVAS: CanvasSettings = {
   snap: true,
   snapSize: 10,
 }
+
+/** An empty, shown Canvas layer — what every diagram has until something is drawn. */
+export const DEFAULT_SKETCH: Sketch = {
+  visible: true,
+  strokes: [],
+}
+
+/**
+ * Per-stroke values omitted when writing a file and filled back in on read —
+ * a red 3-unit pen, the tool the Canvas layer opens on.
+ */
+export const SKETCH_STROKE_DEFAULTS = {
+  color: 'red',
+  width: 3,
+} as const satisfies Partial<SketchStroke>
 
 /**
  * Values omitted when writing a file, and filled back in when reading it.
@@ -101,5 +118,6 @@ export function blankDocument(title = 'Untitled diagram'): DiagramDocument {
     nodes: [],
     edges: [],
     flows: [],
+    sketch: { visible: true, strokes: [] },
   }
 }

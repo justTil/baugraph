@@ -65,7 +65,12 @@ committed next to the code it describes.
         "order-created--dead-letter-queue": { "color": "red", "token": "packet", "speed": 110 }
       }
     }
-  ]
+  ],
+  "sketch": {
+    "strokes": [
+      { "id": "stroke", "color": "red", "width": 3, "points": [120, 80, 150, 92, 190, 110] }
+    ]
+  }
 }
 ```
 
@@ -122,6 +127,13 @@ All in service of readable diffs:
   connection it described.
 - **`data` on any node or edge is yours** — free-form metadata, round-tripped
   untouched. Use it for ticket links, ownership, team conventions.
+- **`sketch` is the freehand Canvas layer**, and its own section rather than
+  part of `canvas` (which is display settings). A diagram with nothing drawn on
+  it writes no `sketch` key at all, so the feature is invisible in the file
+  until it is used and every file written before it existed is unchanged. Each
+  stroke's `points` is a flat `[x, y, …]` run in canvas coordinates — the same
+  space as a node's `position` — so a drawing pans and zooms with what it
+  annotates. `visible` is written only when the layer has been hidden.
 - **An edge routes itself unless `waypoints` says otherwise.** Every
   connection is auto-routed around obstacles by default, the only behavior
   this format had before manual routing existed. Giving an edge one or more

@@ -1,0 +1,29 @@
+{
+  "$schema": "/schema/baugraph-v1.schema.json",
+  "baugraph": "1.0",
+  "meta": {
+    "title": "Canvas layer"
+  },
+  "canvas": {
+    "theme": "light",
+    "grid": true,
+    "snap": true,
+    "snapSize": 10
+  },
+  "nodes": [
+    {
+      "id": "a",
+      "label": "A",
+      "position": { "x": 0, "y": 0 },
+      "size": { "width": 120, "height": 60 }
+    }
+  ],
+  "edges": [],
+  "sketch": {
+    "visible": false,
+    "strokes": [
+      { "id": "stroke", "points": [10, 10, 40, 30, 90, 20] },
+      { "id": "stroke-2", "color": "blue", "width": 6, "points": [0, 0, 5, 5, 12, 9] }
+    ]
+  }
+}

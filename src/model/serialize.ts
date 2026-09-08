@@ -1,6 +1,18 @@
-import type { DiagramDocument, DiagramEdge, DiagramNode, MessageFlow } from '@/model/types'
+import type {
+  DiagramDocument,
+  DiagramEdge,
+  DiagramNode,
+  MessageFlow,
+  SketchStroke,
+} from '@/model/types'
 import { FORMAT_VERSION, PORT_SIDES } from '@/model/types'
-import { EDGE_DEFAULTS, FLOW_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
+import {
+  EDGE_DEFAULTS,
+  FLOW_DEFAULTS,
+  NODE_DEFAULTS,
+  SKETCH_STROKE_DEFAULTS,
+  blankDocument,
+} from '@/model/defaults'
 import { documentSchema } from '@/model/schema'
 import { migrate } from '@/model/migrate'
 
@@ -81,6 +93,8 @@ const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'color',
   'data',
 ]
+
+const SKETCH_STROKE_KEY_ORDER: (keyof SketchStroke)[] = ['id', 'color', 'width', 'points']
 
 const FLOW_KEY_ORDER: (keyof MessageFlow)[] = [
   'id',
@@ -171,6 +185,14 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
     return ordered(trimmed as MessageFlow, FLOW_KEY_ORDER)
   })
 
+  const strokes = (doc.sketch?.strokes ?? []).map((stroke) => {
+    const trimmed = omitDefaults(
+      { ...stroke, points: stroke.points.map(round) },
+      SKETCH_STROKE_DEFAULTS,
+    )
+    return ordered(trimmed as SketchStroke, SKETCH_STROKE_KEY_ORDER)
+  })
+
   return {
     $schema: SCHEMA_URL,
     baugraph: doc.baugraph || FORMAT_VERSION,
@@ -181,6 +203,11 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
     // A diagram with no flows says nothing about them: an empty array would show
     // up as a change in every file the moment this feature shipped.
     ...(flows.length ? { flows } : {}),
+    // Same for the Canvas layer — nothing drawn, nothing written. `visible` only
+    // appears when the layer has been hidden, since shown is the default.
+    ...(strokes.length
+      ? { sketch: { ...(doc.sketch.visible ? {} : { visible: false }), strokes } }
+      : {}),
   }
 }
 

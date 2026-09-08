@@ -93,6 +93,8 @@ correctly, plus the full JSON Schema to validate against. Format version:
 - \`nodes\` — boxes and zones. See below.
 - \`edges\` — connections between two node ids.
 - \`flows\` — optional messages animated along a set of edges.
+- \`sketch\` — optional freehand annotation layer drawn by hand in the editor;
+  omit it entirely. See below.
 
 Every field that has a default may be omitted; the reader fills it back in. Do
 not invent fields — anything not in the schema belongs under a node's, edge's
@@ -224,6 +226,30 @@ connections, nothing more.
   object of any of \`color\`/\`token\`/\`speed\` — for the one connection that should
   not read the same as the rest, like a failure path drawn red and slow:
   \`{ "order-created--dead-letter-queue": { "color": "red", "token": "packet", "speed": 110 } }\`.
+
+## Sketch (freehand Canvas layer) — optional
+
+A hand-drawn overlay on top of the diagram. It is produced by drawing in the
+editor's Canvas mode, not written by hand — reproduce it when round-tripping a
+file, but do not author one from scratch.
+
+\`\`\`json
+{
+  "sketch": {
+    "strokes": [
+      { "id": "stroke", "color": "red", "width": 3, "points": [120, 80, 140, 96, 180, 110] }
+    ]
+  }
+}
+\`\`\`
+
+- \`strokes\` — freehand paths. \`points\` is a flat \`[x, y, x, y, …]\` run in
+  canvas coordinates (the same space as a node's \`position\`), so a stroke pans
+  and zooms with what it annotates. \`color\` is one of the node colour keys;
+  \`width\` is in canvas units.
+- \`visible\` — \`false\` only when the layer has been hidden in the editor;
+  omitted otherwise.
+- A diagram with nothing drawn writes no \`sketch\` key at all.
 
 ## Node-type catalogue
 

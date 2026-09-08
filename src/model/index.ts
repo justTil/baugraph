@@ -7,6 +7,8 @@ export {
   edgeSchema,
   flowSchema,
   canvasSchema,
+  sketchSchema,
+  sketchStrokeSchema,
   metaSchema,
 } from '@/model/schema'
 export { migrate } from '@/model/migrate'

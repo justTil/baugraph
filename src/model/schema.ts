@@ -16,9 +16,11 @@ import {
 } from '@/model/types'
 import {
   DEFAULT_CANVAS,
+  DEFAULT_SKETCH,
   EDGE_DEFAULTS,
   FLOW_DEFAULTS,
   NODE_DEFAULTS,
+  SKETCH_STROKE_DEFAULTS,
 } from '@/model/defaults'
 
 /**
@@ -154,6 +156,34 @@ export const canvasSchema = z.object({
   snapSize: z.number().int().min(1).max(200).default(DEFAULT_CANVAS.snapSize),
 })
 
+/**
+ * One freehand stroke on the Canvas layer.
+ *
+ * `points` is a flat `[x, y, x, y, …]` run — the shape Konva draws from and the
+ * terser thing to diff — with a floor of two points. An odd length is the file
+ * naming a half a coordinate, which is never what was meant.
+ */
+export const sketchStrokeSchema = z.object({
+  id: idSchema,
+  color: z.enum(COLOR_KEYS).default(SKETCH_STROKE_DEFAULTS.color),
+  width: z.number().finite().min(0.5).max(64).default(SKETCH_STROKE_DEFAULTS.width),
+  points: z
+    .array(z.number().finite())
+    .min(4)
+    .max(20000),
+})
+
+/**
+ * The Canvas layer. A whole new section rather than part of `canvas`: an empty
+ * one writes nothing at all (see `serialize.ts`), so a file gains a `sketch` key
+ * only once something is drawn — and one written before this existed is
+ * unchanged.
+ */
+export const sketchSchema = z.object({
+  visible: z.boolean().default(DEFAULT_SKETCH.visible),
+  strokes: z.array(sketchStrokeSchema).default([]),
+})
+
 export const metaSchema = z.object({
   title: z.string().default('Untitled diagram'),
   description: z.string().optional(),
@@ -171,6 +201,7 @@ export const documentSchema = z
     nodes: z.array(nodeSchema).default([]),
     edges: z.array(edgeSchema).default([]),
     flows: z.array(flowSchema).default([]),
+    sketch: sketchSchema.default(DEFAULT_SKETCH),
   })
   .superRefine((doc, ctx) => {
     const ids = new Set<string>()
@@ -292,6 +323,28 @@ export const documentSchema = z
           code: 'custom',
           path: ['flows', i, 'style', edge],
           message: `"${edge}" is styled but is not one of this flow's connections`,
+        })
+      }
+    })
+
+    // A Canvas stroke is addressed by its id when it is erased, so two sharing
+    // one would take each other with them. And `points` is `x, y` pairs — an odd
+    // count is a coordinate with no partner.
+    const strokeIds = new Set<string>()
+    doc.sketch.strokes.forEach((stroke, i) => {
+      if (strokeIds.has(stroke.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sketch', 'strokes', i, 'id'],
+          message: `duplicate stroke id "${stroke.id}"`,
+        })
+      }
+      strokeIds.add(stroke.id)
+      if (stroke.points.length % 2 !== 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sketch', 'strokes', i, 'points'],
+          message: 'points come in x, y pairs, so their count must be even',
         })
       }
     })

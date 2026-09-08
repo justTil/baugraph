@@ -298,6 +298,47 @@ export interface CanvasSettings {
   snapSize: number
 }
 
+/** Freehand tools the Canvas layer offers. `eraser` removes whole strokes. */
+export const SKETCH_TOOLS = ['pen', 'eraser'] as const
+export type SketchTool = (typeof SKETCH_TOOLS)[number]
+
+/**
+ * One hand-drawn stroke on the Canvas layer.
+ *
+ * The Canvas layer is a freehand overlay: turn it on from the diagram's
+ * top-right corner and draw on top of everything without touching a node. A
+ * stroke's path is stored in absolute canvas coordinates — the same space as a
+ * node's `position` — so it pans and zooms with whatever it annotates.
+ */
+export interface SketchStroke {
+  /** Stable identifier, so a stroke round-trips and can be erased on its own. */
+  id: string
+  /** Semantic colour key, resolved by the active theme like every other colour. */
+  color: ColorKey
+  /** Stroke width in canvas units. */
+  width: number
+  /**
+   * The path, as a flat run of `x, y` pairs in canvas coordinates — the shape
+   * Konva itself draws from. At least two points (four numbers).
+   */
+  points: number[]
+}
+
+/**
+ * The Canvas layer: every hand-drawn stroke, plus whether the layer is shown.
+ *
+ * A section of its own rather than part of `canvas` (which is display settings
+ * the editor derives nothing from): a diagram with nothing drawn on it writes no
+ * `sketch` key at all, so the feature stays invisible in the file until it is
+ * used, and every file written before it existed still parses to exactly the
+ * diagram it always did.
+ */
+export interface Sketch {
+  /** Whether the layer is currently drawn. Toggled by the show/hide button. */
+  visible: boolean
+  strokes: SketchStroke[]
+}
+
 export interface DiagramMeta {
   title: string
   description?: string
@@ -315,4 +356,6 @@ export interface DiagramDocument {
   edges: DiagramEdge[]
   /** Message flows drawn over the connections above. */
   flows: MessageFlow[]
+  /** The hand-drawn Canvas layer over everything above. */
+  sketch: Sketch
 }

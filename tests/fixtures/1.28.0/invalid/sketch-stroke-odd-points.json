@@ -1,0 +1,12 @@
+{
+  "$schema": "/schema/baugraph-v1.schema.json",
+  "baugraph": "1.0",
+  "meta": { "title": "Bad sketch stroke" },
+  "nodes": [],
+  "edges": [],
+  "sketch": {
+    "strokes": [
+      { "id": "stroke", "points": [10, 10, 40, 30, 90] }
+    ]
+  }
+}
