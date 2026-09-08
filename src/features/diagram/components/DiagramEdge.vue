@@ -22,6 +22,7 @@ const props = defineProps<EdgeProps<EdgeData>>()
 
 const {
   canvas,
+  flows,
   reconnectEdge,
   reconnectingEdge,
   commit,
@@ -499,6 +500,28 @@ const label = computed(() => {
     color: props.selected ? theme.value.selection : theme.value.muted,
   }
 })
+
+/**
+ * A tag on the line when a flow that runs over it is switched off. Without it the
+ * connection just quietly stops carrying anything, and the reason — a flow turned
+ * off somewhere, maybe passes ago — is nowhere on the canvas. Dashed and muted so
+ * it reads as "nothing is happening here on purpose", and dropped below the label
+ * so the two never share the midpoint.
+ */
+const pausedFlowCount = computed(
+  () => flows.value.filter((flow) => !flow.enabled && flow.edges.includes(props.id)).length,
+)
+const pausedTag = computed(() => {
+  if (!pausedFlowCount.value) return null
+  const text = pausedFlowCount.value === 1 ? 'Flow paused' : `${pausedFlowCount.value} flows paused`
+  const width = measureText(text, 10) + 18
+  return {
+    text,
+    x: geometry.value.mid.x - width / 2,
+    y: geometry.value.mid.y + (props.data.label ? 10 : -8),
+    width,
+  }
+})
 </script>
 
 <template>
@@ -574,6 +597,29 @@ const label = computed(() => {
         {{ label.text }}
       </text>
     </template>
+
+    <g v-if="pausedTag" class="pointer-events-none select-none">
+      <rect
+        :x="pausedTag.x"
+        :y="pausedTag.y"
+        :width="pausedTag.width"
+        height="16"
+        rx="8"
+        :fill="theme.bg"
+        :stroke="theme.muted"
+        stroke-width="1"
+        stroke-dasharray="3 2"
+      />
+      <text
+        :x="geometry.mid.x"
+        :y="pausedTag.y + 11"
+        text-anchor="middle"
+        font-size="10"
+        :fill="theme.muted"
+      >
+        {{ pausedTag.text }}
+      </text>
+    </g>
   </template>
 
   <!--

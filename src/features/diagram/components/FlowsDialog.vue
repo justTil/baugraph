@@ -161,6 +161,13 @@ function drop(id: string) {
   })
 }
 
+/** Flows switched off, and the one action that turns every one of them back on. */
+const stopped = computed(() => flows.value.filter((flow) => !flow.enabled))
+
+function resumeAll() {
+  act(() => stopped.value.forEach((flow) => updateFlow(flow.id, { enabled: true })))
+}
+
 function hover(flow: MessageFlow | null) {
   highlighted.value = flow
     ? { id: flow.id, color: flow.color, edges: planOf(flow).edges }
@@ -329,6 +336,23 @@ const clamp = (raw: string, min: number, max: number, fallback: number, round = 
             >
               <component :is="paused ? Play : Pause" />
               {{ paused ? 'Play all' : 'Pause all' }}
+            </Button>
+
+            <!--
+              Distinct from Play all above: that lifts the global freeze, this
+              switches flows that were individually turned off back on, so a round
+              of stopping single flows has one way back.
+            -->
+            <Button
+              v-if="stopped.length"
+              variant="ghost"
+              size="sm"
+              class="text-muted-foreground w-full justify-start"
+              :title="`Switch all ${stopped.length} stopped flows back on`"
+              @click="resumeAll"
+            >
+              <Play />
+              Resume all ({{ stopped.length }})
             </Button>
           </div>
         </aside>
