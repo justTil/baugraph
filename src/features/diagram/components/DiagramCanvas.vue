@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
+import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
 import { usePanel } from '@/features/workspace/composables/usePanel'
 import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile'
@@ -35,6 +36,7 @@ import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
 import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
 import type { MenuTarget } from '@/features/diagram/components/CanvasContextMenu.vue'
 import CanvasContextMenu from '@/features/diagram/components/CanvasContextMenu.vue'
+import LaserPointer from '@/features/diagram/components/LaserPointer.vue'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
 import type { AlignGuide } from '@/features/diagram/lib/align-snap'
 import { alignSnap } from '@/features/diagram/lib/align-snap'
@@ -97,6 +99,10 @@ const {
 const { place, placeAtScreen } = usePlacement()
 const { to: connectTo } = useConnectionTarget()
 const { installFlowRuntime, stopFlowRuntime } = useFlows()
+const { active: laserActive } = useLaserPointer()
+
+/** The wrapper the laser pointer tracks the cursor against. */
+const canvasHost = ref<HTMLElement | null>(null)
 // Other views can share the screen with the canvas, so the window-level
 // shortcuts below only belong to it while it is the dock's focused panel.
 const { isActive, isVisible } = usePanel()
@@ -594,6 +600,18 @@ function onKeyDown(event: KeyboardEvent) {
     case 'F':
       fitView({ padding: 0.2 })
       break
+    case 'l':
+    case 'L':
+      // The presentation laser pointer — no modifier, since it is reached for
+      // mid-talk rather than mid-edit.
+      laserActive.value = !laserActive.value
+      break
+    case 'Escape':
+      if (laserActive.value) {
+        event.preventDefault()
+        laserActive.value = false
+      }
+      break
     case 'Enter': {
       const node = selectedNodes.value[0]
       if (node) {
@@ -701,7 +719,9 @@ watch(isVisible, (visible) => {
 <template>
   <ContextMenu @update:open="menuOpen = $event">
     <div
+      ref="canvasHost"
       class="relative min-h-0 flex-1"
+      :class="{ 'cursor-none': laserActive }"
       :style="{
         '--bg-canvas': theme.bg,
         '--bg-selection': theme.selection,
@@ -989,6 +1009,32 @@ watch(isVisible, (visible) => {
         </span>
       </label>
     </div>
+
+    <!-- The presentation laser pointer: a cursor-following glow, on top of everything. -->
+    <LaserPointer :host="canvasHost" />
+
+    <!-- Bottom-centre hint while the laser pointer is on. -->
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="translate-y-1 opacity-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-to-class="translate-y-1 opacity-0"
+    >
+      <div
+        v-if="laserActive"
+        class="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+      >
+        <div
+          class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
+          :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
+        >
+          <span class="size-2 rounded-full bg-[#ff2d2d] shadow-[0_0_6px_#ff2d2d]" />
+          Laser pointer on — hold to draw, press
+          <kbd class="rounded border px-1 font-sans text-[11px]">L</kbd> or
+          <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
+        </div>
+      </div>
+    </Transition>
     </div>
 
     <CanvasContextMenu
