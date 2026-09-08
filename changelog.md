@@ -20,6 +20,11 @@ All notable changes to this project will be documented in this file.
   leaves the browser.
 - **In-app changelog.** A **What's New** entry in the sidebar renders this file
   as a formatted release history.
+- **Laser pointer.** A presentation aid — toggle it from the toolbar or press
+  **L** and the cursor becomes a glowing dot that follows you over the canvas;
+  hold and drag to draw a stroke that fades after a couple of seconds, for
+  circling something in a meeting. Scroll-to-pan and pinch-to-zoom still work;
+  presses on the canvas draw instead of moving anything. **Esc** turns it off.
 - Docs
 - "Self host with Docker" link in the app header, pointing at the Docker Hub image
 - Two more worked example diagrams (a CI/CD pipeline and a three-tier web app),

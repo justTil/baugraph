@@ -721,7 +721,7 @@ watch(isVisible, (visible) => {
     <div
       ref="canvasHost"
       class="relative min-h-0 flex-1"
-      :class="{ 'cursor-none': laserActive }"
+      :class="{ 'laser-active': laserActive }"
       :style="{
         '--bg-canvas': theme.bg,
         '--bg-selection': theme.selection,
@@ -1047,6 +1047,16 @@ watch(isVisible, (visible) => {
 </template>
 
 <style>
+/*
+ * The laser pointer draws its own dot, so nothing under it should show a cursor
+ * of its own — not the pane's grab hand, not a node's move cursor. Blunt on
+ * purpose: while the pointer is on, the canvas is a presentation surface.
+ */
+.laser-active,
+.laser-active * {
+  cursor: none !important;
+}
+
 /* Vue Flow's default node chrome would double up on the shapes we draw. */
 .vue-flow__node-shape,
 .vue-flow__node-zone {
