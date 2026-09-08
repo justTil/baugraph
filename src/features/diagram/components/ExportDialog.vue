@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Toggle } from '@/components/ui/toggle'
 import { stringify } from '@/model'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
@@ -25,6 +26,7 @@ import {
 import { documentFrames } from '@/features/diagram/lib/render-svg'
 import type { BackdropId, ChromeId } from '@/features/diagram/lib/frame'
 import { BACKDROP_OPTIONS, CHROME_OPTIONS } from '@/features/diagram/lib/frame'
+import { randomWatermarkId } from '@/features/diagram/lib/watermark'
 
 /**
  * Choosing what to export, next to a picture of what that will be.
@@ -85,6 +87,14 @@ const pngScale = ref('2')
 const gifScale = ref('1')
 const gifRate = ref('20')
 
+/** Empty means no watermark; a stamp is only drawn once there is text to stamp. */
+const watermarkText = ref('')
+const watermark = computed(() =>
+  format.value === 'json' || !watermarkText.value.trim()
+    ? undefined
+    : { text: watermarkText.value.trim() },
+)
+
 const error = ref<string | null>(null)
 const busy = ref(false)
 /** 0 → 1 while a GIF is being drawn; the only export slow enough to need it. */
@@ -102,6 +112,7 @@ const preview = computed(() => {
 
   const frames = documentFrames(doc, {
     frame: frame.value,
+    watermark: watermark.value,
     transparent: transparent.value && (format.value === 'svg' || format.value === 'png'),
     // A PNG is one frame, and a frame of an animation is not a picture of the
     // diagram; a GIF is nothing but the animation.
@@ -199,16 +210,26 @@ async function run() {
         if (!(await saveDocumentAs(documentId))) return
         break
       case 'svg':
-        exportSvg(doc, { transparent: transparent.value, animate: animate.value, frame: frame.value })
+        exportSvg(doc, {
+          transparent: transparent.value,
+          animate: animate.value,
+          frame: frame.value,
+          watermark: watermark.value,
+        })
         break
       case 'png':
-        await exportPng(doc, scale.value, { transparent: transparent.value, frame: frame.value })
+        await exportPng(doc, scale.value, {
+          transparent: transparent.value,
+          frame: frame.value,
+          watermark: watermark.value,
+        })
         break
       case 'gif':
         await exportGif(doc, {
           fps: Number(gifRate.value),
           scale: scale.value,
           frame: frame.value,
+          watermark: watermark.value,
           onProgress: (done) => (progress.value = done),
         })
         break
@@ -292,6 +313,27 @@ async function run() {
               </div>
             </div>
           </template>
+
+          <div v-if="format !== 'json'" class="space-y-1.5">
+            <p class="text-xs font-medium">Watermark</p>
+            <div class="flex gap-1.5">
+              <Input
+                v-model="watermarkText"
+                placeholder="e.g. DRAFT"
+                class="text-xs"
+                maxlength="40"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                class="shrink-0"
+                @click="watermarkText = randomWatermarkId()"
+              >
+                Random
+              </Button>
+            </div>
+          </div>
 
           <div
             v-if="(format === 'svg' || format === 'png') && !dressed"

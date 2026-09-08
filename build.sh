@@ -54,8 +54,10 @@ rm -rf "$DIST_DIR"
 if [[ "$FAST" -eq 1 ]]; then
   log "Building (vite build, no type-check)"
   npm run build-only
+  log "Building docs (VitePress)"
+  npm run docs:build
 else
-  log "Building (type-check + vite build)"
+  log "Building (type-check + vite build + docs)"
   npm run build
 fi
 

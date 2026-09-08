@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Plus, Settings2, Waypoints, X } from '@lucide/vue'
+import { Pause, Play, Plus, Waypoints, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { MessageFlow } from '@/model'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
@@ -19,12 +19,15 @@ import { COLOR_HEX } from '@/features/diagram/lib/theme'
 
 const props = defineProps<{ edgeId: string }>()
 
-const { flows, commit, endCoalesce, addFlow, toggleFlowEdge, flowsOnEdge } = useDiagram()
+const { flows, commit, endCoalesce, addFlow, updateFlow, toggleFlowEdge, flowsOnEdge } = useDiagram()
 
-const { highlighted, planOf, openFlowEditor } = useFlows()
+const { paused, highlighted, planOf, openFlowEditor } = useFlows()
 
 const on = computed(() => flowsOnEdge(props.edgeId))
 const off = computed(() => flows.value.filter((flow) => !flow.edges.includes(props.edgeId)))
+
+/** Flows switched off anywhere in the diagram — what "Resume all" would turn back on. */
+const stopped = computed(() => flows.value.filter((flow) => !flow.enabled))
 
 /** The colour this connection actually draws in — the override, or the flow's. */
 const colourOf = (flow: MessageFlow) =>
@@ -37,6 +40,14 @@ function act(fn: () => void) {
   commit()
   endCoalesce()
   fn()
+}
+
+function resume(flow: MessageFlow) {
+  act(() => updateFlow(flow.id, { enabled: true }))
+}
+
+function resumeAll() {
+  act(() => stopped.value.forEach((flow) => updateFlow(flow.id, { enabled: true })))
 }
 
 function hover(flow: MessageFlow | null) {
@@ -61,6 +72,30 @@ function hover(flow: MessageFlow | null) {
       <span class="text-muted-foreground/70 ml-auto text-[10px]">on this connection</span>
     </header>
 
+    <!--
+      A global pause is easy to set and then forget, so it says so here too — the
+      panel for the connection that has visibly stopped moving — with the way out
+      right next to it.
+    -->
+    <div
+      v-if="paused && on.length"
+      class="bg-muted/60 flex items-center gap-1.5 border-b px-3 py-2"
+    >
+      <Pause class="text-muted-foreground size-3.5 shrink-0" />
+      <span class="text-muted-foreground flex-1 text-[11px] leading-snug">
+        All message flows are paused.
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        class="-my-1 h-6 shrink-0 px-2 text-xs"
+        @click="paused = false"
+      >
+        <Play />
+        Resume
+      </Button>
+    </div>
+
     <div class="space-y-2 p-3">
       <div
         v-for="flow in on"
@@ -71,20 +106,40 @@ function hover(flow: MessageFlow | null) {
       >
         <span
           class="size-2.5 shrink-0 rounded-full border border-black/20 dark:border-white/20"
+          :class="{ 'opacity-40': !flow.enabled }"
           :style="{ background: colourOf(flow) }"
         />
-        <span class="min-w-0 flex-1 truncate text-xs font-medium">
+        <span
+          class="min-w-0 flex-1 truncate text-xs font-medium"
+          :class="{ 'text-muted-foreground': !flow.enabled }"
+        >
           {{ flow.label || flow.id }}
           <span v-if="tweaked(flow)" class="text-muted-foreground font-normal">· own look</span>
         </span>
+        <span
+          v-if="!flow.enabled"
+          class="text-muted-foreground bg-muted shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide uppercase"
+        >
+          Paused
+        </span>
         <Button
+          v-if="!flow.enabled"
           variant="ghost"
           size="icon"
           class="text-muted-foreground -my-1 size-6 shrink-0"
+          title="Switch this flow back on"
+          @click="resume(flow)"
+        >
+          <Play />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="text-muted-foreground -my-1 h-6 shrink-0 px-2 text-xs"
           title="Edit this flow, and how it looks on this connection"
           @click="openFlowEditor(flow.id, props.edgeId)"
         >
-          <Settings2 />
+          Edit
         </Button>
         <Button
           variant="ghost"
@@ -118,6 +173,23 @@ function hover(flow: MessageFlow | null) {
       >
         <Plus />
         <span class="truncate">Add to “{{ flow.label || flow.id }}”</span>
+      </Button>
+
+      <!--
+        Switches every stopped flow back on, not just the ones on this connection:
+        a flow left off is off everywhere, and this is the one button that undoes a
+        round of pausing without hunting each one down.
+      -->
+      <Button
+        v-if="stopped.length"
+        variant="ghost"
+        size="sm"
+        class="text-muted-foreground w-full justify-start"
+        :title="`Switch all ${stopped.length} stopped flows back on`"
+        @click="resumeAll"
+      >
+        <Play />
+        Resume all flows ({{ stopped.length }})
       </Button>
     </div>
   </section>

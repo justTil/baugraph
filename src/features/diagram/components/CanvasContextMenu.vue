@@ -45,6 +45,7 @@ import {
   PenLine,
   Plus,
   Redo2,
+  RotateCcw,
   Scaling,
   SendToBack,
   Shapes,
@@ -554,6 +555,13 @@ function copySelectionIds() {
       <ContextMenuItem @select="act(() => reverseEdge(edge!.id))">
         <ArrowLeftRight />
         Reverse direction
+      </ContextMenuItem>
+      <ContextMenuItem
+        :disabled="!edge.data?.waypoints?.length"
+        @select="act(() => updateEdgeData(edge!.id, { waypoints: undefined }))"
+      >
+        <RotateCcw />
+        Reset routing
       </ContextMenuItem>
       <ContextMenuItem @select="animate([edge!.id])">
         <Waypoints />

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import {
   Check,
   Copy,
+  Crosshair,
   Grid3x3,
   Magnet,
   Maximize,
@@ -25,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { HEADER_ACTIONS_SLOT_SELECTOR } from '@/components/layout/header-slot'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
+import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
 import { AI_SKILLS_MARKDOWN } from '@/features/diagram/data/ai-skills.generated'
@@ -47,6 +49,7 @@ const saveHint = computed(() => {
   return dirty.value ? `${target} — unsaved changes (⌘S)` : `${target} (⌘S)`
 })
 const { paused, openFlowEditor } = useFlows()
+const { active: laserActive } = useLaserPointer()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
 
 const zoomLabel = computed(() => `${Math.round(viewport.value.zoom * 100)}%`)
@@ -171,6 +174,24 @@ async function copyAiSkills() {
         </Button>
       </TooltipTrigger>
       <TooltipContent>{{ paused ? 'Play message flows' : 'Pause message flows' }}</TooltipContent>
+    </Tooltip>
+
+    <!--
+      A presentation aid: turns the cursor into a laser dot that leaves a fading
+      trail, for pointing something out in a meeting without touching the diagram.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="laserActive"
+          aria-label="Laser pointer"
+          @update:model-value="laserActive = Boolean($event)"
+        >
+          <Crosshair />
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>Laser pointer (L) — hold to draw</TooltipContent>
     </Tooltip>
 
     <Tooltip>

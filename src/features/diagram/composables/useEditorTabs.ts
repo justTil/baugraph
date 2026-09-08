@@ -14,7 +14,7 @@ import {
   touchDocument,
   useDocuments,
 } from '@/features/diagram/composables/useDocuments'
-import { sampleDocument } from '@/features/diagram/data/sample'
+import { startupSamples } from '@/features/diagram/data/sample'
 import { fontsReady } from '@/features/diagram/lib/text'
 
 /**
@@ -54,6 +54,12 @@ export function openDocumentTab(documentId: string): IDockviewPanel | undefined 
 const pendingClose = ref<string | null>(null)
 const closeQueue: string[] = []
 
+/**
+ * The worked-example tabs opened on a first run. They are a welcome mat, not the
+ * user's work, so closing one never stops to ask about unsaved changes.
+ */
+const startupSampleIds = new Set<string>()
+
 export function useCloseRequest() {
   return { pendingClose }
 }
@@ -68,7 +74,8 @@ function advanceCloseQueue() {
  * answer comes back through {@link resolveCloseRequest}.
  */
 export function requestCloseDocument(documentId: string | undefined): boolean {
-  if (!documentId || !diagramStore(documentId).dirty.value) return true
+  if (!documentId || startupSampleIds.has(documentId)) return true
+  if (!diagramStore(documentId).dirty.value) return true
   if (!closeQueue.includes(documentId)) closeQueue.push(documentId)
   if (pendingClose.value === null) advanceCloseQueue()
   return false
@@ -87,6 +94,7 @@ export function resolveCloseRequest(documentId: string, close: boolean) {
  * left open on a discarded document would be editing a store nothing saves.
  */
 export function discardDocument(documentId: string) {
+  startupSampleIds.delete(documentId)
   closePanel(editorPanelId(documentId))
   unlinkDocumentFile(documentId)
   forgetDocument(documentId)
@@ -123,9 +131,9 @@ export function focusOrOpenEditor(): IDockviewPanel | undefined {
 }
 
 /**
- * The editor shown when the dock has no saved layout to restore: the diagram
+ * The editors shown when the dock has no saved layout to restore: the diagram
  * carried over from the single-document version of the app, else the most
- * recent one, else the worked example.
+ * recent one, else the worked examples — one tab each, first one focused.
  */
 export function openStartupEditor() {
   const carriedOver = migrateLegacyDocument()
@@ -140,11 +148,17 @@ export function openStartupEditor() {
     return
   }
 
-  // The example sizes its nodes from their own text, so it has to be built with
-  // the font it will be drawn in — which the tab cannot wait around for.
-  const id = adoptDocument(blankDocument('Order processing — reference architecture'))
-  openDocumentTab(id)
-  void fontsReady().then(() => diagramStore(id).loadDocument(sampleDocument()))
+  // The examples size their nodes from their own text, so each has to be built
+  // with the font it will be drawn in — which the tab cannot wait around for.
+  const ids = startupSamples.map((sample) => {
+    const id = adoptDocument(blankDocument(sample.title))
+    startupSampleIds.add(id)
+    void fontsReady().then(() => diagramStore(id).loadDocument(sample.build()))
+    return id
+  })
+  ids.forEach((id) => openDocumentTab(id))
+  // Land on the first tab rather than the last one opened.
+  if (ids[0]) openDocumentTab(ids[0])
 }
 
 /**

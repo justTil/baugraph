@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LayoutTemplate } from '@lucide/vue'
+import { Container, LayoutTemplate } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
@@ -13,6 +13,11 @@ defineProps<{
 
 const { resetLayout } = useWorkspace()
 
+// Only the hosted baugraph.com build points people at the Docker image — a
+// self-hosted instance is already running it.
+const selfHosted = __SELF_HOSTED__
+const DOCKER_HUB_URL = 'https://hub.docker.com/r/justtil/baugraph'
+
 function onResetLayout() {
   if (!window.confirm('Close every tab and restore the default arrangement?')) return
   resetLayout()
@@ -24,9 +29,41 @@ function onResetLayout() {
     <header class="flex h-12 shrink-0 items-center gap-2 px-3">
       <SidebarTrigger class="-ml-1" />
       <Separator orientation="vertical" class="mr-1 h-4" />
-      <h1 class="text-muted-foreground min-w-0 flex-1 truncate text-sm font-medium">
+      <h1 class="text-muted-foreground min-w-0 shrink truncate text-sm font-medium">
         {{ title }}
       </h1>
+
+      <!--
+        Points people at the Docker image, sitting right after the view title
+        rather than out with the file actions - it's about the app itself, not
+        about whatever is on screen. Dropped from self-hosted builds, which are
+        already running that image.
+      -->
+      <template v-if="!selfHosted">
+        <Separator orientation="vertical" class="h-4" />
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button
+              as="a"
+              :href="DOCKER_HUB_URL"
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="ghost"
+              size="sm"
+              class="h-8 shrink-0"
+            >
+              <Container />
+              Self host with Docker
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Run your own Baugraph instance from the official Docker image
+          </TooltipContent>
+        </Tooltip>
+      </template>
+
+      <div class="flex-1" />
+
       <!--
         A view's file-level actions (new/open/save/export, …) - the ones that
         belong with the app chrome rather than the toolbar row below. Empty,

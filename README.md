@@ -17,13 +17,25 @@ npm run dev
 
 Then open http://localhost:5173.
 
+## Documentation
+
+The **Docs** entry in the sidebar links to a standalone site built with
+[VitePress](https://vitepress.dev), served at its own URI (`/docs/` — e.g.
+[baugraph.com/docs](https://baugraph.com/docs)) rather than as an in-app tab,
+so it works without the app's JavaScript and can be linked to directly. Its
+source lives in [`docs/`](docs); `npm run docs:dev` runs it locally, and
+`npm run build` (or `npm run docs:build` on its own) writes it to
+`dist/docs/`.
+
 | Script | What it does |
 | --- | --- |
 | `npm run dev` | Vite dev server with HMR |
-| `npm run build` | Type-check, then build to `dist/` |
+| `npm run build` | Type-check, build the app, then build the docs — all into `dist/` |
 | `npm run type-check` | `vue-tsc` only |
 | `npm run generate` | Regenerate the JSON Schema and the icon registry |
-| `./build.sh` | Clean install + type-check + production build |
+| `npm run docs:dev` | VitePress dev server for `docs/`, with its own HMR |
+| `npm run docs:build` | Build `docs/` into `dist/docs/` |
+| `./build.sh` | Clean install + type-check + production build (app + docs) |
 | `./manage.sh start [PORT]` | Serve `dist/` behind a load balancer |
 
 ## Using the editor
@@ -360,6 +372,7 @@ src/
 scripts/                   code generators (JSON Schema, icon registry)
 public/schema/             the published JSON Schema
 examples/                  an example diagram
+docs/                      the VitePress docs site, served at /docs/
 ```
 
 ### Node types and technologies
