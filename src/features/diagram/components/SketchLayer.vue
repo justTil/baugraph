@@ -57,6 +57,20 @@ function hexOf(key: string) {
   return COLOR_HEX[key as keyof typeof COLOR_HEX] ?? COLOR_HEX.slate
 }
 
+/** Options shared by every drawn line — kept crisp and smoothed. */
+const LINE_STYLE = {
+  lineCap: 'round',
+  lineJoin: 'round',
+  // A light spline through the sampled points, so a freehand line reads as a
+  // curve rather than a run of short straight segments.
+  tension: 0.4,
+  listening: false,
+  shadowForStrokeEnabled: false,
+  // No offscreen buffer: inside a scaled group its bitmap would be upscaled and
+  // blur the line as the diagram is zoomed in.
+  perfectDrawEnabled: false,
+} as const
+
 /** Rebuilds every stored stroke. Called on any change to the document's strokes. */
 function renderStrokes() {
   if (!group || !layer) return
@@ -64,14 +78,10 @@ function renderStrokes() {
   lineById.clear()
   for (const stroke of sketchStrokes.value) {
     const line = new Konva.Line({
+      ...LINE_STYLE,
       points: stroke.points,
       stroke: hexOf(stroke.color),
       strokeWidth: stroke.width,
-      lineCap: 'round',
-      lineJoin: 'round',
-      listening: false,
-      perfectDrawEnabled: false,
-      shadowForStrokeEnabled: false,
     })
     group.add(line)
     lineById.set(stroke.id, line)
@@ -109,13 +119,10 @@ function flowPoint(evt: PointerEvent) {
 function beginPen(x: number, y: number) {
   current = [x, y]
   liveLine = new Konva.Line({
+    ...LINE_STYLE,
     points: current,
     stroke: hexOf(color.value),
     strokeWidth: width.value,
-    lineCap: 'round',
-    lineJoin: 'round',
-    listening: false,
-    perfectDrawEnabled: false,
   })
   group?.add(liveLine)
   layer?.batchDraw()
@@ -123,12 +130,14 @@ function beginPen(x: number, y: number) {
 
 function extendPen(x: number, y: number) {
   const n = current.length
-  // Skip points that barely move — a dense path is slower to draw and heavier
-  // to store for no visible gain.
+  // Drop a sample only if it is within a screen pixel of the last one — enough
+  // to keep the array from exploding on a slow drag without visibly faceting
+  // the line at any zoom.
   if (n >= 2) {
     const dx = x - current[n - 2]!
     const dy = y - current[n - 1]!
-    if (dx * dx + dy * dy < 4) return
+    const min = 1 / viewport.value.zoom
+    if (dx * dx + dy * dy < min * min) return
   }
   current.push(x, y)
   liveLine?.points(current)
@@ -217,6 +226,12 @@ function finishStroke() {
 
 onMounted(() => {
   if (!container.value) return
+  // Match the backing canvas to the display's real pixel density. Konva samples
+  // this once at import, which under a bundler can land before `window` is ready
+  // and leave every stroke rendered at half resolution on a retina screen — the
+  // "pixelated" look. Setting it here is the documented fix.
+  Konva.pixelRatio = window.devicePixelRatio || 1
+
   stage = new Konva.Stage({
     container: container.value,
     width: container.value.clientWidth,
