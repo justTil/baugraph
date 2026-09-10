@@ -1209,16 +1209,16 @@ watch(isVisible, (visible) => {
     <!-- The presentation laser pointer: a cursor-following glow, on top of everything. -->
     <LaserPointer :host="canvasHost" />
 
-    <!-- Bottom-centre hint while the laser pointer is on. -->
+    <!-- Top-centre hint while the laser pointer is on. -->
     <Transition
       enter-active-class="transition duration-150 ease-out"
-      enter-from-class="translate-y-1 opacity-0"
+      enter-from-class="-translate-y-1 opacity-0"
       leave-active-class="transition duration-150 ease-in"
-      leave-to-class="translate-y-1 opacity-0"
+      leave-to-class="-translate-y-1 opacity-0"
     >
       <div
         v-if="laserActive"
-        class="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+        class="pointer-events-none absolute top-4 left-1/2 z-40 -translate-x-1/2"
       >
         <div
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
@@ -1232,16 +1232,16 @@ watch(isVisible, (visible) => {
       </div>
     </Transition>
 
-    <!-- Bottom-centre hint while Canvas mode is on — the diagram is frozen under it. -->
+    <!-- Top-centre hint while Canvas mode is on — the diagram is frozen under it. -->
     <Transition
       enter-active-class="transition duration-150 ease-out"
-      enter-from-class="translate-y-1 opacity-0"
+      enter-from-class="-translate-y-1 opacity-0"
       leave-active-class="transition duration-150 ease-in"
-      leave-to-class="translate-y-1 opacity-0"
+      leave-to-class="-translate-y-1 opacity-0"
     >
       <div
         v-if="sketchActive && viewMode === 'diagram'"
-        class="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+        class="pointer-events-none absolute top-4 left-1/2 z-40 -translate-x-1/2"
       >
         <div
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
