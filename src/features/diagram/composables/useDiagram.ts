@@ -20,19 +20,16 @@ import type {
   Route,
   ShapeKey,
   Side,
-  SketchStroke,
   Vec2,
 } from '@/model'
 import {
   DEFAULT_CANVAS,
   DEFAULT_NODE_SIZE,
-  DEFAULT_SKETCH,
   DEFAULT_ZONE_SIZE,
   FLOW_DEFAULTS,
   FORMAT_VERSION,
   MAX_PORTS,
   nodePorts,
-  uniqueId,
   edgeId as makeEdgeId,
   flowId as makeFlowId,
   nodeId as makeNodeId,
@@ -160,15 +157,6 @@ function createDiagramStore(documentId: string) {
   const flows = ref<MessageFlow[]>([])
   const meta = reactive<DiagramMeta>({ title: 'Untitled diagram' })
   const canvas = reactive<CanvasSettings>({ ...DEFAULT_CANVAS })
-
-  /**
-   * The Canvas layer: hand-drawn strokes over everything else, plus whether the
-   * layer is shown. Held here — not in `useSketch`, which is only the transient
-   * "am I drawing" mode — so strokes are undoable, autosaved and written to the
-   * file like any other part of the diagram.
-   */
-  const sketchStrokes = ref<SketchStroke[]>([])
-  const sketchVisible = ref(DEFAULT_SKETCH.visible)
 
   const past = ref<DiagramDocument[]>([])
   const future = ref<DiagramDocument[]>([])
@@ -496,10 +484,6 @@ function createDiagramStore(documentId: string) {
       nodes: sorted.map(toModelNode),
       edges: edges.value.map(toModelEdge),
       flows: flows.value.map((flow) => ({ ...flow, edges: [...flow.edges] })),
-      sketch: {
-        visible: sketchVisible.value,
-        strokes: sketchStrokes.value.map((s) => ({ ...s, points: [...s.points] })),
-      },
     }
   }
 
@@ -510,8 +494,6 @@ function createDiagramStore(documentId: string) {
     nodes.value = doc.nodes.map(toVueFlowNode)
     edges.value = doc.edges.map(toVueFlowEdge)
     flows.value = (doc.flows ?? []).map((flow) => ({ ...flow, edges: [...flow.edges] }))
-    sketchVisible.value = doc.sketch?.visible ?? DEFAULT_SKETCH.visible
-    sketchStrokes.value = (doc.sketch?.strokes ?? []).map((s) => ({ ...s, points: [...s.points] }))
   }
 
   /* ---------------------------------------------------------------- history */
@@ -1606,44 +1588,6 @@ function createDiagramStore(documentId: string) {
     )
   }
 
-  /* ------------------------------------------------------------ sketch layer */
-
-  const takenStrokeIds = () => new Set(sketchStrokes.value.map((s) => s.id))
-
-  /**
-   * Records a freehand stroke. The caller `commit()`s first, like every other
-   * mutation, so a drawn line is one undo step.
-   */
-  function addSketchStroke(stroke: Omit<SketchStroke, 'id'> & { id?: string }): SketchStroke {
-    const created: SketchStroke = {
-      id: stroke.id ?? uniqueId('stroke', takenStrokeIds()),
-      color: stroke.color,
-      width: stroke.width,
-      points: [...stroke.points],
-    }
-    sketchStrokes.value = [...sketchStrokes.value, created]
-    return created
-  }
-
-  /** Erases strokes by id — the eraser tool, one or several at a time. */
-  function removeSketchStrokes(ids: Iterable<string>) {
-    const drop = new Set(ids)
-    if (!drop.size) return
-    const next = sketchStrokes.value.filter((s) => !drop.has(s.id))
-    if (next.length !== sketchStrokes.value.length) sketchStrokes.value = next
-  }
-
-  /** Wipes the Canvas layer. */
-  function clearSketch() {
-    if (!sketchStrokes.value.length) return
-    sketchStrokes.value = []
-  }
-
-  /** Shows or hides the layer without touching what is drawn on it. */
-  function setSketchVisible(visible: boolean) {
-    sketchVisible.value = visible
-  }
-
   /* -------------------------------------------------------------- documents */
 
   function loadDocument(doc: DiagramDocument, { resetHistory = true } = {}) {
@@ -1666,14 +1610,11 @@ function createDiagramStore(documentId: string) {
   }
 
   scope.run(() => {
-    watch([nodes, edges, flows, meta, canvas, sketchStrokes, sketchVisible], persist, { deep: true })
-    // The canvas settings, the flows and the sketch layer are ours alone —
-    // nothing but an edit moves them — so they can be watched directly for what
-    // `commit` misses: the toolbar's theme and grid toggles, the show/hide of
-    // the Canvas layer.
-    watch([flows, meta, canvas, sketchStrokes, sketchVisible], () => (dirty.value = true), {
-      deep: true,
-    })
+    watch([nodes, edges, flows, meta, canvas], persist, { deep: true })
+    // The canvas settings and the flows are ours alone — nothing but an edit
+    // moves them — so they can be watched directly for what `commit` misses:
+    // the toolbar's theme and grid toggles.
+    watch([flows, meta, canvas], () => (dirty.value = true), { deep: true })
     // A bend point's selection outlives the edge it came from only by accident
     // — deleting a connection, undoing its creation, or clearing its last
     // waypoint should not leave a phantom entry the alignment buttons still
@@ -1696,8 +1637,6 @@ function createDiagramStore(documentId: string) {
     flows,
     meta,
     canvas,
-    sketchStrokes,
-    sketchVisible,
     selectedNodes,
     selectedEdges,
     canUndo: computed(() => past.value.length > 0),
@@ -1757,10 +1696,6 @@ function createDiagramStore(documentId: string) {
     reorderNode,
     alignSelection,
     nudgeSelection,
-    addSketchStroke,
-    removeSketchStrokes,
-    clearSketch,
-    setSketchVisible,
     loadDocument,
     replaceDocument,
     toDocument,

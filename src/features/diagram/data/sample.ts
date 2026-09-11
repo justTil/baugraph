@@ -70,7 +70,7 @@ export function sampleDocument(): DiagramDocument {
       title: 'Order processing — reference architecture',
       description: 'Example diagram shipped with Baugraph.',
     },
-    canvas: { theme: 'light', grid: true, snap: true, snapSize: 10, axes: false },
+    canvas: { theme: 'light', grid: true, snap: true, snapSize: 10 },
     nodes: autoSized([
       {
         id: 'order-platform',
@@ -443,7 +443,6 @@ export function sampleDocument(): DiagramDocument {
         enabled: true,
       },
     ],
-    sketch: { visible: true, strokes: [] },
   }
 }
 
@@ -459,7 +458,7 @@ export function pipelineDocument(): DiagramDocument {
       title: 'Deployment pipeline — GitHub to Kubernetes',
       description: 'Example diagram shipped with Baugraph.',
     },
-    canvas: { theme: 'light', grid: true, snap: true, snapSize: 10, axes: false },
+    canvas: { theme: 'light', grid: true, snap: true, snapSize: 10 },
     nodes: autoSized([
       {
         id: 'developer',
@@ -801,7 +800,6 @@ export function pipelineDocument(): DiagramDocument {
         enabled: true,
       },
     ],
-    sketch: { visible: true, strokes: [] },
   }
 }
 
@@ -818,7 +816,7 @@ export function webAppDocument(): DiagramDocument {
       title: 'Web application — three-tier',
       description: 'Example diagram shipped with Baugraph.',
     },
-    canvas: { theme: 'light', grid: true, snap: true, snapSize: 10, axes: false },
+    canvas: { theme: 'light', grid: true, snap: true, snapSize: 10 },
     nodes: autoSized([
       {
         id: 'browser',
@@ -1141,6 +1139,5 @@ export function webAppDocument(): DiagramDocument {
         enabled: true,
       },
     ],
-    sketch: { visible: true, strokes: [] },
   }
 }

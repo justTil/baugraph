@@ -14,32 +14,17 @@ import type {
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import {
-  AlignCenterHorizontal,
-  AlignCenterVertical,
-  Brush,
-  Check,
-  Eraser,
-  Eye,
-  EyeOff,
-  Pencil,
-  Scaling,
-  Trash2,
-  Waypoints,
-} from '@lucide/vue'
+import { AlignCenterHorizontal, AlignCenterVertical, Check, Scaling, Waypoints } from '@lucide/vue'
 import type { ColorKey, DiagramParseError } from '@/model'
 import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
-import { SKETCH_WIDTHS, useSketchMode } from '@/features/diagram/composables/useSketch'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
 import { usePanel } from '@/features/workspace/composables/usePanel'
 import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile'
@@ -58,7 +43,7 @@ import { alignSnap } from '@/features/diagram/lib/align-snap'
 import type { Box } from '@/features/diagram/lib/edge-path'
 import { endpointOf } from '@/features/diagram/lib/edge-path'
 import { DEFAULT_PALETTE_ITEM, type PaletteItem } from '@/features/diagram/data/palette'
-import { COLOR_SWATCHES, diagramTheme, mix, nodePaint } from '@/features/diagram/lib/theme'
+import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 
 const emit = defineEmits<{
   (e: 'export'): void
@@ -78,10 +63,6 @@ const {
   removeSelectedWaypoints,
   selectedNodes,
   selectedEdges,
-  sketchStrokes,
-  sketchVisible,
-  setSketchVisible,
-  clearSketch,
   commit,
   endCoalesce,
   undo,
@@ -119,23 +100,6 @@ const { place, placeAtScreen } = usePlacement()
 const { to: connectTo } = useConnectionTarget()
 const { installFlowRuntime, stopFlowRuntime } = useFlows()
 const { active: laserActive } = useLaserPointer()
-const {
-  active: sketchActive,
-  tool: sketchTool,
-  color: sketchColor,
-  width: sketchWidth,
-} = useSketchMode()
-
-/** Drawing on a hidden layer makes no sense, so entering Canvas mode reveals it. */
-watch(sketchActive, (on) => {
-  if (on) setSketchVisible(true)
-})
-
-function wipeSketch() {
-  commit()
-  endCoalesce()
-  clearSketch()
-}
 
 /** The wrapper the laser pointer tracks the cursor against. */
 const canvasHost = ref<HTMLElement | null>(null)
@@ -147,13 +111,6 @@ const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
 const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
 const theme = computed(() => diagramTheme(canvas.theme))
-
-/**
- * The x=0/y=0 lines' colour: a step past the grid so the origin still reads
- * as a landmark rather than another grid line, without competing with a
- * selection or a connection in flight.
- */
-const axisColor = computed(() => mix(theme.value.grid, theme.value.ink, 0.5))
 
 /** Live label/size of whichever node is being resized, for the canvas's own indicator. */
 const resizingNode = computed(() => {
@@ -202,11 +159,6 @@ const JsonEditor = defineAsyncComponent({
   },
   delay: 150,
 })
-
-/** Konva is ~150 kB; nothing loads it until the Canvas layer is first needed. */
-const SketchLayer = defineAsyncComponent(
-  () => import('@/features/diagram/components/SketchLayer.vue'),
-)
 
 const viewMode = ref<'diagram' | 'json'>('diagram')
 const jsonDraft = ref('')
@@ -582,18 +534,6 @@ function isTyping(target: EventTarget | null): boolean {
 function onKeyDown(event: KeyboardEvent) {
   // The context menu handles its own keys; ⌫ while it is open must not delete.
   if (!isActive.value || menuOpen.value || isTyping(event.target)) return
-
-  // Canvas mode owns the keyboard while it is on: Esc leaves it, and the editing
-  // shortcuts below (delete, nudge, group…) act on a diagram that is frozen
-  // anyway. ⌘-combos still pass through, so Undo keeps working while drawing.
-  if (sketchActive.value && !(event.metaKey || event.ctrlKey)) {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      sketchActive.value = false
-    }
-    return
-  }
-
   const meta = event.metaKey || event.ctrlKey
 
   if (meta) {
@@ -820,9 +760,6 @@ watch(isVisible, (visible) => {
           :selection-key-code="'Shift'"
           :elevate-edges-on-select="true"
           :elevate-nodes-on-select="false"
-          :nodes-draggable="!sketchActive"
-          :nodes-connectable="!sketchActive"
-          :elements-selectable="!sketchActive"
           :connection-line-style="connectionLineStyle"
           :default-edge-options="{ type: 'diagram' }"
           @connect="onConnect"
@@ -938,46 +875,6 @@ watch(isVisible, (visible) => {
           </g>
         </svg>
 
-        <!--
-          The canvas origin: x=0 and y=0 drawn across the whole view, so (0, 0) is
-          never more than a glance away. The two lines pan and zoom with the
-          diagram (`viewport`), but the dot and label marking the crossing stay a
-          fixed screen size rather than shrinking away at low zoom.
-        -->
-        <svg v-if="canvas.axes" class="pointer-events-none absolute inset-0 z-[5] h-full w-full">
-          <g :transform="`translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`">
-            <line
-              x1="-100000"
-              y1="0"
-              x2="100000"
-              y2="0"
-              :stroke="axisColor"
-              stroke-width="1"
-              stroke-opacity="0.6"
-              vector-effect="non-scaling-stroke"
-            />
-            <line
-              x1="0"
-              y1="-100000"
-              x2="0"
-              y2="100000"
-              :stroke="axisColor"
-              stroke-width="1"
-              stroke-opacity="0.6"
-              vector-effect="non-scaling-stroke"
-            />
-          </g>
-          <circle :cx="viewport.x" :cy="viewport.y" r="3" :fill="axisColor" />
-          <text
-            :x="viewport.x + 7"
-            :y="viewport.y - 7"
-            class="font-mono text-[10px]"
-            :fill="axisColor"
-          >
-            0, 0
-          </text>
-        </svg>
-
         <!-- Inline label editor, positioned over the node or connection being renamed. -->
         <input
           v-if="editing"
@@ -1065,17 +962,6 @@ watch(isVisible, (visible) => {
       </div>
     </div>
 
-    <!--
-      The Canvas layer: a Konva overlay for freehand annotation. It keeps
-      painting while Canvas mode is off; `enabled` only decides whether a press
-      draws or reaches the diagram.
-    -->
-    <SketchLayer
-      v-if="viewMode === 'diagram'"
-      :enabled="sketchActive"
-      :shown="sketchVisible || sketchActive"
-    />
-
     <!-- Always on top, so there is a way back from JSON however it was reached. -->
     <div class="absolute top-4 right-4 z-40 flex items-center gap-2">
       <!--
@@ -1107,44 +993,6 @@ watch(isVisible, (visible) => {
         </Tooltip>
       </div>
 
-      <!--
-        Canvas layer controls: a toggle to draw on top of the diagram, and —
-        once there is something drawn — a switch to hide it without erasing it.
-      -->
-      <div
-        class="flex items-center gap-0.5 rounded-lg border p-1 shadow-sm"
-        :style="{ background: theme.surface, borderColor: theme.line }"
-      >
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Toggle
-              size="sm"
-              class="size-7 p-0"
-              :model-value="sketchActive"
-              aria-label="Canvas layer"
-              @update:model-value="sketchActive = Boolean($event)"
-            >
-              <Brush :size="15" />
-            </Toggle>
-          </TooltipTrigger>
-          <TooltipContent>Canvas — draw on top of the diagram</TooltipContent>
-        </Tooltip>
-        <Tooltip v-if="sketchStrokes.length">
-          <TooltipTrigger as-child>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-7"
-              @click="setSketchVisible(!sketchVisible)"
-            >
-              <Eye v-if="sketchVisible" :size="15" />
-              <EyeOff v-else :size="15" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{{ sketchVisible ? 'Hide the drawing' : 'Show the drawing' }}</TooltipContent>
-        </Tooltip>
-      </div>
-
       <label
         class="flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm select-none"
         :style="{ background: theme.surface, borderColor: theme.line }"
@@ -1162,114 +1010,21 @@ watch(isVisible, (visible) => {
       </label>
     </div>
 
-    <!--
-      Canvas tools, up only while Canvas mode is on: pen or eraser, a colour, a
-      weight, and a way to wipe the layer. Sits under the toggle that opened it.
-    -->
-    <div
-      v-if="sketchActive && viewMode === 'diagram'"
-      class="absolute top-16 right-4 z-40 flex items-center gap-1 rounded-lg border p-1 shadow-sm"
-      :style="{ background: theme.surface, borderColor: theme.line }"
-    >
-      <Tooltip>
-        <TooltipTrigger as-child>
-          <Toggle
-            size="sm"
-            class="size-7 p-0"
-            :model-value="sketchTool === 'pen'"
-            aria-label="Pen"
-            @update:model-value="sketchTool = 'pen'"
-          >
-            <Pencil :size="15" />
-          </Toggle>
-        </TooltipTrigger>
-        <TooltipContent>Pen</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger as-child>
-          <Toggle
-            size="sm"
-            class="size-7 p-0"
-            :model-value="sketchTool === 'eraser'"
-            aria-label="Eraser"
-            @update:model-value="sketchTool = 'eraser'"
-          >
-            <Eraser :size="15" />
-          </Toggle>
-        </TooltipTrigger>
-        <TooltipContent>Eraser — removes a whole stroke</TooltipContent>
-      </Tooltip>
-
-      <Separator orientation="vertical" class="mx-0.5 h-5" />
-
-      <button
-        v-for="swatch in COLOR_SWATCHES"
-        :key="swatch.key"
-        type="button"
-        class="size-5 rounded-full border transition-transform hover:scale-110"
-        :class="sketchColor === swatch.key ? 'ring-2 ring-offset-1' : ''"
-        :style="{
-          background: swatch.hex,
-          borderColor: theme.line,
-          '--tw-ring-color': swatch.hex,
-          '--tw-ring-offset-color': theme.surface,
-        }"
-        :aria-label="`Pen colour ${swatch.key}`"
-        :aria-pressed="sketchColor === swatch.key"
-        @click="sketchColor = swatch.key"
-      />
-
-      <Separator orientation="vertical" class="mx-0.5 h-5" />
-
-      <button
-        v-for="w in SKETCH_WIDTHS"
-        :key="w"
-        type="button"
-        class="flex size-6 items-center justify-center rounded transition-colors"
-        :class="sketchWidth === w ? 'bg-accent' : 'hover:bg-accent/50'"
-        :style="{ color: theme.ink }"
-        :aria-label="`Pen weight ${w}`"
-        :aria-pressed="sketchWidth === w"
-        @click="sketchWidth = w"
-      >
-        <span class="rounded-full" :style="{ width: `${w + 2}px`, height: `${w + 2}px`, background: 'currentColor' }" />
-      </button>
-
-      <Separator orientation="vertical" class="mx-0.5 h-5" />
-
-      <Tooltip>
-        <TooltipTrigger as-child>
-          <Button
-            variant="ghost"
-            size="icon"
-            class="size-7"
-            :disabled="!sketchStrokes.length"
-            @click="wipeSketch()"
-          >
-            <Trash2 :size="15" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Clear the Canvas layer</TooltipContent>
-      </Tooltip>
-    </div>
-
     <!-- The presentation laser pointer: a cursor-following glow, on top of everything. -->
     <LaserPointer :host="canvasHost" />
 
-    <!--
-      Top-centre mode hints. They share one column so that when more than one
-      mode is on at once — laser pointer over Canvas mode, say — the pills stack
-      below each other instead of overlapping.
-    -->
-    <div class="pointer-events-none absolute top-4 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-2">
-      <Transition
-        enter-active-class="transition duration-150 ease-out"
-        enter-from-class="-translate-y-1 opacity-0"
-        leave-active-class="transition duration-150 ease-in"
-        leave-to-class="-translate-y-1 opacity-0"
+    <!-- Bottom-centre hint while the laser pointer is on. -->
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="translate-y-1 opacity-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-to-class="translate-y-1 opacity-0"
+    >
+      <div
+        v-if="laserActive"
+        class="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
       >
         <div
-          v-if="laserActive"
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
           :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
         >
@@ -1278,25 +1033,8 @@ watch(isVisible, (visible) => {
           <kbd class="rounded border px-1 font-sans text-[11px]">L</kbd> or
           <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
         </div>
-      </Transition>
-
-      <Transition
-        enter-active-class="transition duration-150 ease-out"
-        enter-from-class="-translate-y-1 opacity-0"
-        leave-active-class="transition duration-150 ease-in"
-        leave-to-class="-translate-y-1 opacity-0"
-      >
-        <div
-          v-if="sketchActive && viewMode === 'diagram'"
-          class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
-          :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
-        >
-          <Brush :size="14" :style="{ color: theme.selection }" />
-          Canvas mode — the diagram is locked while you draw. Press
-          <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
-        </div>
-      </Transition>
-    </div>
+      </div>
+    </Transition>
     </div>
 
     <CanvasContextMenu
