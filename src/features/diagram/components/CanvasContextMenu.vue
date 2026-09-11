@@ -24,6 +24,7 @@ import {
   AlignStartVertical,
   AlignVerticalDistributeCenter,
   ArrowLeftRight,
+  Axis3d,
   Braces,
   BringToFront,
   ClipboardCopy,
@@ -961,6 +962,13 @@ function copySelectionIds() {
       >
         <Magnet />
         Snap to grid
+      </ContextMenuCheckboxItem>
+      <ContextMenuCheckboxItem
+        :model-value="canvas.axes"
+        @update:model-value="canvas.axes = $event === true"
+      >
+        <Axis3d />
+        Show axes
       </ContextMenuCheckboxItem>
       <ContextMenuCheckboxItem
         :model-value="canvas.theme === 'dark'"

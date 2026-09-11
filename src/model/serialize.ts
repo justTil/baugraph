@@ -197,7 +197,7 @@ export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
     $schema: SCHEMA_URL,
     baugraph: doc.baugraph || FORMAT_VERSION,
     meta: ordered({ ...doc.meta }, ['title', 'description', 'createdAt', 'updatedAt']),
-    canvas: ordered({ ...doc.canvas }, ['theme', 'grid', 'snap', 'snapSize']),
+    canvas: ordered({ ...doc.canvas }, ['theme', 'grid', 'snap', 'snapSize', 'axes']),
     nodes,
     edges,
     // A diagram with no flows says nothing about them: an empty array would show

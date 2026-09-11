@@ -38,7 +38,8 @@
         "theme": "light",
         "grid": true,
         "snap": true,
-        "snapSize": 10
+        "snapSize": 10,
+        "axes": false
       },
       "type": "object",
       "properties": {
@@ -63,6 +64,10 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 200
+        },
+        "axes": {
+          "default": false,
+          "type": "boolean"
         }
       }
     },

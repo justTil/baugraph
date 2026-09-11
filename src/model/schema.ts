@@ -154,6 +154,7 @@ export const canvasSchema = z.object({
   grid: z.boolean().default(DEFAULT_CANVAS.grid),
   snap: z.boolean().default(DEFAULT_CANVAS.snap),
   snapSize: z.number().int().min(1).max(200).default(DEFAULT_CANVAS.snapSize),
+  axes: z.boolean().default(DEFAULT_CANVAS.axes),
 })
 
 /**

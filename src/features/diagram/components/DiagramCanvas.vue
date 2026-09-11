@@ -58,7 +58,7 @@ import { alignSnap } from '@/features/diagram/lib/align-snap'
 import type { Box } from '@/features/diagram/lib/edge-path'
 import { endpointOf } from '@/features/diagram/lib/edge-path'
 import { DEFAULT_PALETTE_ITEM, type PaletteItem } from '@/features/diagram/data/palette'
-import { COLOR_SWATCHES, diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
+import { COLOR_SWATCHES, diagramTheme, mix, nodePaint } from '@/features/diagram/lib/theme'
 
 const emit = defineEmits<{
   (e: 'export'): void
@@ -147,6 +147,13 @@ const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
 const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
 const theme = computed(() => diagramTheme(canvas.theme))
+
+/**
+ * The x=0/y=0 lines' colour: a step past the grid so the origin still reads
+ * as a landmark rather than another grid line, without competing with a
+ * selection or a connection in flight.
+ */
+const axisColor = computed(() => mix(theme.value.grid, theme.value.ink, 0.5))
 
 /** Live label/size of whichever node is being resized, for the canvas's own indicator. */
 const resizingNode = computed(() => {
@@ -929,6 +936,46 @@ watch(isVisible, (visible) => {
               vector-effect="non-scaling-stroke"
             />
           </g>
+        </svg>
+
+        <!--
+          The canvas origin: x=0 and y=0 drawn across the whole view, so (0, 0) is
+          never more than a glance away. The two lines pan and zoom with the
+          diagram (`viewport`), but the dot and label marking the crossing stay a
+          fixed screen size rather than shrinking away at low zoom.
+        -->
+        <svg v-if="canvas.axes" class="pointer-events-none absolute inset-0 z-[5] h-full w-full">
+          <g :transform="`translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`">
+            <line
+              x1="-100000"
+              y1="0"
+              x2="100000"
+              y2="0"
+              :stroke="axisColor"
+              stroke-width="1"
+              stroke-opacity="0.6"
+              vector-effect="non-scaling-stroke"
+            />
+            <line
+              x1="0"
+              y1="-100000"
+              x2="0"
+              y2="100000"
+              :stroke="axisColor"
+              stroke-width="1"
+              stroke-opacity="0.6"
+              vector-effect="non-scaling-stroke"
+            />
+          </g>
+          <circle :cx="viewport.x" :cy="viewport.y" r="3" :fill="axisColor" />
+          <text
+            :x="viewport.x + 7"
+            :y="viewport.y - 7"
+            class="font-mono text-[10px]"
+            :fill="axisColor"
+          >
+            0, 0
+          </text>
         </svg>
 
         <!-- Inline label editor, positioned over the node or connection being renamed. -->

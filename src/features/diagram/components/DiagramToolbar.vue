@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
+  Axis3d,
   Check,
   Copy,
   Crosshair,
@@ -220,6 +221,20 @@ async function copyAiSkills() {
         </Toggle>
       </TooltipTrigger>
       <TooltipContent>Show grid</TooltipContent>
+    </Tooltip>
+
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="canvas.axes"
+          aria-label="Show axes"
+          @update:model-value="canvas.axes = Boolean($event)"
+        >
+          <Axis3d />
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>Show x/y axes — a way back to (0, 0)</TooltipContent>
     </Tooltip>
 
     <Tooltip>

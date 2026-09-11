@@ -296,6 +296,8 @@ export interface CanvasSettings {
   snap: boolean
   /** Grid pitch in canvas units. */
   snapSize: number
+  /** Draws the x=0 and y=0 lines through the canvas origin — a way back to (0, 0). */
+  axes: boolean
 }
 
 /** Freehand tools the Canvas layer offers. `eraser` removes whole strokes. */

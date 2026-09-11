@@ -25,6 +25,7 @@ export const DEFAULT_CANVAS: CanvasSettings = {
   grid: true,
   snap: true,
   snapSize: 10,
+  axes: false,
 }
 
 /** An empty, shown Canvas layer — what every diagram has until something is drawn. */
