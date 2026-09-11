@@ -1209,18 +1209,20 @@ watch(isVisible, (visible) => {
     <!-- The presentation laser pointer: a cursor-following glow, on top of everything. -->
     <LaserPointer :host="canvasHost" />
 
-    <!-- Top-centre hint while the laser pointer is on. -->
-    <Transition
-      enter-active-class="transition duration-150 ease-out"
-      enter-from-class="-translate-y-1 opacity-0"
-      leave-active-class="transition duration-150 ease-in"
-      leave-to-class="-translate-y-1 opacity-0"
-    >
-      <div
-        v-if="laserActive"
-        class="pointer-events-none absolute top-4 left-1/2 z-40 -translate-x-1/2"
+    <!--
+      Top-centre mode hints. They share one column so that when more than one
+      mode is on at once — laser pointer over Canvas mode, say — the pills stack
+      below each other instead of overlapping.
+    -->
+    <div class="pointer-events-none absolute top-4 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-2">
+      <Transition
+        enter-active-class="transition duration-150 ease-out"
+        enter-from-class="-translate-y-1 opacity-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-to-class="-translate-y-1 opacity-0"
       >
         <div
+          v-if="laserActive"
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
           :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
         >
@@ -1229,21 +1231,16 @@ watch(isVisible, (visible) => {
           <kbd class="rounded border px-1 font-sans text-[11px]">L</kbd> or
           <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
         </div>
-      </div>
-    </Transition>
+      </Transition>
 
-    <!-- Top-centre hint while Canvas mode is on — the diagram is frozen under it. -->
-    <Transition
-      enter-active-class="transition duration-150 ease-out"
-      enter-from-class="-translate-y-1 opacity-0"
-      leave-active-class="transition duration-150 ease-in"
-      leave-to-class="-translate-y-1 opacity-0"
-    >
-      <div
-        v-if="sketchActive && viewMode === 'diagram'"
-        class="pointer-events-none absolute top-4 left-1/2 z-40 -translate-x-1/2"
+      <Transition
+        enter-active-class="transition duration-150 ease-out"
+        enter-from-class="-translate-y-1 opacity-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-to-class="-translate-y-1 opacity-0"
       >
         <div
+          v-if="sketchActive && viewMode === 'diagram'"
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
           :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
         >
@@ -1251,8 +1248,8 @@ watch(isVisible, (visible) => {
           Canvas mode — the diagram is locked while you draw. Press
           <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </div>
     </div>
 
     <CanvasContextMenu
