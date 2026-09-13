@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build the extension (debug)",
+      "detail": "Both halves. Run from the repository root, which is where the editor is built from.",
+      "type": "shell",
+      "command": "npm run extension:debug",
+      "options": { "cwd": "${workspaceFolder}/.." },
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true }
+    }
+  ]
+}

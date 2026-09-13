@@ -364,6 +364,11 @@ saved from VS Code and one saved from the browser are byte-identical.
 File` from the Explorer — rewrites it in the canonical form above, which is how
 a hand-edited or AI-written diagram gets sorted without opening a canvas.
 
+To work on it, press <kbd>F5</kbd> (**Run the VS Code extension**, see
+[`.vscode/launch.json`](.vscode/launch.json)): both halves are rebuilt with
+sourcemaps and an Extension Development Host opens with `examples/` loaded.
+`npm run extension:watch` rebuilds them on save.
+
 See [`docs/vscode.md`](docs/vscode.md) for the rest, and
 [`extension/README.md`](extension/README.md) for building and debugging it.
 

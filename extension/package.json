@@ -113,7 +113,8 @@
   },
   "scripts": {
     "build": "node build.mjs --production",
-    "dev": "node build.mjs --watch",
+    "build:debug": "node build.mjs",
+    "watch": "node build.mjs --watch",
     "type-check": "tsc --noEmit",
     "package": "vsce package --no-dependencies"
   },

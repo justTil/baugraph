@@ -21,6 +21,10 @@ docs/.vitepress/dist
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+# Debugging the VS Code extension is part of this repository's workflow, so the
+# configuration that does it is committed along with the extension itself.
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea
 *.suo
 *.ntvs*

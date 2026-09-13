@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Baugraph extension",
+      "name": "Run the VS Code extension",
       "type": "extensionHost",
       "request": "launch",
       "args": [
@@ -10,7 +10,7 @@
         "${workspaceFolder}/../examples"
       ],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "npm: build"
+      "preLaunchTask": "Build the extension (debug)"
     }
   ]
 }

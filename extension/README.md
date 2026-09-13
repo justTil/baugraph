@@ -59,8 +59,16 @@ npm run extension:build
 ```
 
 That produces `extension/media/` (the editor) and `extension/dist/` (the host).
-Then open `extension/` in VS Code and press <kbd>F5</kbd> to launch an Extension
-Development Host with the `examples/` folder open.
+
+To debug it, press <kbd>F5</kbd> — from the repository root or from this folder,
+both are configured. **Run the VS Code extension** builds both halves unminified
+and with sourcemaps (so breakpoints in `src/extension.ts` bind), then opens an
+Extension Development Host with `examples/` loaded; open any diagram there.
+
+While iterating, run the **Watch the extension** task (or `npm run
+extension:watch` in the root) and both halves rebuild on save. Changes to the
+host need the Development Host restarted (<kbd>⌘R</kbd> in that window);
+changes to the editor only need *Developer: Reload Webviews*.
 
 To produce an installable package:
 
