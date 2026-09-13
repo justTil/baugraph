@@ -83,7 +83,8 @@
             "type": "string",
             "enum": [
               "shape",
-              "zone"
+              "zone",
+              "annotation"
             ]
           },
           "type": {
@@ -118,7 +119,8 @@
               "hexagon",
               "diamond",
               "circle",
-              "note"
+              "note",
+              "text"
             ]
           },
           "color": {

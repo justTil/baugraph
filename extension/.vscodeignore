@@ -1,0 +1,11 @@
+# Everything the extension needs is in dist/ (the host), media/ (the editor)
+# and schema/ (the JSON Schema the text editor validates against). Sources are
+# in the repository; shipping them again would double the size of the .vsix.
+.vscode/**
+src/**
+node_modules/**
+build.mjs
+tsconfig.json
+**/*.map
+**/.DS_Store
+.gitignore

@@ -11,6 +11,13 @@ export {
 } from '@/model/schema'
 export { migrate } from '@/model/migrate'
 export {
+  sortDocument,
+  sortEdges,
+  sortFlows,
+  sortMetadata,
+  sortNodes,
+} from '@/model/sort'
+export {
   DiagramParseError,
   SCHEMA_URL,
   parse,

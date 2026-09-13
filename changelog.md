@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.29.0]
+
+### Added
+
+- **A VS Code extension.** `*.baugraph.json` files open on the canvas inside VS
+  Code instead of as JSON — the same editor as the web app, running in a custom
+  editor and writing the same file. Edits go into the document the way a text
+  edit does, so `⌘S`, undo, revert, hot exit, the Timeline and the source-control
+  diff all behave normally, and a split text editor on the same file stays in
+  step as you type. **Format Document** on a diagram file rewrites it in
+  canonical form, `*.baugraph.json` is bound to the published JSON Schema for
+  editing the source by hand, and exports go through a save dialog. Built from
+  this repository with `npm run extension:package`; see `docs/vscode.md`.
+
+### Changed
+
+- **Diagram files are now written in a canonical order.** Nodes come out in
+  hierarchy order — a zone, then everything inside it — connections are grouped
+  by the node they leave, flows are ordered by id, and the keys of a `data`
+  block are sorted. Array order never carried meaning (paint order comes from a
+  node's `kind`, and a flow's hops from the graph), but it used to be whatever
+  order the diagram happened to be drawn in, so two people building the same
+  diagram produced files full of moved blocks and no changes. The same diagram
+  now has exactly one file. Saving an existing diagram once will show this as a
+  one-off reordering diff.
+
 ## [1.28.0]
 
 ### Added

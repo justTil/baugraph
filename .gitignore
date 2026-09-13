@@ -41,3 +41,8 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# VS Code extension build output (see extension/.gitignore)
+extension/dist
+extension/media
+extension/schema

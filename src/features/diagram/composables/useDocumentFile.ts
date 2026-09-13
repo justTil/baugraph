@@ -166,7 +166,7 @@ async function writeTo(documentId: string, link: FileLink, titleSlug: string): P
  * or refused the permission a remembered file needs in a new session — so a
  * caller waiting on the save (closing a tab) can stay put.
  */
-export async function saveDocument(documentId: string): Promise<boolean> {
+async function browserSave(documentId: string): Promise<boolean> {
   const store = diagramStore(documentId)
 
   if (!canOverwriteFiles) {
@@ -178,7 +178,7 @@ export async function saveDocument(documentId: string): Promise<boolean> {
   }
 
   const link = links.get(documentId)
-  if (!link) return saveDocumentAs(documentId)
+  if (!link) return browserSaveAs(documentId)
 
   const titleSlug = slug(store.toDocument())
   const renamed = titleSlug !== link.slug
@@ -197,11 +197,11 @@ export async function saveDocument(documentId: string): Promise<boolean> {
   // A refused grant means the link is no longer usable; ask for a destination
   // rather than failing on every subsequent save.
   unlinkDocumentFile(documentId)
-  return saveDocumentAs(documentId)
+  return browserSaveAs(documentId)
 }
 
 /** Always asks for a destination, and saves to it from then on. */
-export async function saveDocumentAs(documentId: string): Promise<boolean> {
+async function browserSaveAs(documentId: string): Promise<boolean> {
   const store = diagramStore(documentId)
 
   if (!canOverwriteFiles) {
@@ -228,7 +228,7 @@ export async function saveDocumentAs(documentId: string): Promise<boolean> {
 export async function saveUnderNewName() {
   const prompt = pendingRename.value
   if (!prompt) return
-  finish(await saveDocumentAs(prompt.documentId))
+  finish(await browserSaveAs(prompt.documentId))
 }
 
 export async function keepFileName() {
@@ -246,10 +246,54 @@ export function cancelRename() {
   finish(false)
 }
 
+/* ------------------------------------------------------------------- hosts */
+
+/**
+ * What "save" means here.
+ *
+ * In a browser tab it is the File System Access API above: a handle the user
+ * picked, remembered between sessions. Somewhere else it is something else
+ * entirely — the VS Code extension's webview cannot reach the disk at all, and
+ * saves by asking the extension host to write the `TextDocument` it was opened
+ * for. The editor calls `saveDocument` either way and never learns which.
+ */
+export interface FileHost {
+  /** False where every save is a fresh download instead of a write-back. */
+  canOverwriteFiles: boolean
+  /** The file this document saves to, for the toolbar to name. Null until it has one. */
+  fileName(documentId: string): string | null
+  save(documentId: string): Promise<boolean>
+  saveAs(documentId: string): Promise<boolean>
+}
+
+const browserHost: FileHost = {
+  canOverwriteFiles,
+  fileName: (documentId) => links.get(documentId)?.handle.name ?? null,
+  save: browserSave,
+  saveAs: browserSaveAs,
+}
+
+let host: FileHost = browserHost
+
+/** Installed once, before the app mounts. */
+export function setFileHost(next: FileHost) {
+  host = next
+}
+
+/** Saves the diagram to its file, asking for one if it has none yet. */
+export function saveDocument(documentId: string): Promise<boolean> {
+  return host.save(documentId)
+}
+
+/** Saves the diagram to a file the user picks, and to that one from then on. */
+export function saveDocumentAs(documentId: string): Promise<boolean> {
+  return host.saveAs(documentId)
+}
+
 /** What the document is saving to, for the toolbar to name. */
 export function useDocumentFile(documentId: string) {
   return {
-    canOverwriteFiles,
-    fileName: computed(() => links.get(documentId)?.handle.name ?? null),
+    canOverwriteFiles: host.canOverwriteFiles,
+    fileName: computed(() => host.fileName(documentId)),
   }
 }
