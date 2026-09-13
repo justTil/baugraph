@@ -107,7 +107,10 @@ const canvasHost = ref<HTMLElement | null>(null)
 // shortcuts below only belong to it while it is the dock's focused panel.
 const { isActive, isVisible } = usePanel()
 
-const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
+// An annotation draws exactly like a shape — icon, label, no chrome of its
+// own — it is only kept a separate Vue Flow type so edges and the z-order
+// can single it out (see `zIndexFor` and the obstacle list in `DiagramEdge`).
+const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode), annotation: markRaw(ShapeNode) }
 const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
 const theme = computed(() => diagramTheme(canvas.theme))
@@ -1059,7 +1062,8 @@ watch(isVisible, (visible) => {
 
 /* Vue Flow's default node chrome would double up on the shapes we draw. */
 .vue-flow__node-shape,
-.vue-flow__node-zone {
+.vue-flow__node-zone,
+.vue-flow__node-annotation {
   background: transparent;
   border: none;
   padding: 0;
@@ -1084,7 +1088,8 @@ watch(isVisible, (visible) => {
  * inline style on that wrapper for as long as any node listener is registered.
  */
 .vue-flow__node-shape:not(.selectable),
-.vue-flow__node-zone:not(.selectable) {
+.vue-flow__node-zone:not(.selectable),
+.vue-flow__node-annotation:not(.selectable) {
   pointer-events: none !important;
 }
 

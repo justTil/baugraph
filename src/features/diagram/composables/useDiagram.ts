@@ -97,11 +97,11 @@ export interface WaypointRef {
 // `any` for the custom-events slot mirrors Vue Flow's own default; narrowing it
 // makes the node type incompatible with the library's internal `GraphNode`.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type BgNode = Node<NodeData, any, 'shape' | 'zone'>
+export type BgNode = Node<NodeData, any, 'shape' | 'zone' | 'annotation'>
 export type BgEdge = Edge<EdgeData>
 
 /** A node as it exists in the store: `data` and `type` are always populated. */
-export type ResolvedNode = BgNode & { type: 'shape' | 'zone'; data: NodeData }
+export type ResolvedNode = BgNode & { type: 'shape' | 'zone' | 'annotation'; data: NodeData }
 /** An edge as it exists in the store: `data` is always populated. */
 export type ResolvedEdge = BgEdge & { data: EdgeData }
 
@@ -332,7 +332,11 @@ function createDiagramStore(documentId: string) {
   const ZONE_Z = 0
   const EDGE_Z = 50
   const NODE_Z = 100
-  const zIndexFor = (kind: 'shape' | 'zone') => (kind === 'zone' ? ZONE_Z : NODE_Z)
+  // Above every shape, so an annotation dropped on an already-busy diagram is
+  // never the one that ends up hidden underneath something else.
+  const ANNOTATION_Z = 150
+  const zIndexFor = (kind: DiagramNode['kind']) =>
+    kind === 'zone' ? ZONE_Z : kind === 'annotation' ? ANNOTATION_Z : NODE_Z
 
   function toVueFlowNode(node: DiagramNode): BgNode {
     const locked = node.locked ?? false
@@ -413,7 +417,7 @@ function createDiagramStore(documentId: string) {
   function toModelNode(node: BgNode): DiagramNode {
     return {
       id: node.id,
-      kind: node.type === 'zone' ? 'zone' : 'shape',
+      kind: node.type === 'zone' || node.type === 'annotation' ? node.type : 'shape',
       type: node.data?.type ?? '',
       tech: node.data?.tech ?? '',
       label: node.data?.label ?? '',

@@ -55,6 +55,7 @@ const MIN_SIZE: Partial<Record<ShapeKey, { width: number; height: number }>> = {
   pill: { width: 130, height: 56 },
   queue: { width: 160, height: 62 },
   note: { width: 160, height: 70 },
+  text: { width: 60, height: 32 },
 }
 
 const MIN_DEFAULT = { width: 140, height: 60 }

@@ -105,16 +105,17 @@ const sizeFloor = computed(() => {
 })
 
 /**
- * A zone can only be a zone kind of thing (VPC, cluster) and a box can only be a
- * box kind of thing, so each is offered its own half of the catalogue.
+ * A zone can only become another kind of zone, a box another kind of box, and
+ * an annotation another kind of annotation — each kind gets its own slice of
+ * the catalogue rather than one list mixing "Database" in with "Text".
  */
 const typeGroups = computed(() => {
-  const zone = node.value?.type === 'zone'
+  const kind = node.value?.type ?? 'shape'
   return NODE_TYPE_GROUPS.map((group) => ({
     id: group.id,
     label: group.label,
     items: group.types
-      .filter((type) => (type.kind === 'zone') === zone)
+      .filter((type) => (type.kind ?? 'shape') === kind)
       .map((type) => ({
         id: type.id,
         label: type.label,
@@ -171,6 +172,7 @@ const SHAPE_LABELS: Record<string, string> = {
   diamond: 'Diamond',
   circle: 'Circle',
   note: 'Note',
+  text: 'Text',
 }
 
 /**
@@ -444,7 +446,7 @@ function setRouting(
           and only on the side they are on. Each side is counted on its own, and
           the points spread themselves evenly along it.
         -->
-        <section v-if="node.type !== 'zone'" class="space-y-2 border-b p-3">
+        <section v-if="node.type !== 'zone' && node.type !== 'annotation'" class="space-y-2 border-b p-3">
           <Label class="text-xs">Connection points</Label>
           <div class="grid grid-cols-2 gap-2">
             <div v-for="side in PORT_SIDES" :key="side" class="relative">

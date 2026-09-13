@@ -38,6 +38,7 @@ export const SHAPE_KEYS = [
   'diamond',
   'circle',
   'note',
+  'text',
 ] as const
 export type ShapeKey = (typeof SHAPE_KEYS)[number]
 
@@ -100,8 +101,15 @@ export type Metadata = Record<string, unknown>
 export interface DiagramNode {
   /** Stable identifier. Referenced by edges and by `parent`. */
   id: string
-  /** `shape` = a regular box, `zone` = a labelled container others can sit in. */
-  kind: 'shape' | 'zone'
+  /**
+   * `shape` = a regular box, `zone` = a labelled container others can sit in,
+   * `annotation` = a free-floating overlay — a text label and whatever joins
+   * it later. An annotation carries no connections and is never an obstacle:
+   * it draws on top of everything and a connection routes straight through it
+   * rather than detouring, which is the whole point of dropping one onto a
+   * diagram that already exists without rearranging it.
+   */
+  kind: 'shape' | 'zone' | 'annotation'
   /**
    * What this node *is*, as opposed to how it is drawn (`kind`) or what it is
    * called (`label`): `database`, `api_gateway`, `message_broker`… Ids come from

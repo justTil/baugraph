@@ -732,8 +732,9 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
   // Connections route around the nodes, so the same obstacle set the canvas
   // works from is handed over here — an export that re-drew a line straight
   // through a box would not match what was on screen. Zones are excluded: they
-  // are containers the connections legitimately run in and out of.
-  const solids = doc.nodes.filter((n) => n.kind !== 'zone')
+  // are containers the connections legitimately run in and out of. Annotations
+  // are excluded too: they are not part of the architecture, just drawn over it.
+  const solids = doc.nodes.filter((n) => n.kind !== 'zone' && n.kind !== 'annotation')
   const byId = new Map(doc.nodes.map((n) => [n.id, n]))
   for (const edge of doc.edges) {
     const source = boxes.get(edge.source)

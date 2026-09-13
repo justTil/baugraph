@@ -120,7 +120,12 @@ const fromHandle = computed(() =>
   connectFrom.value?.nodeId === props.id ? connectFrom.value.id : null,
 )
 
+/**
+ * An annotation is an overlay, not a participant in the graph — it carries no
+ * connection points of its own (see `DiagramNode.kind` in the model).
+ */
 const handles = computed(() => {
+  if (props.type === 'annotation') return []
   const ports = nodePorts(props.data.ports)
   return PORT_SIDES.flatMap((side) => {
     const count = ports[side]

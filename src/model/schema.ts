@@ -80,7 +80,7 @@ const portsSchema = z.object({
 
 export const nodeSchema = z.object({
   id: idSchema,
-  kind: z.enum(['shape', 'zone']).default(NODE_DEFAULTS.kind),
+  kind: z.enum(['shape', 'zone', 'annotation']).default(NODE_DEFAULTS.kind),
   type: catalogueIdSchema.default(NODE_DEFAULTS.type),
   tech: catalogueIdSchema.default(NODE_DEFAULTS.tech),
   label: z.string().default(''),

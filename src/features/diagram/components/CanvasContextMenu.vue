@@ -168,13 +168,17 @@ const mode = computed<'node' | 'edge' | 'selection' | 'pane'>(() => {
 
 const isZone = computed(() => node.value?.type === 'zone')
 
-/** A zone can only become another kind of zone, a box another kind of box. */
-const typeGroups = computed(() =>
-  NODE_TYPE_GROUPS.map((group) => ({
+/**
+ * A zone can only become another kind of zone, a box another kind of box, and
+ * an annotation another kind of annotation.
+ */
+const typeGroups = computed(() => {
+  const kind = node.value?.type ?? 'shape'
+  return NODE_TYPE_GROUPS.map((group) => ({
     ...group,
-    types: group.types.filter((type) => (type.kind === 'zone') === isZone.value),
-  })).filter((group) => group.types.length > 0),
-)
+    types: group.types.filter((type) => (type.kind ?? 'shape') === kind),
+  })).filter((group) => group.types.length > 0)
+})
 
 /** Palette groups split by what they add: node types, then technologies. */
 const paletteTypeGroups = computed(() => PALETTE.filter((group) => group.kind === 'types'))
@@ -199,6 +203,7 @@ const SHAPE_LABELS: Record<string, string> = {
   diamond: 'Diamond',
   circle: 'Circle',
   note: 'Note',
+  text: 'Text',
 }
 
 /** Shared by a node's border and a connection's line: one ramp, one wording. */

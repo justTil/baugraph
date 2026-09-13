@@ -126,6 +126,12 @@ export function shapeElements(shape: ShapeKey, w: number, h: number, stroke = 0)
       ]
     }
 
+    // A bare label: no fill, no outline, whatever colour or border is set on
+    // it — just the text a caller draws on top, the same way a textfield has
+    // no chrome of its own.
+    case 'text':
+      return []
+
     default:
       return [{ tag: 'path', role: 'body', attrs: { d: roundedRect(i, i, iw, ih, 8) } }]
   }
