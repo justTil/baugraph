@@ -349,10 +349,13 @@ function createDiagramStore(documentId: string) {
       // Deliberately no `extent: 'parent'`: dragging a node out of its zone is how
       // you ungroup it, and dragging one in is how you group it (see `regroup`).
       zIndex: zIndexFor(node.kind),
-      selectable: !locked,
-      draggable: !locked,
-      connectable: !locked,
-      focusable: !locked,
+      // `undefined` (not `true`) when unlocked: an explicit per-node value beats
+      // Vue Flow's pane-wide `nodesDraggable`/`elementsSelectable`/etc, which is
+      // how presentation mode locks the canvas — only a locked node forces `false`.
+      selectable: locked ? false : undefined,
+      draggable: locked ? false : undefined,
+      connectable: locked ? false : undefined,
+      focusable: locked ? false : undefined,
       data: {
         label: node.label,
         type: node.type ?? '',
@@ -1053,10 +1056,10 @@ function createDiagramStore(documentId: string) {
       target.has(n.id)
         ? {
             ...n,
-            selectable: !locked,
-            draggable: !locked,
-            connectable: !locked,
-            focusable: !locked,
+            selectable: locked ? false : undefined,
+            draggable: locked ? false : undefined,
+            connectable: locked ? false : undefined,
+            focusable: locked ? false : undefined,
             selected: locked ? false : (n as Partial<GraphNode>).selected,
             data: { ...(n.data as NodeData), locked },
           }
