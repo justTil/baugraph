@@ -158,8 +158,9 @@ async function copyAiSkills() {
     -->
     <Tooltip>
       <TooltipTrigger as-child>
-        <Button variant="ghost" size="icon" class="size-8" @click="openFlowEditor()">
+        <Button variant="ghost" size="sm" class="h-8" @click="openFlowEditor()">
           <Waypoints />
+          Message flows
         </Button>
       </TooltipTrigger>
       <TooltipContent>Message flows</TooltipContent>
@@ -171,9 +172,10 @@ async function copyAiSkills() {
     -->
     <Tooltip v-if="flows.length">
       <TooltipTrigger as-child>
-        <Button variant="ghost" size="icon" class="size-8" @click="paused = !paused">
+        <Button variant="ghost" size="sm" class="h-8" @click="paused = !paused">
           <Play v-if="paused" />
           <Pause v-else />
+          {{ paused ? 'Play flows' : 'Pause flows' }}
         </Button>
       </TooltipTrigger>
       <TooltipContent>{{ paused ? 'Play message flows' : 'Pause message flows' }}</TooltipContent>
@@ -193,6 +195,7 @@ async function copyAiSkills() {
           @update:model-value="togglePresentation()"
         >
           <Presentation />
+          Presentation
         </Toggle>
       </TooltipTrigger>
       <TooltipContent>Presentation mode (P) — full screen for screen-sharing</TooltipContent>
@@ -211,6 +214,7 @@ async function copyAiSkills() {
           @update:model-value="laserActive = Boolean($event)"
         >
           <Crosshair />
+          Laser pointer
         </Toggle>
       </TooltipTrigger>
       <TooltipContent>Laser pointer (L) — hold to draw</TooltipContent>
