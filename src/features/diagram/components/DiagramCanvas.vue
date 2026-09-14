@@ -1161,7 +1161,8 @@ watch(isVisible, (visible) => {
     >
       <div
         v-if="laserActive || presentationHint"
-        class="pointer-events-none absolute top-16 left-1/2 z-40 -translate-x-1/2"
+        class="pointer-events-none absolute left-1/2 z-40 -translate-x-1/2"
+        :class="presenting ? 'top-16' : 'top-4'"
       >
         <div
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
