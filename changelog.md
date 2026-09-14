@@ -15,6 +15,18 @@ All notable changes to this project will be documented in this file.
   canonical form, `*.baugraph.json` is bound to the published JSON Schema for
   editing the source by hand, and exports go through a save dialog. Built from
   this repository with `npm run extension:package`; see `docs/vscode.md`.
+- **Presentation mode.** Toggle it from the toolbar, press **P**, or hit **Esc**
+  to leave — the nav, header, toolbar and inspector all drop away and, where the
+  browser allows it, the page goes full screen too. The laser pointer stays one
+  switch away in a small floating control, since the toolbar it normally lives
+  in is hidden along with everything else. The canvas itself goes view-only for
+  as long as it's on: dragging, connecting, resizing, the right-click menu,
+  double-click rename and every editing shortcut are disabled, with a one-time
+  reminder shown at the top of the canvas — the same spot the laser pointer's
+  own hint uses — so a click that does nothing doesn't come as a surprise.
+- **A foldable inspector.** A new button in its header collapses the panel on
+  the right to a thin rail and back, freeing up room to work the canvas without
+  losing the panel entirely. The choice is remembered across reloads.
 
 ### Changed
 
