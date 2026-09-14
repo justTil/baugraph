@@ -785,6 +785,26 @@ watch(presenting, (on) => {
 onBeforeUnmount(() => clearTimeout(presentationHintTimer))
 
 /**
+ * The top-centre hint sits lower while presenting, to clear the laser/exit
+ * controls in the corner — but only for the few seconds a presenter needs to
+ * notice that box. Once it's been seen, the hint can sit at its normal height
+ * even if the laser pointer keeps it on screen for the rest of the talk.
+ */
+const PRESENTATION_SPACING_MS = 5000
+const presentationSpacious = ref(false)
+let presentationSpacingTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(presenting, (on) => {
+  clearTimeout(presentationSpacingTimer)
+  presentationSpacious.value = on
+  if (on) {
+    presentationSpacingTimer = setTimeout(() => (presentationSpacious.value = false), PRESENTATION_SPACING_MS)
+  }
+})
+
+onBeforeUnmount(() => clearTimeout(presentationSpacingTimer))
+
+/**
  * Re-fit whenever a document is loaded from disk or storage — but only once Vue
  * Flow has measured the nodes it was just handed, because fitting around boxes
  * of no known size lands on nothing. The timer is the way out for a document
@@ -1161,8 +1181,8 @@ watch(isVisible, (visible) => {
     >
       <div
         v-if="laserActive || presentationHint"
-        class="pointer-events-none absolute left-1/2 z-40 -translate-x-1/2"
-        :class="presenting ? 'top-16' : 'top-4'"
+        class="pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 transition-[top] duration-300"
+        :class="presenting && presentationSpacious ? 'top-16' : 'top-4'"
       >
         <div
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
