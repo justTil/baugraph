@@ -11,6 +11,8 @@ import {
   AlignVerticalDistributeCenter,
   Lock,
   LockOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Scaling,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -23,8 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { AlignAction } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useInspectorPanel } from '@/features/diagram/composables/useInspectorPanel'
 import ColorSwatches from '@/features/diagram/components/ColorSwatches.vue'
 import IconPicker from '@/features/diagram/components/IconPicker.vue'
 import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
@@ -76,6 +80,8 @@ const {
   alignSelection,
   sizeOf,
 } = useDiagram()
+
+const { collapsed } = useInspectorPanel()
 
 const node = computed(() =>
   selectedNodes.value.length === 1 && selectedEdges.value.length === 0
@@ -333,14 +339,40 @@ function setRouting(
 </script>
 
 <template>
-  <aside class="bg-sidebar flex w-72 shrink-0 flex-col border-l">
-    <header class="flex h-10 shrink-0 items-center border-b px-3">
-      <span class="text-muted-foreground text-[10px] font-bold tracking-[0.09em] uppercase">
+  <aside
+    class="bg-sidebar flex shrink-0 flex-col border-l transition-[width] duration-150"
+    :class="collapsed ? 'w-9' : 'w-72'"
+  >
+    <header
+      class="flex h-10 shrink-0 items-center border-b px-3"
+      :class="collapsed ? 'justify-center px-0' : ''"
+    >
+      <span
+        v-if="!collapsed"
+        class="text-muted-foreground text-[10px] font-bold tracking-[0.09em] uppercase"
+      >
         {{ title }}
       </span>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-6"
+            :class="{ 'ml-auto': !collapsed }"
+            @click="collapsed = !collapsed"
+          >
+            <PanelRightClose v-if="!collapsed" />
+            <PanelRightOpen v-else />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent :side="collapsed ? 'left' : 'bottom'">
+          {{ collapsed ? 'Expand inspector' : 'Collapse inspector' }}
+        </TooltipContent>
+      </Tooltip>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div v-show="!collapsed" class="min-h-0 flex-1 overflow-y-auto">
       <!-- ------------------------------------------------------------ node -->
       <template v-if="node">
         <section class="space-y-3 border-b p-3">
@@ -926,6 +958,8 @@ function setRouting(
             <dd>fit view to content</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">L</kbd></dt>
             <dd>laser pointer for presenting</dd>
+            <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">P</kbd></dt>
+            <dd>presentation mode</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⇧⌘F</kbd></dt>
             <dd>size nodes to their text</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘G</kbd></dt>

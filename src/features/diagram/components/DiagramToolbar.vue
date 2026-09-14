@@ -11,6 +11,7 @@ import {
   Pause,
   Pencil,
   Play,
+  Presentation,
   Redo2,
   Sun,
   Undo2,
@@ -29,6 +30,7 @@ import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 import { AI_SKILLS_MARKDOWN } from '@/features/diagram/data/ai-skills.generated'
 
 const emit = defineEmits<{
@@ -50,6 +52,7 @@ const saveHint = computed(() => {
 })
 const { paused, openFlowEditor } = useFlows()
 const { active: laserActive } = useLaserPointer()
+const { presenting, toggle: togglePresentation } = usePresentation()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
 
 const zoomLabel = computed(() => `${Math.round(viewport.value.zoom * 100)}%`)
@@ -174,6 +177,25 @@ async function copyAiSkills() {
         </Button>
       </TooltipTrigger>
       <TooltipContent>{{ paused ? 'Play message flows' : 'Pause message flows' }}</TooltipContent>
+    </Tooltip>
+
+    <!--
+      Clears the nav, header and inspector off screen and, where the browser
+      allows it, claims the whole screen — for sharing just the diagram in a
+      call rather than the app around it.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="presenting"
+          aria-label="Presentation mode"
+          @update:model-value="togglePresentation()"
+        >
+          <Presentation />
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>Presentation mode (P) — full screen for screen-sharing</TooltipContent>
     </Tooltip>
 
     <!--

@@ -16,6 +16,7 @@ import PalettePanel from '@/features/diagram/components/PalettePanel.vue'
 import ExportDialog from '@/features/diagram/components/ExportDialog.vue'
 import FlowsDialog from '@/features/diagram/components/FlowsDialog.vue'
 import HelpDialog from '@/features/diagram/components/HelpDialog.vue'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 import { VSCODE_DOCUMENT_ID, post, useVscodeDocument } from '@/vscode/bridge'
 
 /**
@@ -30,6 +31,7 @@ import { VSCODE_DOCUMENT_ID, post, useVscodeDocument } from '@/vscode/bridge'
 provide(DOCUMENT_ID, VSCODE_DOCUMENT_ID)
 
 const { store, ready, editable, dark, fileName, parseError, save } = useVscodeDocument()
+const { presenting } = usePresentation()
 
 const exportOpen = ref(false)
 const helpOpen = ref(false)
@@ -60,26 +62,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <SidebarProvider class="h-screen min-h-0">
-    <Sidebar collapsible="icon">
+    <Sidebar v-if="!presenting" collapsible="icon">
       <SidebarContent>
         <PalettePanel />
       </SidebarContent>
     </Sidebar>
 
     <div class="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
-      <header class="flex h-10 shrink-0 items-center gap-1 border-b px-2">
-        <SidebarTrigger class="size-7" />
-        <span class="text-muted-foreground truncate font-mono text-xs">
-          {{ fileName }}
-          <span v-if="store.dirty.value" aria-hidden="true">•</span>
-        </span>
-        <div :id="HEADER_ACTIONS_SLOT_ID" class="ml-auto flex items-center gap-1" />
-      </header>
+      <!--
+        Presentation mode drops the webview's own chrome too, the same as the
+        nav and header it stands in for on the web — just the canvas is left
+        to share.
+      -->
+      <template v-if="!presenting">
+        <header class="flex h-10 shrink-0 items-center gap-1 border-b px-2">
+          <SidebarTrigger class="size-7" />
+          <span class="text-muted-foreground truncate font-mono text-xs">
+            {{ fileName }}
+            <span v-if="store.dirty.value" aria-hidden="true">•</span>
+          </span>
+          <div :id="HEADER_ACTIONS_SLOT_ID" class="ml-auto flex items-center gap-1" />
+        </header>
 
-      <div
-        :id="HEADER_SLOT_ID"
-        class="flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1"
-      />
+        <div
+          :id="HEADER_SLOT_ID"
+          class="flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1"
+        />
+      </template>
+      <!--
+        Both slot targets stay in the DOM — hidden rather than removed — since
+        the toolbar's own Teleport below reaches for them regardless of
+        whether this view is presenting.
+      -->
+      <div v-else class="hidden">
+        <div :id="HEADER_ACTIONS_SLOT_ID" />
+        <div :id="HEADER_SLOT_ID" />
+      </div>
 
       <!--
         Only once the file has been read: the canvas would otherwise mount on a
@@ -88,7 +106,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       -->
       <main v-if="ready && !parseError" class="flex min-h-0 flex-1">
         <DiagramCanvas @export="exportOpen = true" />
-        <InspectorPanel @export="exportOpen = true" />
+        <InspectorPanel v-if="!presenting" @export="exportOpen = true" />
       </main>
 
       <!--

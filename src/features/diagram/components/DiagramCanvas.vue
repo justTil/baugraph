@@ -14,12 +14,21 @@ import type {
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { AlignCenterHorizontal, AlignCenterVertical, Check, Scaling, Waypoints } from '@lucide/vue'
+import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  Check,
+  Crosshair,
+  Minimize2,
+  Scaling,
+  Waypoints,
+} from '@lucide/vue'
 import type { ColorKey, DiagramParseError } from '@/model'
 import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Toggle } from '@/components/ui/toggle'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
@@ -27,6 +36,7 @@ import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
 import { usePanel } from '@/features/workspace/composables/usePanel'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { useSavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
@@ -100,6 +110,7 @@ const { place, placeAtScreen } = usePlacement()
 const { to: connectTo } = useConnectionTarget()
 const { installFlowRuntime, stopFlowRuntime } = useFlows()
 const { active: laserActive } = useLaserPointer()
+const { presenting, exit: exitPresentation, toggle: togglePresentation } = usePresentation()
 
 /** The wrapper the laser pointer tracks the cursor against. */
 const canvasHost = ref<HTMLElement | null>(null)
@@ -609,10 +620,18 @@ function onKeyDown(event: KeyboardEvent) {
       // mid-talk rather than mid-edit.
       laserActive.value = !laserActive.value
       break
+    case 'p':
+    case 'P':
+      // Presentation mode, same reasoning as the laser pointer above.
+      void togglePresentation()
+      break
     case 'Escape':
       if (laserActive.value) {
         event.preventDefault()
         laserActive.value = false
+      } else if (presenting.value) {
+        event.preventDefault()
+        void exitPresentation()
       }
       break
     case 'Enter': {
@@ -966,7 +985,7 @@ watch(isVisible, (visible) => {
     </div>
 
     <!-- Always on top, so there is a way back from JSON however it was reached. -->
-    <div class="absolute top-4 right-4 z-40 flex items-center gap-2">
+    <div v-if="!presenting" class="absolute top-4 right-4 z-40 flex items-center gap-2">
       <!--
         Only up while two or more bend points are selected — aligning one
         point against itself means nothing. Sits beside the JSON switch
@@ -1011,6 +1030,40 @@ watch(isVisible, (visible) => {
           JSON
         </span>
       </label>
+    </div>
+
+    <!--
+      Presentation mode replaces the editing chrome above with just enough to
+      run a call: the toolbar it normally lives in is hidden along with the
+      rest of the app chrome, so the laser pointer needs a switch here too,
+      and there has to be a pointer-driven way back out.
+    -->
+    <div
+      v-else
+      class="absolute top-4 right-4 z-40 flex items-center gap-1 rounded-lg border p-1 shadow-sm"
+      :style="{ background: theme.surface, borderColor: theme.line }"
+    >
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Toggle
+            size="sm"
+            :model-value="laserActive"
+            aria-label="Laser pointer"
+            @update:model-value="laserActive = Boolean($event)"
+          >
+            <Crosshair :size="15" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent>Laser pointer (L)</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button variant="ghost" size="icon" class="size-7" @click="exitPresentation()">
+            <Minimize2 :size="15" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Exit presentation (Esc)</TooltipContent>
+      </Tooltip>
     </div>
 
     <!-- The presentation laser pointer: a cursor-following glow, on top of everything. -->
