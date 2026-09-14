@@ -1161,7 +1161,7 @@ watch(isVisible, (visible) => {
     >
       <div
         v-if="laserActive || presentationHint"
-        class="pointer-events-none absolute top-4 left-1/2 z-40 -translate-x-1/2"
+        class="pointer-events-none absolute top-16 left-1/2 z-40 -translate-x-1/2"
       >
         <div
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
@@ -1181,6 +1181,15 @@ watch(isVisible, (visible) => {
         </div>
       </div>
     </Transition>
+
+    <!-- Bottom-centre, for as long as presenting is on — unlike the top hint, this doesn't fade. -->
+    <p
+      v-if="presenting"
+      class="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2 text-xs font-medium"
+      :style="{ color: theme.ink, opacity: 0.6 }"
+    >
+      In presentation mode
+    </p>
     </div>
 
     <CanvasContextMenu
