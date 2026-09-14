@@ -20,6 +20,7 @@ import {
   Check,
   Crosshair,
   Minimize2,
+  Presentation,
   Scaling,
   Waypoints,
 } from '@lucide/vue'
@@ -199,6 +200,19 @@ function setViewMode(next: string | undefined) {
   viewMode.value = next as 'diagram' | 'json'
 }
 
+/**
+ * Presenting always shows the canvas, never raw JSON text sitting in an
+ * editable Monaco instance — the switch back to it is hidden along with the
+ * rest of the editing chrome, so this is what actually gets there. A valid
+ * edit is flushed in first; an invalid one is simply left behind rather than
+ * kept open and editable behind the presenter's back.
+ */
+watch(presenting, (on) => {
+  if (!on || viewMode.value !== 'json') return
+  setViewMode('diagram')
+  viewMode.value = 'diagram'
+})
+
 /** Minimap swatches echo each node's own colour instead of a flat grey. */
 function minimapNodeColor(node: { data?: { color?: ColorKey }; type?: string }) {
   const paint = nodePaint(
@@ -247,6 +261,7 @@ const connectionLineStyle = computed(() =>
  * behind, which made every mis-aimed connection something to undo.
  */
 function onConnect(connection: Connection) {
+  if (presenting.value) return
   commit()
   endCoalesce()
   const from = endpointOf(connection.sourceHandle)
@@ -262,12 +277,14 @@ function onConnect(connection: Connection) {
 /* ------------------------------------------------------- palette drag/drop */
 
 function onDragOver(event: DragEvent) {
+  if (presenting.value) return
   if (!event.dataTransfer?.types.includes(PALETTE_DRAG_TYPE)) return
   event.preventDefault()
   event.dataTransfer.dropEffect = 'copy'
 }
 
 function onDrop(event: DragEvent) {
+  if (presenting.value) return
   const payload = event.dataTransfer?.getData(PALETTE_DRAG_TYPE)
   if (!payload) return
   event.preventDefault()
@@ -291,12 +308,20 @@ const menuOpen = ref(false)
 /** Screen point of the last right-click; anchors the edge label editor. */
 const menuPoint = ref({ x: 0, y: 0 })
 
+/** The menu is forced shut by `:open` while presenting; this keeps it from also moving the selection. */
+function onMenuOpenChange(open: boolean) {
+  if (presenting.value) return
+  menuOpen.value = open
+}
+
 function onContextMenuCapture(event: MouseEvent) {
+  if (presenting.value) return
   menuTarget.value = null
   menuPoint.value = { x: event.clientX, y: event.clientY }
 }
 
 function onNodeContextMenu({ node }: NodeMouseEvent) {
+  if (presenting.value) return
   menuTarget.value = { kind: 'node', id: node.id }
   // Right-clicking outside the current selection moves the selection there, so
   // the menu always acts on what the user is pointing at.
@@ -307,6 +332,7 @@ function onNodeContextMenu({ node }: NodeMouseEvent) {
 }
 
 function onEdgeContextMenu({ edge }: EdgeMouseEvent) {
+  if (presenting.value) return
   menuTarget.value = { kind: 'edge', id: edge.id }
   if (!edge.selected) {
     removeSelectedElements()
@@ -315,10 +341,12 @@ function onEdgeContextMenu({ edge }: EdgeMouseEvent) {
 }
 
 function onSelectionContextMenu() {
+  if (presenting.value) return
   menuTarget.value = { kind: 'selection' }
 }
 
 function onPaneContextMenu(event: MouseEvent) {
+  if (presenting.value) return
   menuTarget.value = {
     kind: 'pane',
     at: screenToFlowCoordinate({ x: event.clientX, y: event.clientY }),
@@ -422,10 +450,12 @@ function commitEditor(save: boolean) {
 }
 
 function onNodeDoubleClick({ node }: NodeMouseEvent) {
+  if (presenting.value) return
   openEditor(node.id)
 }
 
 function onPaneDoubleClick(event: MouseEvent) {
+  if (presenting.value) return
   place(lastItem.value, screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
 }
 
@@ -548,6 +578,29 @@ function isTyping(target: EventTarget | null): boolean {
 function onKeyDown(event: KeyboardEvent) {
   // The context menu handles its own keys; ⌫ while it is open must not delete.
   if (!isActive.value || menuOpen.value || isTyping(event.target)) return
+
+  // Presenting takes every editing shortcut off the table — only the keys
+  // that drive the presentation itself (and, unusually, still work with the
+  // rest of the canvas locked down) do anything below.
+  if (presenting.value) {
+    switch (event.key) {
+      case 'l':
+      case 'L':
+        laserActive.value = !laserActive.value
+        break
+      case 'p':
+      case 'P':
+        void togglePresentation()
+        break
+      case 'Escape':
+        event.preventDefault()
+        if (laserActive.value) laserActive.value = false
+        else void exitPresentation()
+        break
+    }
+    return
+  }
+
   const meta = event.metaKey || event.ctrlKey
 
   if (meta) {
@@ -712,6 +765,26 @@ watch(savedNotice, (notice) => {
 onBeforeUnmount(() => clearTimeout(savedTimer))
 
 /**
+ * A one-time reminder, shown for a few seconds when presentation mode starts,
+ * that nothing on the canvas answers the pointer or the keyboard any more —
+ * otherwise the first thing a presenter learns about it is a click that does
+ * nothing. Read once and gone, the same as the laser pointer's own hint,
+ * which takes over the same spot the moment it has something more useful to
+ * say.
+ */
+const PRESENTATION_HINT_MS = 4000
+const presentationHint = ref(false)
+let presentationHintTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(presenting, (on) => {
+  clearTimeout(presentationHintTimer)
+  presentationHint.value = on
+  if (on) presentationHintTimer = setTimeout(() => (presentationHint.value = false), PRESENTATION_HINT_MS)
+})
+
+onBeforeUnmount(() => clearTimeout(presentationHintTimer))
+
+/**
  * Re-fit whenever a document is loaded from disk or storage — but only once Vue
  * Flow has measured the nodes it was just handed, because fitting around boxes
  * of no known size lands on nothing. The timer is the way out for a document
@@ -739,7 +812,9 @@ watch(isVisible, (visible) => {
 </script>
 
 <template>
-  <ContextMenu @update:open="menuOpen = $event">
+  <!-- Controlled rather than left to open itself: presenting forces it shut,
+       since right-clicking is otherwise still one edit away from the canvas. -->
+  <ContextMenu :open="presenting ? false : menuOpen" @update:open="onMenuOpenChange">
     <div
       ref="canvasHost"
       class="relative min-h-0 flex-1"
@@ -784,6 +859,10 @@ watch(isVisible, (visible) => {
           :elevate-nodes-on-select="false"
           :connection-line-style="connectionLineStyle"
           :default-edge-options="{ type: 'diagram' }"
+          :nodes-draggable="!presenting"
+          :nodes-connectable="!presenting"
+          :edges-updatable="!presenting"
+          :elements-selectable="!presenting"
           @connect="onConnect"
           @node-drag-start="onNodeDragStart"
           @node-drag="alignDrag"
@@ -1069,7 +1148,11 @@ watch(isVisible, (visible) => {
     <!-- The presentation laser pointer: a cursor-following glow, on top of everything. -->
     <LaserPointer :host="canvasHost" />
 
-    <!-- Top-centre hint while the laser pointer is on. -->
+    <!--
+      Top-centre hint: the laser pointer's own, while it is on, otherwise the
+      one-time reminder that presenting has locked the canvas. The laser wins
+      when both are true, since it is the more useful thing to say.
+    -->
     <Transition
       enter-active-class="transition duration-150 ease-out"
       enter-from-class="-translate-y-1 opacity-0"
@@ -1077,17 +1160,24 @@ watch(isVisible, (visible) => {
       leave-to-class="-translate-y-1 opacity-0"
     >
       <div
-        v-if="laserActive"
+        v-if="laserActive || presentationHint"
         class="pointer-events-none absolute top-4 left-1/2 z-40 -translate-x-1/2"
       >
         <div
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
           :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
         >
-          <span class="size-2 rounded-full bg-[#ff2d2d] shadow-[0_0_6px_#ff2d2d]" />
-          Laser pointer on — hold to draw, press
-          <kbd class="rounded border px-1 font-sans text-[11px]">L</kbd> or
-          <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
+          <template v-if="laserActive">
+            <span class="size-2 rounded-full bg-[#ff2d2d] shadow-[0_0_6px_#ff2d2d]" />
+            Laser pointer on — hold to draw, press
+            <kbd class="rounded border px-1 font-sans text-[11px]">L</kbd> or
+            <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
+          </template>
+          <template v-else>
+            <Presentation :size="13" />
+            Presentation mode — editing is disabled. Press
+            <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
+          </template>
         </div>
       </div>
     </Transition>

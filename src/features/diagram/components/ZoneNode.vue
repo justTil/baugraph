@@ -12,17 +12,20 @@ import { roundedRect } from '@/features/diagram/lib/shapes'
 import { fitZoneMinSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 
 const props = defineProps<NodeProps<NodeData>>()
 
 const { canvas, commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
 const { findNode, getNodes } = useCanvas()
+const { presenting } = usePresentation()
 
 /**
  * Locking a zone is the usual way to work inside one: the frame stops answering
  * the pointer entirely, so the header can no longer be grabbed by accident.
  */
 function unlock() {
+  if (presenting.value) return
   commit()
   endCoalesce()
   setNodesLocked([props.id], false)
