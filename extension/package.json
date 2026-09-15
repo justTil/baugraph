@@ -62,6 +62,11 @@
         "command": "baugraph.normalize",
         "title": "Sort and Normalise Diagram File",
         "category": "Baugraph"
+      },
+      {
+        "command": "baugraph.setTheme",
+        "title": "Diagram Theme…",
+        "category": "Baugraph"
       }
     ],
     "menus": {
@@ -109,7 +114,23 @@
         "fileMatch": "*.baugraph.json",
         "url": "./schema/baugraph-v1.schema.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Baugraph",
+      "properties": {
+        "baugraph.theme": {
+          "type": "string",
+          "enum": ["system", "light", "dark"],
+          "enumDescriptions": [
+            "Match VS Code's own colour theme",
+            "Always light",
+            "Always dark"
+          ],
+          "default": "system",
+          "description": "Colour theme for the diagram canvas, also reachable from the canvas toolbar."
+        }
+      }
+    }
   },
   "scripts": {
     "build": "node build.mjs --production",

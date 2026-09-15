@@ -38,8 +38,8 @@ const helpOpen = ref(false)
 /** The toolbar teleports into the header, which has to exist before it mounts. */
 const mounted = ref(false)
 
-// The chrome follows VS Code's theme; the canvas follows the document's own
-// `canvas.theme`, which is the author's decision and travels with the file.
+// The chrome's own styling isn't reached by `useAppTheme` (see `main.ts`),
+// which only drives the shared component tree, so it still needs this.
 watch(dark, (on) => document.documentElement.classList.toggle('dark', on), { immediate: true })
 
 /**

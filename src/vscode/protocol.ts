@@ -13,6 +13,9 @@
  *     can never disagree about what a `.baugraph.json` file looks like.
  */
 
+/** How the colour theme is chosen: VS Code's own, or an explicit override. */
+export type ThemePreference = 'system' | 'light' | 'dark'
+
 /** Sent by the webview to the extension host. */
 export type WebviewMessage =
   /** First thing the webview says; the host answers with `init`. */
@@ -21,6 +24,8 @@ export type WebviewMessage =
   | { type: 'edit'; text: string }
   /** Write the document to disk (the editor's own save button / key). */
   | { type: 'save' }
+  /** The toolbar's theme toggle, saved as a `baugraph.theme` setting. */
+  | { type: 'setTheme'; preference: ThemePreference }
   /**
    * An export the webview produced. A webview cannot put a file on disk — it
    * cannot even start a download — so the bytes come out here and the host

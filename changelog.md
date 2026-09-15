@@ -36,10 +36,14 @@ All notable changes to this project will be documented in this file.
 - **One dark mode setting for the whole app.** The moon icon in the toolbar
   (also in the canvas's right-click menu and a new **Appearance** card in
   Settings) now switches the sidebar, header, canvas and JSON view together.
-  It's a single preference stored in the browser, not one saved per diagram,
-  so it stays the same wherever you look instead of changing when you switch
-  tabs. Exports (SVG/PNG/GIF) pick up the same setting, so a downloaded image
-  matches what was on screen.
+  In the browser it's a single preference stored on the device, defaulting to
+  light, so it stays the same wherever you look instead of changing when you
+  switch tabs. Exports (SVG/PNG/GIF) pick up the same setting, so a downloaded
+  image matches what was on screen.
+- **The VS Code extension follows VS Code's own colour theme by default.**
+  The same toggle there sets an explicit light or dark instead, saved as the
+  `baugraph.theme` setting (Settings UI, settings.json, or the **Baugraph:
+  Diagram Theme…** command, which is also the way back to "match VS Code").
 
 ### Changed
 

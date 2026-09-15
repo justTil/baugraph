@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import { blankDocument, parse, slugify, stringify } from '@/model'
-import type { HostMessage, WebviewMessage } from '@/vscode/protocol'
+import type { HostMessage, ThemePreference, WebviewMessage } from '@/vscode/protocol'
 
 /**
  * Baugraph for VS Code.
@@ -99,8 +99,13 @@ class BaugraphEditorProvider implements vscode.CustomTextEditorProvider {
       vscode.workspace.onDidSaveTextDocument((saved) => {
         if (saved.uri.toString() === document.uri.toString()) post(state())
       }),
-      vscode.window.onDidChangeActiveColorTheme((theme) => {
-        post({ type: 'theme', dark: isDark(theme) })
+      vscode.window.onDidChangeActiveColorTheme(() => {
+        // Irrelevant to a webview that has picked its own light/dark rather
+        // than following VS Code's — nothing changed for it.
+        if (themePreference() === 'system') post({ type: 'theme', dark: resolveDark() })
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration('baugraph.theme')) post({ type: 'theme', dark: resolveDark() })
       }),
       webview.onDidReceiveMessage((message: WebviewMessage) => {
         queue = queue
@@ -128,8 +133,14 @@ class BaugraphEditorProvider implements vscode.CustomTextEditorProvider {
           fileName: name(document.uri),
           editable: isWritable(document),
           dirty: document.isDirty,
-          dark: isDark(vscode.window.activeColorTheme),
+          dark: resolveDark(),
         })
+        return
+
+      case 'setTheme':
+        await vscode.workspace
+          .getConfiguration('baugraph')
+          .update('theme', message.preference, vscode.ConfigurationTarget.Global)
         return
 
       case 'edit':
@@ -316,7 +327,32 @@ function commands(): vscode.Disposable[] {
       if (!target) return
       await normalize(target)
     }),
+
+    vscode.commands.registerCommand('baugraph.setTheme', () => setThemeCommand()),
   ]
+}
+
+/** The toolbar's toggle only ever picks light or dark; this is the way back to "system". */
+async function setThemeCommand(): Promise<void> {
+  const current = themePreference()
+  const pick = await vscode.window.showQuickPick(
+    (
+      [
+        { preference: 'system', label: "Follow VS Code's colour theme" },
+        { preference: 'light', label: 'Light' },
+        { preference: 'dark', label: 'Dark' },
+      ] satisfies { preference: ThemePreference; label: string }[]
+    ).map(({ preference, label }) => ({
+      label,
+      description: preference === current ? 'Current' : undefined,
+      preference,
+    })),
+    { title: 'Baugraph: Diagram Theme' },
+  )
+  if (!pick) return
+  await vscode.workspace
+    .getConfiguration('baugraph')
+    .update('theme', pick.preference, vscode.ConfigurationTarget.Global)
 }
 
 /** Creates a diagram file, then opens it on the canvas. */
@@ -435,6 +471,21 @@ const name = (uri: vscode.Uri) => uri.path.split('/').pop() ?? uri.toString()
 
 const isDark = (theme: vscode.ColorTheme) =>
   theme.kind === vscode.ColorThemeKind.Dark || theme.kind === vscode.ColorThemeKind.HighContrast
+
+/**
+ * The `baugraph.theme` setting: VS Code's own colour theme by default, or an
+ * explicit override the user picked from the toolbar / `Baugraph: Set Theme`.
+ * A plain setting rather than `globalState`, so it shows up in Settings UI,
+ * settings.json and syncs the way every other VS Code preference does.
+ */
+const themePreference = (): ThemePreference =>
+  vscode.workspace.getConfiguration('baugraph').get<ThemePreference>('theme', 'system')
+
+const resolveDark = (): boolean => {
+  const preference = themePreference()
+  if (preference === 'system') return isDark(vscode.window.activeColorTheme)
+  return preference === 'dark'
+}
 
 /** False for a diff's left-hand side, or a file system opened read-only. */
 const isWritable = (document: vscode.TextDocument) =>

@@ -12,8 +12,19 @@ import '@/vscode/vscode.css'
 import { createApp } from 'vue'
 import { setDownloadHandler } from '@/features/diagram/lib/export'
 import { setFileHost } from '@/features/diagram/composables/useDocumentFile'
+import { setThemeSource } from '@/composables/useAppTheme'
 import VscodeEditor from '@/vscode/VscodeEditor.vue'
-import { VSCODE_DOCUMENT_ID, fileName, save, sendDownload } from '@/vscode/bridge'
+import { VSCODE_DOCUMENT_ID, dark, fileName, save, sendDownload, setThemePreference } from '@/vscode/bridge'
+
+/**
+ * The canvas, chrome and JSON view all read `useAppTheme()`; inside VS Code
+ * that has to mean the editor's own colour theme rather than the browser
+ * preference the web app defaults to (see `useAppTheme`'s `ThemeSource`).
+ */
+setThemeSource({
+  dark,
+  setDark: (value) => setThemePreference(value ? 'dark' : 'light'),
+})
 
 /**
  * Saving is VS Code's. The editor still calls `saveDocument` and it still means

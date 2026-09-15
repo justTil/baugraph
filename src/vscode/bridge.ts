@@ -21,7 +21,7 @@ import { nextTick, ref, watch } from 'vue'
 import type { DiagramDocument } from '@/model'
 import { DiagramParseError, blankDocument, safeParse, stringify } from '@/model'
 import { diagramStore } from '@/features/diagram/composables/useDiagram'
-import type { HostMessage, WebviewMessage } from '@/vscode/protocol'
+import type { HostMessage, ThemePreference, WebviewMessage } from '@/vscode/protocol'
 
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void
@@ -52,7 +52,10 @@ const EDIT_DEBOUNCE_MS = 200
 export const ready = ref(false)
 /** False for a diff view, or a file the workspace will not let us write. */
 export const editable = ref(true)
-/** VS Code's colour theme, which the chrome follows. */
+/**
+ * Whether the editor is dark right now — VS Code's own colour theme, unless
+ * the user has picked an explicit override (see `setThemePreference`).
+ */
 export const dark = ref(false)
 /** The file this editor is open on, as VS Code names it. */
 export const fileName = ref<string | null>(null)
@@ -131,6 +134,14 @@ function schedule() {
 export function save() {
   flush()
   post({ type: 'save' })
+}
+
+/**
+ * Overrides the colour theme, or hands it back to VS Code's own — saved as
+ * the `baugraph.theme` setting, so it's remembered next time this file opens.
+ */
+export function setThemePreference(preference: ThemePreference) {
+  post({ type: 'setTheme', preference })
 }
 
 function onMessage(event: MessageEvent<HostMessage>) {
