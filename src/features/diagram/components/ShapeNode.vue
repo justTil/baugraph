@@ -12,13 +12,15 @@ import { CENTERED_SHAPES, contentInset, shapeElements } from '@/features/diagram
 import { fitNodeSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
 
 const props = defineProps<NodeProps<NodeData>>()
 
-const { canvas, commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
+const { commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
+const { mode: appThemeMode } = useAppTheme()
 const { connecting, from: connectFrom, to: connectTo } = useConnectionTarget()
 const { presenting } = usePresentation()
 
@@ -42,7 +44,7 @@ function onResizeEnd() {
 const width = computed(() => props.dimensions.width || DEFAULT_NODE_SIZE.width)
 const height = computed(() => props.dimensions.height || DEFAULT_NODE_SIZE.height)
 
-const theme = computed(() => diagramTheme(canvas.theme))
+const theme = computed(() => diagramTheme(appThemeMode.value))
 const paint = computed(() =>
   nodePaint({ color: props.data.color, kind: 'shape', border: props.data.border }, theme.value),
 )

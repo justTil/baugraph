@@ -33,6 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import { Toggle } from '@/components/ui/toggle'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { isStartupSample } from '@/features/diagram/composables/useEditorTabs'
 import { useFlows } from '@/features/diagram/composables/useFlows'
@@ -131,7 +132,8 @@ const { isActive, isVisible } = usePanel()
 const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode), annotation: markRaw(ShapeNode) }
 const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
-const theme = computed(() => diagramTheme(canvas.theme))
+const { mode: appThemeMode } = useAppTheme()
+const theme = computed(() => diagramTheme(appThemeMode.value))
 
 /** Live label/size of whichever node is being resized, for the canvas's own indicator. */
 const resizingNode = computed(() => {

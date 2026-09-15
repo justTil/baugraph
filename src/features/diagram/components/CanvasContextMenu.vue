@@ -81,6 +81,7 @@ import { NODE_TYPE_GROUPS } from '@/features/diagram/data/node-types'
 import { techCategoriesWithCustom } from '@/features/diagram/data/tech'
 import { COLOR_HEX, COLOR_SWATCHES, diagramTheme } from '@/features/diagram/lib/theme'
 import { exportJson } from '@/features/diagram/lib/export'
+import { useAppTheme } from '@/composables/useAppTheme'
 import {
   ARROW_MODES,
   BORDER_WIDTHS,
@@ -245,7 +246,8 @@ const ALIGNMENTS: { action: AlignAction; icon: unknown; label: string }[] = [
   { action: 'match-height', icon: StretchVertical, label: 'Match height' },
 ]
 
-const defaultEdgeHex = computed(() => diagramTheme(canvas.theme).edge)
+const { dark: appDark, mode: appThemeMode } = useAppTheme()
+const defaultEdgeHex = computed(() => diagramTheme(appThemeMode.value).edge)
 
 /** Colour applied to every selected node, so the swatch works on a selection too. */
 function paintNodes(color: string) {
@@ -968,11 +970,11 @@ function copySelectionIds() {
         Snap to grid
       </ContextMenuCheckboxItem>
       <ContextMenuCheckboxItem
-        :model-value="canvas.theme === 'dark'"
-        @update:model-value="canvas.theme = $event === true ? 'dark' : 'light'"
+        :model-value="appDark"
+        @update:model-value="appDark = $event === true"
       >
         <Moon />
-        Dark canvas
+        Dark mode
       </ContextMenuCheckboxItem>
 
       <ContextMenuCheckboxItem

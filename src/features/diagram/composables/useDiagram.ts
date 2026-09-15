@@ -1620,7 +1620,7 @@ function createDiagramStore(documentId: string) {
     watch([nodes, edges, flows, meta, canvas], persist, { deep: true })
     // The canvas settings and the flows are ours alone — nothing but an edit
     // moves them — so they can be watched directly for what `commit` misses:
-    // the toolbar's theme and grid toggles.
+    // the toolbar's grid/snap toggles.
     watch([flows, meta, canvas], () => (dirty.value = true), { deep: true })
     // A bend point's selection outlives the edge it came from only by accident
     // — deleting a connection, undoing its creation, or clearing its last

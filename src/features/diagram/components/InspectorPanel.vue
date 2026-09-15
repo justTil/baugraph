@@ -47,15 +47,17 @@ import {
 } from '@/features/diagram/data/tech'
 import { diagramTheme } from '@/features/diagram/lib/theme'
 import { fitZoneMinSize } from '@/features/diagram/lib/auto-size'
+import { useAppTheme } from '@/composables/useAppTheme'
 
 const emit = defineEmits<{
   (e: 'export'): void
 }>()
 
+const { mode: appThemeMode } = useAppTheme()
+
 const {
   nodes,
   edges,
-  canvas,
   selectedNodes,
   selectedEdges,
   lockedCount,
@@ -256,7 +258,7 @@ const stats = computed(() => ({
   edges: edges.value.length,
 }))
 
-const defaultEdgeHex = computed(() => diagramTheme(canvas.theme).edge)
+const defaultEdgeHex = computed(() => diagramTheme(appThemeMode.value).edge)
 
 /** Text fields coalesce into one undo step per focus, not one per keystroke. */
 function editText(id: string, field: 'label' | 'sublabel', value: string) {

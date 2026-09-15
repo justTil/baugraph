@@ -16,12 +16,12 @@ import {
   nearestSegmentIndex,
 } from '@/features/diagram/lib/edge-path'
 import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
 const {
-  canvas,
   flows,
   reconnectEdge,
   reconnectingEdge,
@@ -36,8 +36,9 @@ const {
 } = useDiagram()
 const { getNodes, screenToFlowCoordinate, findEdge } = useVueFlow()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
+const { mode: appThemeMode } = useAppTheme()
 
-const theme = computed(() => diagramTheme(canvas.theme))
+const theme = computed(() => diagramTheme(appThemeMode.value))
 
 /** Absolute box of a node, including any parent offset Vue Flow has applied. */
 const boxOf = (node: EdgeProps['sourceNode']) => ({

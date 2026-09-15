@@ -12,13 +12,15 @@ import { roundedRect } from '@/features/diagram/lib/shapes'
 import { fitZoneMinSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
 
 const props = defineProps<NodeProps<NodeData>>()
 
-const { canvas, commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
+const { commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
 const { findNode, getNodes } = useCanvas()
 const { presenting } = usePresentation()
+const { mode: appThemeMode } = useAppTheme()
 
 /**
  * Locking a zone is the usual way to work inside one: the frame stops answering
@@ -34,7 +36,7 @@ function unlock() {
 const width = computed(() => props.dimensions.width || DEFAULT_ZONE_SIZE.width)
 const height = computed(() => props.dimensions.height || DEFAULT_ZONE_SIZE.height)
 
-const theme = computed(() => diagramTheme(canvas.theme))
+const theme = computed(() => diagramTheme(appThemeMode.value))
 const paint = computed(() =>
   nodePaint({ color: props.data.color, kind: 'zone', border: props.data.border }, theme.value),
 )

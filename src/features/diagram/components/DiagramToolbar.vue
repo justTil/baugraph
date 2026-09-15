@@ -25,6 +25,7 @@ import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { HEADER_ACTIONS_SLOT_SELECTOR } from '@/components/layout/header-slot'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
@@ -39,6 +40,7 @@ const emit = defineEmits<{
 
 const { documentId, meta, canvas, flows, canUndo, canRedo, dirty, undo, redo, commit, endCoalesce } =
   useDiagram()
+const { dark: appDark } = useAppTheme()
 const { canOverwriteFiles, fileName } = useDocumentFile(documentId)
 
 /** What ⌘S will do, so the button can say it before it is pressed. */
@@ -254,13 +256,13 @@ async function copyAiSkills() {
           variant="ghost"
           size="icon"
           class="size-8"
-          @click="canvas.theme = canvas.theme === 'dark' ? 'light' : 'dark'"
+          @click="appDark = !appDark"
         >
-          <Sun v-if="canvas.theme === 'dark'" />
+          <Sun v-if="appDark" />
           <Moon v-else />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Diagram theme</TooltipContent>
+      <TooltipContent>Dark mode</TooltipContent>
     </Tooltip>
 
     <Separator orientation="vertical" class="mx-1 h-4" />

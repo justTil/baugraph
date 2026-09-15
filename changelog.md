@@ -33,6 +33,13 @@ All notable changes to this project will be documented in this file.
   on a first visit now carry a small alert in the top-left corner of the
   canvas, so it's clear at a glance that what's on screen is a shipped example
   rather than the user's own work.
+- **One dark mode setting for the whole app.** The moon icon in the toolbar
+  (also in the canvas's right-click menu and a new **Appearance** card in
+  Settings) now switches the sidebar, header, canvas and JSON view together.
+  It's a single preference stored in the browser, not one saved per diagram,
+  so it stays the same wherever you look instead of changing when you switch
+  tabs. Exports (SVG/PNG/GIF) pick up the same setting, so a downloaded image
+  matches what was on screen.
 
 ### Changed
 
@@ -47,15 +54,15 @@ All notable changes to this project will be documented in this file.
   one-off reordering diff.
 - **Toolbar buttons now carry their label alongside the icon** for message
   flows, play/pause, presentation mode and the laser pointer, so they're easier
-  to scan at a glance. Magnet, grid and the diagram theme toggle stay
-  icon-only.
+  to scan at a glance. Magnet, grid and the theme toggle stay icon-only.
 
 ### Fixed
 
-- **Night mode now themes the whole app, not just the canvas.** Toggling a
-  diagram to dark previously repainted only the canvas; the sidebar, header
-  and inspector panel stayed on their light styling. The toggle now flips the
-  rest of the app's chrome along with it, so the whole UI is dark.
+- **Dark mode used to cover only the canvas, and inconsistently at that.**
+  The sidebar, header and JSON view never picked it up at all, and because the
+  toggle changed a per-diagram setting, switching tabs could silently flip it
+  back. It's one setting now — see "One dark mode setting for the whole app"
+  above.
 
 ## [1.28.0]
 
