@@ -23,7 +23,9 @@ All notable changes to this project will be documented in this file.
   as long as it's on: dragging, connecting, resizing, the right-click menu,
   double-click rename and every editing shortcut are disabled, with a one-time
   reminder shown at the top of the canvas — the same spot the laser pointer's
-  own hint uses — so a click that does nothing doesn't come as a surprise.
+  own hint uses — so a click that does nothing doesn't come as a surprise. For
+  the first five seconds the hint sits a little lower, clear of the laser/exit
+  controls in the corner, then settles back to its normal spot.
 - **A foldable inspector.** A new button in its header collapses the panel on
   the right to a thin rail and back, freeing up room to work the canvas without
   losing the panel entirely. The choice is remembered across reloads.
@@ -39,6 +41,10 @@ All notable changes to this project will be documented in this file.
   diagram produced files full of moved blocks and no changes. The same diagram
   now has exactly one file. Saving an existing diagram once will show this as a
   one-off reordering diff.
+- **Toolbar buttons now carry their label alongside the icon** for message
+  flows, play/pause, presentation mode and the laser pointer, so they're easier
+  to scan at a glance. Magnet, grid and the diagram theme toggle stay
+  icon-only.
 
 ## [1.28.0]
 
