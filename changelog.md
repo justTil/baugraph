@@ -29,6 +29,10 @@ All notable changes to this project will be documented in this file.
 - **A foldable inspector.** A new button in its header collapses the panel on
   the right to a thin rail and back, freeing up room to work the canvas without
   losing the panel entirely. The choice is remembered across reloads.
+- **A "Demo" badge on the worked examples.** The three sample diagrams opened
+  on a first visit now carry a small alert in the top-left corner of the
+  canvas, so it's clear at a glance that what's on screen is a shipped example
+  rather than the user's own work.
 
 ### Changed
 
@@ -45,6 +49,13 @@ All notable changes to this project will be documented in this file.
   flows, play/pause, presentation mode and the laser pointer, so they're easier
   to scan at a glance. Magnet, grid and the diagram theme toggle stay
   icon-only.
+
+### Fixed
+
+- **Night mode now themes the whole app, not just the canvas.** Toggling a
+  diagram to dark previously repainted only the canvas; the sidebar, header
+  and inspector panel stayed on their light styling. The toggle now flips the
+  rest of the app's chrome along with it, so the whole UI is dark.
 
 ## [1.28.0]
 

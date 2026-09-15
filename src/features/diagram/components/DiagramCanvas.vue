@@ -22,6 +22,7 @@ import {
   Minimize2,
   Presentation,
   Scaling,
+  Sparkles,
   Waypoints,
 } from '@lucide/vue'
 import type { ColorKey, DiagramParseError } from '@/model'
@@ -33,6 +34,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { isStartupSample } from '@/features/diagram/composables/useEditorTabs'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
@@ -94,6 +96,10 @@ const {
   toDocument,
   replaceDocument,
 } = useDiagram()
+
+// Flags one of the worked examples opened on a first visit, so a newcomer
+// poking at the canvas knows it is not their own diagram.
+const isDemo = computed(() => isStartupSample(documentId))
 
 const {
   fitView,
@@ -910,6 +916,16 @@ watch(isVisible, (visible) => {
             class="!right-3 !bottom-3 !rounded-md !border"
           />
         </VueFlow>
+
+        <!-- Marks one of the worked examples opened on a first visit, so a
+             newcomer poking at the canvas knows it is not their own diagram. -->
+        <div v-if="isDemo" class="pointer-events-none absolute top-4 left-4 z-20">
+          <Alert class="w-auto shadow-lg">
+            <Sparkles />
+            <AlertTitle>Demo</AlertTitle>
+            <AlertDescription>Sample diagram — not your own work</AlertDescription>
+          </Alert>
+        </div>
 
         <!-- Top-centre indicator, up for as long as a connection's own end is being dragged loose. -->
         <Transition

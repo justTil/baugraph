@@ -2,11 +2,13 @@
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { useNavigation } from '@/composables/useNavigation'
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
 
 const { activeItem } = useNavigation()
 const { presenting } = usePresentation()
+useAppTheme()
 </script>
 
 <template>
