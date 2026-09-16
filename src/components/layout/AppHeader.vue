@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Container, LayoutTemplate } from '@lucide/vue'
+import { Container, ExternalLink, LayoutTemplate } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
@@ -17,6 +17,7 @@ const { resetLayout } = useWorkspace()
 // self-hosted instance is already running it.
 const selfHosted = __SELF_HOSTED__
 const DOCKER_HUB_URL = 'https://hub.docker.com/r/justtil/baugraph'
+const VSCODE_EXTENSION_URL = 'https://marketplace.visualstudio.com/items?itemName=justtil.baugraph'
 
 function onResetLayout() {
   if (!window.confirm('Close every tab and restore the default arrangement?')) return
@@ -34,10 +35,10 @@ function onResetLayout() {
       </h1>
 
       <!--
-        Points people at the Docker image, sitting right after the view title
-        rather than out with the file actions - it's about the app itself, not
-        about whatever is on screen. Dropped from self-hosted builds, which are
-        already running that image.
+        Points people at the Docker image and the VS Code extension, sitting
+        right after the view title rather than out with the file actions -
+        it's about the app itself, not about whatever is on screen. Dropped
+        from self-hosted builds, which are already running that image.
       -->
       <template v-if="!selfHosted">
         <Separator orientation="vertical" class="h-4" />
@@ -54,10 +55,30 @@ function onResetLayout() {
             >
               <Container />
               Self host with Docker
+              <ExternalLink class="size-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            Run your own Baugraph instance from the official Docker image
+            Run your own Baugraph instance from the official Docker image (opens in a new tab)
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button
+              as="a"
+              :href="VSCODE_EXTENSION_URL"
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="ghost"
+              size="sm"
+              class="h-8 shrink-0"
+            >
+              Get VS Code Extension
+              <ExternalLink class="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Open the Baugraph extension on the VS Code Marketplace (opens in a new tab)
           </TooltipContent>
         </Tooltip>
       </template>

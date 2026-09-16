@@ -55,6 +55,7 @@ const MIN_SIZE: Partial<Record<ShapeKey, { width: number; height: number }>> = {
   pill: { width: 130, height: 56 },
   queue: { width: 160, height: 62 },
   note: { width: 160, height: 70 },
+  text: { width: 60, height: 32 },
 }
 
 const MIN_DEFAULT = { width: 140, height: 60 }
@@ -80,7 +81,15 @@ function textBlock(node: FitSource): FitSize {
     height += size + LEADING
   }
 
-  if (node.label) line(measureText(node.label, LABEL_SIZE, LABEL_WEIGHT), LABEL_SIZE)
+  if (node.label) {
+    // A text annotation draws its label unbold — see `ShapeNode.vue` — so it is
+    // measured at the weight it is actually drawn at, or a bold label would
+    // fit a box wider than the text needs.
+    const weight = node.shape === 'text' ? 400 : LABEL_WEIGHT
+    for (const row of node.label.split('\n')) {
+      line(measureText(row, LABEL_SIZE, weight), LABEL_SIZE)
+    }
+  }
 
   const caption = nodeCaption(node)
   if (caption) {

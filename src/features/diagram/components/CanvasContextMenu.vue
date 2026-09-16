@@ -81,6 +81,7 @@ import { NODE_TYPE_GROUPS } from '@/features/diagram/data/node-types'
 import { techCategoriesWithCustom } from '@/features/diagram/data/tech'
 import { COLOR_HEX, COLOR_SWATCHES, diagramTheme } from '@/features/diagram/lib/theme'
 import { exportJson } from '@/features/diagram/lib/export'
+import { useAppTheme } from '@/composables/useAppTheme'
 import {
   ARROW_MODES,
   BORDER_WIDTHS,
@@ -168,13 +169,17 @@ const mode = computed<'node' | 'edge' | 'selection' | 'pane'>(() => {
 
 const isZone = computed(() => node.value?.type === 'zone')
 
-/** A zone can only become another kind of zone, a box another kind of box. */
-const typeGroups = computed(() =>
-  NODE_TYPE_GROUPS.map((group) => ({
+/**
+ * A zone can only become another kind of zone, a box another kind of box, and
+ * an annotation another kind of annotation.
+ */
+const typeGroups = computed(() => {
+  const kind = node.value?.type ?? 'shape'
+  return NODE_TYPE_GROUPS.map((group) => ({
     ...group,
-    types: group.types.filter((type) => (type.kind === 'zone') === isZone.value),
-  })).filter((group) => group.types.length > 0),
-)
+    types: group.types.filter((type) => (type.kind ?? 'shape') === kind),
+  })).filter((group) => group.types.length > 0)
+})
 
 /** Palette groups split by what they add: node types, then technologies. */
 const paletteTypeGroups = computed(() => PALETTE.filter((group) => group.kind === 'types'))
@@ -199,6 +204,7 @@ const SHAPE_LABELS: Record<string, string> = {
   diamond: 'Diamond',
   circle: 'Circle',
   note: 'Note',
+  text: 'Text',
 }
 
 /** Shared by a node's border and a connection's line: one ramp, one wording. */
@@ -240,7 +246,8 @@ const ALIGNMENTS: { action: AlignAction; icon: unknown; label: string }[] = [
   { action: 'match-height', icon: StretchVertical, label: 'Match height' },
 ]
 
-const defaultEdgeHex = computed(() => diagramTheme(canvas.theme).edge)
+const { dark: appDark, mode: appThemeMode } = useAppTheme()
+const defaultEdgeHex = computed(() => diagramTheme(appThemeMode.value).edge)
 
 /** Colour applied to every selected node, so the swatch works on a selection too. */
 function paintNodes(color: string) {
@@ -963,11 +970,11 @@ function copySelectionIds() {
         Snap to grid
       </ContextMenuCheckboxItem>
       <ContextMenuCheckboxItem
-        :model-value="canvas.theme === 'dark'"
-        @update:model-value="canvas.theme = $event === true ? 'dark' : 'light'"
+        :model-value="appDark"
+        @update:model-value="appDark = $event === true"
       >
         <Moon />
-        Dark canvas
+        Dark mode
       </ContextMenuCheckboxItem>
 
       <ContextMenuCheckboxItem

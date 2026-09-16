@@ -1,0 +1,149 @@
+{
+  "name": "baugraph",
+  "displayName": "Baugraph",
+  "description": "Edit .baugraph.json architecture diagrams on a canvas, inside VS Code.",
+  "version": "1.29.0",
+  "publisher": "justtil",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/justTil/baugraph.git",
+    "directory": "extension"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "diagram",
+    "architecture",
+    "baugraph",
+    "custom editor"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "baugraph.editor",
+        "displayName": "Baugraph diagram",
+        "selector": [
+          {
+            "filenamePattern": "*.baugraph.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "baugraph.newDiagram",
+        "title": "New Diagram…",
+        "category": "Baugraph"
+      },
+      {
+        "command": "baugraph.openDiagram",
+        "title": "Open as Diagram",
+        "category": "Baugraph",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "baugraph.openSource",
+        "title": "Open as JSON Text",
+        "category": "Baugraph",
+        "icon": "$(json)"
+      },
+      {
+        "command": "baugraph.normalize",
+        "title": "Sort and Normalise Diagram File",
+        "category": "Baugraph"
+      },
+      {
+        "command": "baugraph.setTheme",
+        "title": "Diagram Theme…",
+        "category": "Baugraph"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "baugraph.openSource",
+          "when": "activeCustomEditorId == baugraph.editor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "baugraph.openDiagram",
+          "when": "resourceFilename =~ /\\.baugraph\\.json$/ && !activeCustomEditorId",
+          "group": "navigation@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "baugraph.openDiagram",
+          "when": "resourceFilename =~ /\\.baugraph\\.json$/",
+          "group": "navigation@30"
+        },
+        {
+          "command": "baugraph.normalize",
+          "when": "resourceFilename =~ /\\.baugraph\\.json$/",
+          "group": "7_modification"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "baugraph.openDiagram",
+          "when": "resourceFilename =~ /\\.baugraph\\.json$/"
+        },
+        {
+          "command": "baugraph.openSource",
+          "when": "resourceFilename =~ /\\.baugraph\\.json$/"
+        },
+        {
+          "command": "baugraph.normalize",
+          "when": "resourceFilename =~ /\\.baugraph\\.json$/"
+        }
+      ]
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": "*.baugraph.json",
+        "url": "./schema/baugraph-v1.schema.json"
+      }
+    ],
+    "configuration": {
+      "title": "Baugraph",
+      "properties": {
+        "baugraph.theme": {
+          "type": "string",
+          "enum": ["system", "light", "dark"],
+          "enumDescriptions": [
+            "Match VS Code's own colour theme",
+            "Always light",
+            "Always dark"
+          ],
+          "default": "system",
+          "description": "Colour theme for the diagram canvas, also reachable from the canvas toolbar."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs --production",
+    "build:debug": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "type-check": "tsc --noEmit",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
+    "typescript": "~6.0.0"
+  }
+}

@@ -3,9 +3,17 @@ import { FORMAT_VERSION, PORT_SIDES } from '@/model/types'
 import { EDGE_DEFAULTS, FLOW_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
 import { documentSchema } from '@/model/schema'
 import { migrate } from '@/model/migrate'
+import { sortDocument } from '@/model/sort'
 
-/** Where the published JSON Schema lives, relative to the deployed app. */
-export const SCHEMA_URL = `${import.meta.env.BASE_URL}schema/baugraph-v1.schema.json`
+/**
+ * Where the published JSON Schema lives, relative to the deployed app.
+ *
+ * A plain constant rather than `import.meta.env.BASE_URL`: the app is served
+ * from the root (see `vite.config.ts`), and keeping Vite out of the model is
+ * what lets this module be bundled for Node as-is — which the VS Code
+ * extension's formatter does.
+ */
+export const SCHEMA_URL = '/schema/baugraph-v1.schema.json'
 
 export class DiagramParseError extends Error {
   constructor(
@@ -52,6 +60,7 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'tech',
   'label',
   'sublabel',
+  'align',
   'shape',
   'color',
   'border',
@@ -108,10 +117,13 @@ const round = (n: number) => Math.round(n * 100) / 100
  * Produces the plain object that gets written to disk.
  *
  * Deterministic by construction: fixed key order, defaults omitted, coordinates
- * rounded, and nodes/edges kept in document order (which the editor preserves).
- * Saving an unchanged diagram twice yields byte-identical output.
+ * rounded, and every array in canonical order (see `sort.ts`). The same diagram
+ * therefore has exactly one file — whoever saved it, in whatever order they drew
+ * it, and however many times.
  */
-export function toFileObject(doc: DiagramDocument): Record<string, unknown> {
+export function toFileObject(input: DiagramDocument): Record<string, unknown> {
+  const doc = sortDocument(input)
+
   const nodes = doc.nodes.map((node) => {
     const trimmed = omitDefaults(
       {

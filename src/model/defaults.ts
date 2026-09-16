@@ -37,6 +37,7 @@ export const NODE_DEFAULTS = {
   color: 'slate',
   border: 'regular',
   sublabel: '',
+  align: 'center',
   icon: '',
   parent: null,
   locked: false,

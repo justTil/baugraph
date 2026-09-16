@@ -48,6 +48,7 @@ export default defineConfig({
           { text: 'The editor', link: '/editor' },
           { text: 'Message flows', link: '/message-flows' },
           { text: 'Exporting', link: '/exports' },
+          { text: 'VS Code extension', link: '/vscode' },
           { text: 'Keyboard shortcuts', link: '/shortcuts' },
         ],
       },

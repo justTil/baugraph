@@ -98,6 +98,12 @@ Every field that has a default may be omitted; the reader fills it back in. Do
 not invent fields — anything not in the schema belongs under a node's, edge's
 or flow's \`data\` object instead, which is free-form and never interpreted.
 
+Array order carries no meaning, and the editor rewrites it on save: nodes in
+hierarchy order (a zone, then everything inside it — which also keeps a parent
+ahead of its children), edges grouped by \`source\` and then \`target\`, flows by
+\`id\`. Writing a file in that order keeps the diff to what actually changed;
+writing it in another order is still valid and will simply be re-sorted.
+
 ## Nodes
 
 \`\`\`json

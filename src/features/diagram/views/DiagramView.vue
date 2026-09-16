@@ -33,6 +33,7 @@ import {
   useDocumentFile,
   useRenamePrompt,
 } from '@/features/diagram/composables/useDocumentFile'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 
 // Docked views stay mounted behind their tab, and several can share the screen,
 // so this view has to know which panel it is in before it knows anything else.
@@ -62,6 +63,10 @@ const renaming = computed(() =>
   pendingRename.value?.documentId === documentId ? pendingRename.value : null,
 )
 const closing = computed(() => pendingClose.value === documentId)
+
+// Full screen for a call: the inspector gives up its width entirely rather
+// than folding to its thin rail, which would still take a bite out of it.
+const { presenting } = usePresentation()
 
 /**
  * The app header holds one toolbar and several editors can share the screen, so
@@ -131,7 +136,7 @@ async function saveAndClose() {
 
   <div class="flex min-h-0 flex-1">
     <DiagramCanvas @export="exportOpen = true" />
-    <InspectorPanel @export="exportOpen = true" />
+    <InspectorPanel v-if="!presenting" @export="exportOpen = true" />
   </div>
 
   <!-- Opens itself: both the toolbar and a connection's inspector reach for it. -->

@@ -1,3 +1,4 @@
+import type { ShapeKey } from '@/model'
 import { nodeTypeLabel } from '@/features/diagram/data/node-types'
 import { techLabel } from '@/features/diagram/data/tech'
 
@@ -25,9 +26,15 @@ export interface CaptionSource {
   label?: string
   type?: string | null
   tech?: string | null
+  shape?: ShapeKey
 }
 
 export function nodeCaption(node: CaptionSource): NodeCaption | null {
+  // A text label carries no type of its own to announce — it is the plainest
+  // node the format has, and a "Text" caption under whatever it says would be
+  // noise on every single one.
+  if (node.shape === 'text') return null
+
   const name = (node.label ?? '').trim().toLowerCase()
   const spellsOut = (text: string) => !!text && text.trim().toLowerCase() === name
 

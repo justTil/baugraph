@@ -11,6 +11,7 @@ import {
   Pause,
   Pencil,
   Play,
+  Presentation,
   Redo2,
   Sun,
   Undo2,
@@ -24,11 +25,13 @@ import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { HEADER_ACTIONS_SLOT_SELECTOR } from '@/components/layout/header-slot'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 import { AI_SKILLS_MARKDOWN } from '@/features/diagram/data/ai-skills.generated'
 
 const emit = defineEmits<{
@@ -37,6 +40,7 @@ const emit = defineEmits<{
 
 const { documentId, meta, canvas, flows, canUndo, canRedo, dirty, undo, redo, commit, endCoalesce } =
   useDiagram()
+const { dark: appDark } = useAppTheme()
 const { canOverwriteFiles, fileName } = useDocumentFile(documentId)
 
 /** What ⌘S will do, so the button can say it before it is pressed. */
@@ -50,6 +54,7 @@ const saveHint = computed(() => {
 })
 const { paused, openFlowEditor } = useFlows()
 const { active: laserActive } = useLaserPointer()
+const { presenting, toggle: togglePresentation } = usePresentation()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
 
 const zoomLabel = computed(() => `${Math.round(viewport.value.zoom * 100)}%`)
@@ -155,8 +160,9 @@ async function copyAiSkills() {
     -->
     <Tooltip>
       <TooltipTrigger as-child>
-        <Button variant="ghost" size="icon" class="size-8" @click="openFlowEditor()">
+        <Button variant="ghost" size="sm" class="h-8" @click="openFlowEditor()">
           <Waypoints />
+          Message flows
         </Button>
       </TooltipTrigger>
       <TooltipContent>Message flows</TooltipContent>
@@ -168,12 +174,33 @@ async function copyAiSkills() {
     -->
     <Tooltip v-if="flows.length">
       <TooltipTrigger as-child>
-        <Button variant="ghost" size="icon" class="size-8" @click="paused = !paused">
+        <Button variant="ghost" size="sm" class="h-8" @click="paused = !paused">
           <Play v-if="paused" />
           <Pause v-else />
+          {{ paused ? 'Play flows' : 'Pause flows' }}
         </Button>
       </TooltipTrigger>
       <TooltipContent>{{ paused ? 'Play message flows' : 'Pause message flows' }}</TooltipContent>
+    </Tooltip>
+
+    <!--
+      Clears the nav, header and inspector off screen and, where the browser
+      allows it, claims the whole screen — for sharing just the diagram in a
+      call rather than the app around it.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="presenting"
+          aria-label="Presentation mode"
+          @update:model-value="togglePresentation()"
+        >
+          <Presentation />
+          Presentation
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>Presentation mode (P) — full screen for screen-sharing</TooltipContent>
     </Tooltip>
 
     <!--
@@ -189,6 +216,7 @@ async function copyAiSkills() {
           @update:model-value="laserActive = Boolean($event)"
         >
           <Crosshair />
+          Laser pointer
         </Toggle>
       </TooltipTrigger>
       <TooltipContent>Laser pointer (L) — hold to draw</TooltipContent>
@@ -228,13 +256,13 @@ async function copyAiSkills() {
           variant="ghost"
           size="icon"
           class="size-8"
-          @click="canvas.theme = canvas.theme === 'dark' ? 'light' : 'dark'"
+          @click="appDark = !appDark"
         >
-          <Sun v-if="canvas.theme === 'dark'" />
+          <Sun v-if="appDark" />
           <Moon v-else />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Diagram theme</TooltipContent>
+      <TooltipContent>Dark mode</TooltipContent>
     </Tooltip>
 
     <Separator orientation="vertical" class="mx-1 h-4" />
