@@ -107,6 +107,15 @@
             "default": "",
             "type": "string"
           },
+          "align": {
+            "default": "center",
+            "type": "string",
+            "enum": [
+              "left",
+              "center",
+              "right"
+            ]
+          },
           "shape": {
             "default": "rect",
             "type": "string",

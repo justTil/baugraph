@@ -13,6 +13,7 @@ import {
   ROUTES,
   SHAPE_KEYS,
   SIDES,
+  TEXT_ALIGNS,
 } from '@/model/types'
 import {
   DEFAULT_CANVAS,
@@ -85,6 +86,7 @@ export const nodeSchema = z.object({
   tech: catalogueIdSchema.default(NODE_DEFAULTS.tech),
   label: z.string().default(''),
   sublabel: z.string().default(NODE_DEFAULTS.sublabel),
+  align: z.enum(TEXT_ALIGNS).default(NODE_DEFAULTS.align),
   shape: z.enum(SHAPE_KEYS).default(NODE_DEFAULTS.shape),
   color: z.enum(COLOR_KEYS).default(NODE_DEFAULTS.color),
   border: z.enum(BORDER_WIDTHS).default(NODE_DEFAULTS.border),

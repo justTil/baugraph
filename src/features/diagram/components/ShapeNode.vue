@@ -65,6 +65,24 @@ const caption = computed(() => nodeCaption(props.data))
  */
 const centered = computed(() => CENTERED_SHAPES.has(props.data.shape) || !icon.value)
 
+/**
+ * A text annotation picks its own horizontal alignment — left, centre or right
+ * — instead of the shape-driven `centered` rule above, which only ever means
+ * "centre" or "start". Every other node ignores `data.align` entirely.
+ */
+const ALIGN_ROW: Record<string, string> = {
+  left: 'justify-start text-left',
+  center: 'justify-center text-center',
+  right: 'justify-end text-right',
+}
+const contentAlign = computed(() =>
+  props.type === 'annotation'
+    ? ALIGN_ROW[props.data.align] ?? ALIGN_ROW.center
+    : centered.value
+      ? 'justify-center text-center'
+      : '',
+)
+
 /** How much of the row the icon claims, in the same units as the gap below. */
 const ICON_BLOCK = 20 + 10
 
@@ -207,7 +225,7 @@ const handles = computed(() => {
 
     <div
       class="relative flex h-full items-center gap-2.5 px-3"
-      :class="centered ? 'justify-center text-center' : ''"
+      :class="contentAlign"
       :style="{
         paddingTop: `${inset.top}px`,
         paddingRight: `${12 + inset.right}px`,

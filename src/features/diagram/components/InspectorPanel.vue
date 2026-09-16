@@ -200,6 +200,12 @@ const BORDER_OPTIONS = [
   ...WIDTH_OPTIONS,
 ]
 
+const ALIGN_OPTIONS = [
+  { value: 'left', label: 'Left' },
+  { value: 'center', label: 'Center' },
+  { value: 'right', label: 'Right' },
+]
+
 const SIDE_GLYPHS: Record<PortSide, string> = {
   top: '↑',
   right: '→',
@@ -405,6 +411,14 @@ function setRouting(
               placeholder="protocol, SLA, note…"
               @update:model-value="editText(node.id, 'sublabel', String($event))"
               @blur="endCoalesce()"
+            />
+          </div>
+          <div v-if="node.type === 'annotation'" class="space-y-1.5">
+            <Label class="text-xs">Align</Label>
+            <SegmentedField
+              :model-value="node.data.align"
+              :options="ALIGN_OPTIONS"
+              @update:model-value="withCommit(() => updateNodeData(node!.id, { align: $event as never }))"
             />
           </div>
         </section>

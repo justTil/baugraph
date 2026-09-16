@@ -60,6 +60,7 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'tech',
   'label',
   'sublabel',
+  'align',
   'shape',
   'color',
   'border',

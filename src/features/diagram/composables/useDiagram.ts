@@ -20,6 +20,7 @@ import type {
   Route,
   ShapeKey,
   Side,
+  TextAlign,
   Vec2,
 } from '@/model'
 import {
@@ -53,6 +54,8 @@ export interface NodeData {
   /** Technology id — what it runs on. Drawn next to the type. */
   tech: string
   sublabel: string
+  /** Horizontal placement of the label. Only a text annotation exposes this. */
+  align: TextAlign
   shape: ShapeKey
   color: ColorKey
   /** Weight of the node's outline. */
@@ -361,6 +364,7 @@ function createDiagramStore(documentId: string) {
         type: node.type ?? '',
         tech: node.tech ?? '',
         sublabel: node.sublabel ?? '',
+        align: node.align ?? 'center',
         shape: node.shape,
         color: node.color,
         border: node.border ?? 'regular',
@@ -425,6 +429,7 @@ function createDiagramStore(documentId: string) {
       tech: node.data?.tech ?? '',
       label: node.data?.label ?? '',
       sublabel: node.data?.sublabel ?? '',
+      align: node.data?.align ?? 'center',
       shape: node.data?.shape ?? 'rect',
       color: node.data?.color ?? 'slate',
       border: node.data?.border ?? 'regular',

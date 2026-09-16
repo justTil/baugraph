@@ -380,8 +380,19 @@ const editing = ref<{
   left: number
   top: number
   width: number
+  height?: number
+  /** A text annotation edits as a textarea, so Enter writes a line rather than closing it. */
+  multiline?: boolean
 } | null>(null)
-const editorInput = ref<HTMLInputElement | null>(null)
+const editorInput = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
+
+const ALIGN_TEXT: Record<string, string> = { left: 'text-left', center: 'text-center', right: 'text-right' }
+
+/** The alignment the node being edited draws its label with, for the overlay to match. */
+const editingAlign = computed(() => {
+  if (!editing.value || editing.value.kind !== 'node') return 'center'
+  return findNode(editing.value.id)?.data.align ?? 'center'
+})
 
 function focusEditor() {
   nextTick(() => {
@@ -399,13 +410,16 @@ function openEditor(id: string) {
   const host = rect.closest('.vue-flow')?.getBoundingClientRect()
   if (!host) return
 
+  const multiline = node.type === 'annotation'
   editing.value = {
     kind: 'node',
     id,
     value: node.data.label ?? '',
     left: box.left - host.left,
-    top: box.top - host.top + (node.type === 'zone' ? 4 : box.height / 2 - 14),
+    top: box.top - host.top + (multiline || node.type === 'zone' ? 4 : box.height / 2 - 14),
     width: box.width,
+    height: multiline ? Math.max(28, box.height - 8) : undefined,
+    multiline,
   }
   focusEditor()
 }
@@ -1014,9 +1028,35 @@ watch(isVisible, (visible) => {
           </g>
         </svg>
 
-        <!-- Inline label editor, positioned over the node or connection being renamed. -->
+        <!--
+          Inline label editor, positioned over the node or connection being
+          renamed. A text annotation edits as a textarea — Enter writes a line
+          instead of closing the editor, the same as the Label field in the
+          inspector — everything else keeps the single-line input, where Enter
+          commits.
+        -->
+        <textarea
+          v-if="editing && editing.multiline"
+          ref="editorInput"
+          v-model="editing.value"
+          class="absolute z-30 resize-none rounded border px-1.5 py-0.5 text-[13px] leading-tight outline-none"
+          :class="ALIGN_TEXT[editingAlign]"
+          :style="{
+            left: `${editing.left}px`,
+            top: `${editing.top}px`,
+            width: `${editing.width}px`,
+            height: `${editing.height}px`,
+            borderColor: theme.selection,
+            background: theme.bg,
+            color: theme.ink,
+          }"
+          spellcheck="false"
+          @keydown.esc.prevent="commitEditor(false)"
+          @keydown.stop
+          @blur="commitEditor(true)"
+        />
         <input
-          v-if="editing"
+          v-else-if="editing"
           ref="editorInput"
           v-model="editing.value"
           class="absolute z-30 rounded border px-1.5 py-0.5 text-center text-[13px] font-semibold outline-none"

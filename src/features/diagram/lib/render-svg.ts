@@ -202,7 +202,13 @@ function nodeTextLines(
  * that has to be cut falls back to a single muted run, because an ellipsis
  * landing mid-`tspan` is not worth the arithmetic.
  */
-function renderLine(line: TextLine, x: number, baseline: number, available: number, anchor: 'start' | 'middle'): string {
+function renderLine(
+  line: TextLine,
+  x: number,
+  baseline: number,
+  available: number,
+  anchor: 'start' | 'middle' | 'end',
+): string {
   const first = line.runs[0]
   if (!first) return ''
 
@@ -210,7 +216,7 @@ function renderLine(line: TextLine, x: number, baseline: number, available: numb
   const fitted = fitText(plain, available, line.size, first.weight)
   const open =
     `<text x="${round2(x)}" y="${round2(baseline)}" font-size="${line.size}"` +
-    (anchor === 'middle' ? ' text-anchor="middle"' : '')
+    (anchor === 'start' ? '' : ` text-anchor="${anchor}"`)
 
   if (line.runs.length === 1 || fitted !== plain) {
     return `${open} font-weight="${first.weight}" fill="${first.fill}">${escapeXml(fitted)}</text>`
@@ -231,7 +237,7 @@ function renderTextBlock(
   x: number,
   top: number,
   available: number,
-  anchor: 'start' | 'middle',
+  anchor: 'start' | 'middle' | 'end',
 ): string {
   let cursor = top
   return lines
@@ -320,7 +326,23 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
   const text = blockHeight(lines)
   const top = cy - text / 2
 
-  if (centered) {
+  if (node.shape === 'text') {
+    // A text annotation picks its own edge to sit against instead of always
+    // centring — the icon-then-text block just moves to whichever edge `align`
+    // names, the same way `ShapeNode.vue` shifts the row with `justify-content`.
+    const align = node.align ?? 'center'
+    const width = Math.min(available, blockWidth(lines))
+    const left =
+      align === 'left'
+        ? box.x + 12
+        : align === 'right'
+          ? box.x + box.width - inset.right - 12 - iconBlock - width
+          : cx - (iconBlock + width) / 2
+    const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle'
+    const textX = align === 'left' ? left + iconBlock : align === 'right' ? left + iconBlock + width : left + iconBlock + width / 2
+    if (hasIcon) parts.push(iconGroup(node.icon!, left, cy - ICON_SIZE / 2, paint.accent))
+    parts.push(renderTextBlock(lines, textX, top, width, anchor))
+  } else if (centered) {
     // Icon then text, the pair centred as one block: a tapering outline leaves
     // no room at the left edge for the content row every other shape uses.
     const width = Math.min(available, blockWidth(lines))

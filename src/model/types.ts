@@ -50,6 +50,10 @@ export type ShapeKey = (typeof SHAPE_KEYS)[number]
 export const BORDER_WIDTHS = ['none', 'regular', 'medium', 'thick'] as const
 export type BorderWidth = (typeof BORDER_WIDTHS)[number]
 
+/** Horizontal placement of a node's text within its own box. */
+export const TEXT_ALIGNS = ['left', 'center', 'right'] as const
+export type TextAlign = (typeof TEXT_ALIGNS)[number]
+
 /** Which edge of a node a connection attaches to. `auto` picks the nearest. */
 export const SIDES = ['auto', 'top', 'right', 'bottom', 'left'] as const
 export type Side = (typeof SIDES)[number]
@@ -127,6 +131,12 @@ export interface DiagramNode {
   label: string
   /** Secondary line under the label — protocol, SLA, cardinality… */
   sublabel?: string
+  /**
+   * Where the label sits within its box. Only a text annotation exposes this —
+   * every other shape centres or left-aligns its label on its own, from the
+   * shape it is drawn on. Omitted means `center`.
+   */
+  align?: TextAlign
   shape: ShapeKey
   color: ColorKey
   /** Weight of the node's outline. Omitted means `regular`. */
