@@ -60,6 +60,11 @@ const closeQueue: string[] = []
  */
 const startupSampleIds = new Set<string>()
 
+/** Whether `documentId` is one of the worked examples opened on a first run. */
+export function isStartupSample(documentId: string): boolean {
+  return startupSampleIds.has(documentId)
+}
+
 export function useCloseRequest() {
   return { pendingClose }
 }

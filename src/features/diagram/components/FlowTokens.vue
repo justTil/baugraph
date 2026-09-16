@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { ComponentPublicInstance } from 'vue'
 import { computed, onBeforeUnmount } from 'vue'
-import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { COLOR_HEX, diagramTheme } from '@/features/diagram/lib/theme'
+import { useAppTheme } from '@/composables/useAppTheme'
 
 /**
  * Everything a single connection draws on behalf of the flows that run over it.
@@ -25,10 +25,10 @@ const props = defineProps<{
   lineWidth: number
 }>()
 
-const { canvas } = useDiagram()
 const { tokensFor, dashesFor, running, registerToken, unregisterToken } = useFlows()
+const { mode: appThemeMode } = useAppTheme()
 
-const theme = computed(() => diagramTheme(canvas.theme))
+const theme = computed(() => diagramTheme(appThemeMode.value))
 /** A pulse never rides thinner than the connection it travels. */
 const dashWidth = computed(() => Math.max(2.4, props.lineWidth))
 const tokens = computed(() => tokensFor(props.edgeId))

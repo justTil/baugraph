@@ -30,7 +30,7 @@ export interface PaletteItem {
   listIcon?: string
   color: ColorKey
   shape?: ShapeKey
-  kind?: 'shape' | 'zone'
+  kind?: 'shape' | 'zone' | 'annotation'
   width?: number
   height?: number
   /** Extra search terms — aliases, abbreviations, former product names. */

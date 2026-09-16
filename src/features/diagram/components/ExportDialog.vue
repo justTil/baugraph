@@ -27,6 +27,7 @@ import { documentFrames } from '@/features/diagram/lib/render-svg'
 import type { BackdropId, ChromeId } from '@/features/diagram/lib/frame'
 import { BACKDROP_OPTIONS, CHROME_OPTIONS } from '@/features/diagram/lib/frame'
 import { randomWatermarkId } from '@/features/diagram/lib/watermark'
+import { useAppTheme } from '@/composables/useAppTheme'
 
 /**
  * Choosing what to export, next to a picture of what that will be.
@@ -41,6 +42,17 @@ import { randomWatermarkId } from '@/features/diagram/lib/watermark'
 const open = defineModel<boolean>('open', { required: true })
 
 const { documentId, meta, toDocument } = useDiagram()
+const { mode: appThemeMode } = useAppTheme()
+
+/**
+ * A visual render — SVG/PNG/GIF, live preview included — draws with the
+ * theme currently on screen rather than whatever the document's own
+ * `canvas.theme` happens to hold, so an export always matches what was
+ * exported. The **JSON** export is the document itself and is left alone.
+ */
+function withDisplayTheme(doc: ReturnType<typeof toDocument>) {
+  return { ...doc, canvas: { ...doc.canvas, theme: appThemeMode.value } }
+}
 
 type Format = 'json' | 'svg' | 'png' | 'gif'
 
@@ -110,7 +122,7 @@ const preview = computed(() => {
   if (!open.value) return null
   const doc = toDocument()
 
-  const frames = documentFrames(doc, {
+  const frames = documentFrames(withDisplayTheme(doc), {
     frame: frame.value,
     watermark: watermark.value,
     transparent: transparent.value && (format.value === 'svg' || format.value === 'png'),
@@ -210,7 +222,7 @@ async function run() {
         if (!(await saveDocumentAs(documentId))) return
         break
       case 'svg':
-        exportSvg(doc, {
+        exportSvg(withDisplayTheme(doc), {
           transparent: transparent.value,
           animate: animate.value,
           frame: frame.value,
@@ -218,14 +230,14 @@ async function run() {
         })
         break
       case 'png':
-        await exportPng(doc, scale.value, {
+        await exportPng(withDisplayTheme(doc), scale.value, {
           transparent: transparent.value,
           frame: frame.value,
           watermark: watermark.value,
         })
         break
       case 'gif':
-        await exportGif(doc, {
+        await exportGif(withDisplayTheme(doc), {
           fps: Number(gifRate.value),
           scale: scale.value,
           frame: frame.value,

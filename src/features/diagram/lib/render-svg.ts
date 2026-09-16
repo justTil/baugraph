@@ -15,7 +15,7 @@ import {
   mix,
   nodePaint,
 } from '@/features/diagram/lib/theme'
-import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
+import { SANS, escapeXml, fitText, measureText, wrapText } from '@/features/diagram/lib/text'
 import type { FrameOptions } from '@/features/diagram/lib/frame'
 import { frameLayout, frameParts, framed } from '@/features/diagram/lib/frame'
 import type { WatermarkOptions } from '@/features/diagram/lib/watermark'
@@ -154,10 +154,24 @@ const blockWidth = (lines: TextLine[]) =>
  * and the free sublabel. Mirrors `ShapeNode.vue`, so an export says exactly what
  * the canvas says.
  */
-function nodeTextLines(node: DiagramNode, paint: ReturnType<typeof nodePaint>): TextLine[] {
+function nodeTextLines(
+  node: DiagramNode,
+  paint: ReturnType<typeof nodePaint>,
+  labelWrapWidth?: number,
+): TextLine[] {
   const lines: TextLine[] = []
   if (node.label) {
-    lines.push({ role: 'label', size: 13, runs: [{ text: node.label, fill: paint.ink, weight: 600 }] })
+    // A text annotation is drawn unbold, and — being free-form — may carry line
+    // breaks the reader typed in, or a run of text long enough to wrap; every
+    // other node's label is one line, always bold. See `ShapeNode.vue`.
+    const weight = node.shape === 'text' ? 400 : 600
+    const rows = node.label.split('\n')
+    const wrapped = labelWrapWidth
+      ? rows.flatMap((row) => wrapText(row, labelWrapWidth, 13, weight))
+      : rows
+    for (const row of wrapped) {
+      lines.push({ role: 'label', size: 13, runs: [{ text: row, fill: paint.ink, weight }] })
+    }
   }
 
   const caption = nodeCaption(node)
@@ -188,7 +202,13 @@ function nodeTextLines(node: DiagramNode, paint: ReturnType<typeof nodePaint>): 
  * that has to be cut falls back to a single muted run, because an ellipsis
  * landing mid-`tspan` is not worth the arithmetic.
  */
-function renderLine(line: TextLine, x: number, baseline: number, available: number, anchor: 'start' | 'middle'): string {
+function renderLine(
+  line: TextLine,
+  x: number,
+  baseline: number,
+  available: number,
+  anchor: 'start' | 'middle' | 'end',
+): string {
   const first = line.runs[0]
   if (!first) return ''
 
@@ -196,7 +216,7 @@ function renderLine(line: TextLine, x: number, baseline: number, available: numb
   const fitted = fitText(plain, available, line.size, first.weight)
   const open =
     `<text x="${round2(x)}" y="${round2(baseline)}" font-size="${line.size}"` +
-    (anchor === 'middle' ? ' text-anchor="middle"' : '')
+    (anchor === 'start' ? '' : ` text-anchor="${anchor}"`)
 
   if (line.runs.length === 1 || fitted !== plain) {
     return `${open} font-weight="${first.weight}" fill="${first.fill}">${escapeXml(fitted)}</text>`
@@ -217,7 +237,7 @@ function renderTextBlock(
   x: number,
   top: number,
   available: number,
-  anchor: 'start' | 'middle',
+  anchor: 'start' | 'middle' | 'end',
 ): string {
   let cursor = top
   return lines
@@ -292,18 +312,39 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
   const inset = contentInset(node.shape, box.height)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2 + inset.top / 2
-
-  const lines = nodeTextLines(node, paint)
-  const text = blockHeight(lines)
-  const top = cy - text / 2
   const iconBlock = hasIcon ? ICON_SIZE + ICON_GAP : 0
 
-  if (centered) {
+  // A text annotation wraps to the room it is actually drawn in — matching the
+  // `whitespace-pre-wrap` box on screen — rather than running on and being cut
+  // off with an ellipsis the way every other node's single-line label is.
+  const room =
+    (node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right) - iconBlock
+  const available = Math.max(24, room)
+  const wrapWidth = node.shape === 'text' ? available : undefined
+
+  const lines = nodeTextLines(node, paint, wrapWidth)
+  const text = blockHeight(lines)
+  const top = cy - text / 2
+
+  if (node.shape === 'text') {
+    // A text annotation picks its own edge to sit against instead of always
+    // centring — the icon-then-text block just moves to whichever edge `align`
+    // names, the same way `ShapeNode.vue` shifts the row with `justify-content`.
+    const align = node.align ?? 'center'
+    const width = Math.min(available, blockWidth(lines))
+    const left =
+      align === 'left'
+        ? box.x + 12
+        : align === 'right'
+          ? box.x + box.width - inset.right - 12 - iconBlock - width
+          : cx - (iconBlock + width) / 2
+    const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle'
+    const textX = align === 'left' ? left + iconBlock : align === 'right' ? left + iconBlock + width : left + iconBlock + width / 2
+    if (hasIcon) parts.push(iconGroup(node.icon!, left, cy - ICON_SIZE / 2, paint.accent))
+    parts.push(renderTextBlock(lines, textX, top, width, anchor))
+  } else if (centered) {
     // Icon then text, the pair centred as one block: a tapering outline leaves
     // no room at the left edge for the content row every other shape uses.
-    const room =
-      (node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right) - iconBlock
-    const available = Math.max(24, room)
     const width = Math.min(available, blockWidth(lines))
     const left = cx - (iconBlock + width) / 2
     if (hasIcon) parts.push(iconGroup(node.icon!, left, cy - ICON_SIZE / 2, paint.accent))
@@ -732,8 +773,9 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
   // Connections route around the nodes, so the same obstacle set the canvas
   // works from is handed over here — an export that re-drew a line straight
   // through a box would not match what was on screen. Zones are excluded: they
-  // are containers the connections legitimately run in and out of.
-  const solids = doc.nodes.filter((n) => n.kind !== 'zone')
+  // are containers the connections legitimately run in and out of. Annotations
+  // are excluded too: they are not part of the architecture, just drawn over it.
+  const solids = doc.nodes.filter((n) => n.kind !== 'zone' && n.kind !== 'annotation')
   const byId = new Map(doc.nodes.map((n) => [n.id, n]))
   for (const edge of doc.edges) {
     const source = boxes.get(edge.source)

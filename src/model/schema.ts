@@ -13,6 +13,7 @@ import {
   ROUTES,
   SHAPE_KEYS,
   SIDES,
+  TEXT_ALIGNS,
 } from '@/model/types'
 import {
   DEFAULT_CANVAS,
@@ -80,11 +81,12 @@ const portsSchema = z.object({
 
 export const nodeSchema = z.object({
   id: idSchema,
-  kind: z.enum(['shape', 'zone']).default(NODE_DEFAULTS.kind),
+  kind: z.enum(['shape', 'zone', 'annotation']).default(NODE_DEFAULTS.kind),
   type: catalogueIdSchema.default(NODE_DEFAULTS.type),
   tech: catalogueIdSchema.default(NODE_DEFAULTS.tech),
   label: z.string().default(''),
   sublabel: z.string().default(NODE_DEFAULTS.sublabel),
+  align: z.enum(TEXT_ALIGNS).default(NODE_DEFAULTS.align),
   shape: z.enum(SHAPE_KEYS).default(NODE_DEFAULTS.shape),
   color: z.enum(COLOR_KEYS).default(NODE_DEFAULTS.color),
   border: z.enum(BORDER_WIDTHS).default(NODE_DEFAULTS.border),

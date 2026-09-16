@@ -58,6 +58,30 @@ export function fitText(text: string, maxWidth: number, fontSize: number, weight
   return lo ? `${value.slice(0, lo)}…` : ''
 }
 
+/**
+ * Greedy word-wrap: breaks `text` into lines no wider than `maxWidth`, matching
+ * the browser's own wrapping closely enough for the two to agree on a line
+ * count. A single word wider than `maxWidth` still gets a line of its own
+ * rather than being split mid-word.
+ */
+export function wrapText(text: string, maxWidth: number, fontSize: number, weight = 400): string[] {
+  if (!text) return ['']
+  const words = text.split(' ')
+  const lines: string[] = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (!current || measureText(candidate, fontSize, weight) <= maxWidth) {
+      current = candidate
+    } else {
+      lines.push(current)
+      current = word
+    }
+  }
+  lines.push(current)
+  return lines
+}
+
 /** Escapes a string for inclusion in SVG/XML markup. */
 export function escapeXml(value: unknown): string {
   return String(value ?? '').replace(

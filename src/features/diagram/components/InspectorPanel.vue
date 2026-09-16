@@ -11,11 +11,14 @@ import {
   AlignVerticalDistributeCenter,
   Lock,
   LockOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Scaling,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -23,8 +26,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { AlignAction } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useInspectorPanel } from '@/features/diagram/composables/useInspectorPanel'
 import ColorSwatches from '@/features/diagram/components/ColorSwatches.vue'
 import IconPicker from '@/features/diagram/components/IconPicker.vue'
 import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
@@ -43,15 +48,17 @@ import {
 } from '@/features/diagram/data/tech'
 import { diagramTheme } from '@/features/diagram/lib/theme'
 import { fitZoneMinSize } from '@/features/diagram/lib/auto-size'
+import { useAppTheme } from '@/composables/useAppTheme'
 
 const emit = defineEmits<{
   (e: 'export'): void
 }>()
 
+const { mode: appThemeMode } = useAppTheme()
+
 const {
   nodes,
   edges,
-  canvas,
   selectedNodes,
   selectedEdges,
   lockedCount,
@@ -76,6 +83,8 @@ const {
   alignSelection,
   sizeOf,
 } = useDiagram()
+
+const { collapsed } = useInspectorPanel()
 
 const node = computed(() =>
   selectedNodes.value.length === 1 && selectedEdges.value.length === 0
@@ -105,16 +114,17 @@ const sizeFloor = computed(() => {
 })
 
 /**
- * A zone can only be a zone kind of thing (VPC, cluster) and a box can only be a
- * box kind of thing, so each is offered its own half of the catalogue.
+ * A zone can only become another kind of zone, a box another kind of box, and
+ * an annotation another kind of annotation — each kind gets its own slice of
+ * the catalogue rather than one list mixing "Database" in with "Text".
  */
 const typeGroups = computed(() => {
-  const zone = node.value?.type === 'zone'
+  const kind = node.value?.type ?? 'shape'
   return NODE_TYPE_GROUPS.map((group) => ({
     id: group.id,
     label: group.label,
     items: group.types
-      .filter((type) => (type.kind === 'zone') === zone)
+      .filter((type) => (type.kind ?? 'shape') === kind)
       .map((type) => ({
         id: type.id,
         label: type.label,
@@ -171,6 +181,7 @@ const SHAPE_LABELS: Record<string, string> = {
   diamond: 'Diamond',
   circle: 'Circle',
   note: 'Note',
+  text: 'Text',
 }
 
 /**
@@ -187,6 +198,12 @@ const WIDTH_OPTIONS = [
 const BORDER_OPTIONS = [
   { value: 'none', label: 'None', title: 'No outline' },
   ...WIDTH_OPTIONS,
+]
+
+const ALIGN_OPTIONS = [
+  { value: 'left', label: 'Left' },
+  { value: 'center', label: 'Center' },
+  { value: 'right', label: 'Right' },
 ]
 
 const SIDE_GLYPHS: Record<PortSide, string> = {
@@ -248,7 +265,7 @@ const stats = computed(() => ({
   edges: edges.value.length,
 }))
 
-const defaultEdgeHex = computed(() => diagramTheme(canvas.theme).edge)
+const defaultEdgeHex = computed(() => diagramTheme(appThemeMode.value).edge)
 
 /** Text fields coalesce into one undo step per focus, not one per keystroke. */
 function editText(id: string, field: 'label' | 'sublabel', value: string) {
@@ -331,20 +348,55 @@ function setRouting(
 </script>
 
 <template>
-  <aside class="bg-sidebar flex w-72 shrink-0 flex-col border-l">
-    <header class="flex h-10 shrink-0 items-center border-b px-3">
-      <span class="text-muted-foreground text-[10px] font-bold tracking-[0.09em] uppercase">
+  <aside
+    class="bg-sidebar flex shrink-0 flex-col border-l transition-[width] duration-150"
+    :class="collapsed ? 'w-9' : 'w-72'"
+  >
+    <header
+      class="flex h-10 shrink-0 items-center border-b px-3"
+      :class="collapsed ? 'justify-center px-0' : ''"
+    >
+      <span
+        v-if="!collapsed"
+        class="text-muted-foreground text-[10px] font-bold tracking-[0.09em] uppercase"
+      >
         {{ title }}
       </span>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-6"
+            :class="{ 'ml-auto': !collapsed }"
+            @click="collapsed = !collapsed"
+          >
+            <PanelRightClose v-if="!collapsed" />
+            <PanelRightOpen v-else />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent :side="collapsed ? 'left' : 'bottom'">
+          {{ collapsed ? 'Expand inspector' : 'Collapse inspector' }}
+        </TooltipContent>
+      </Tooltip>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div v-show="!collapsed" class="min-h-0 flex-1 overflow-y-auto">
       <!-- ------------------------------------------------------------ node -->
       <template v-if="node">
         <section class="space-y-3 border-b p-3">
           <div class="space-y-1.5">
             <Label class="text-xs">Label</Label>
+            <Textarea
+              v-if="node.type === 'annotation'"
+              :model-value="node.data.label"
+              class="min-h-16 resize-y text-sm"
+              rows="3"
+              @update:model-value="editText(node.id, 'label', String($event))"
+              @blur="endCoalesce()"
+            />
             <Input
+              v-else
               :model-value="node.data.label"
               class="h-8 text-sm"
               @update:model-value="editText(node.id, 'label', String($event))"
@@ -359,6 +411,14 @@ function setRouting(
               placeholder="protocol, SLA, note…"
               @update:model-value="editText(node.id, 'sublabel', String($event))"
               @blur="endCoalesce()"
+            />
+          </div>
+          <div v-if="node.type === 'annotation'" class="space-y-1.5">
+            <Label class="text-xs">Align</Label>
+            <SegmentedField
+              :model-value="node.data.align"
+              :options="ALIGN_OPTIONS"
+              @update:model-value="withCommit(() => updateNodeData(node!.id, { align: $event as never }))"
             />
           </div>
         </section>
@@ -444,7 +504,7 @@ function setRouting(
           and only on the side they are on. Each side is counted on its own, and
           the points spread themselves evenly along it.
         -->
-        <section v-if="node.type !== 'zone'" class="space-y-2 border-b p-3">
+        <section v-if="node.type !== 'zone' && node.type !== 'annotation'" class="space-y-2 border-b p-3">
           <Label class="text-xs">Connection points</Label>
           <div class="grid grid-cols-2 gap-2">
             <div v-for="side in PORT_SIDES" :key="side" class="relative">
@@ -924,6 +984,8 @@ function setRouting(
             <dd>fit view to content</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">L</kbd></dt>
             <dd>laser pointer for presenting</dd>
+            <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">P</kbd></dt>
+            <dd>presentation mode</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⇧⌘F</kbd></dt>
             <dd>size nodes to their text</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘G</kbd></dt>

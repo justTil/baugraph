@@ -20,6 +20,7 @@ import type {
   Route,
   ShapeKey,
   Side,
+  TextAlign,
   Vec2,
 } from '@/model'
 import {
@@ -53,6 +54,8 @@ export interface NodeData {
   /** Technology id — what it runs on. Drawn next to the type. */
   tech: string
   sublabel: string
+  /** Horizontal placement of the label. Only a text annotation exposes this. */
+  align: TextAlign
   shape: ShapeKey
   color: ColorKey
   /** Weight of the node's outline. */
@@ -97,11 +100,11 @@ export interface WaypointRef {
 // `any` for the custom-events slot mirrors Vue Flow's own default; narrowing it
 // makes the node type incompatible with the library's internal `GraphNode`.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type BgNode = Node<NodeData, any, 'shape' | 'zone'>
+export type BgNode = Node<NodeData, any, 'shape' | 'zone' | 'annotation'>
 export type BgEdge = Edge<EdgeData>
 
 /** A node as it exists in the store: `data` and `type` are always populated. */
-export type ResolvedNode = BgNode & { type: 'shape' | 'zone'; data: NodeData }
+export type ResolvedNode = BgNode & { type: 'shape' | 'zone' | 'annotation'; data: NodeData }
 /** An edge as it exists in the store: `data` is always populated. */
 export type ResolvedEdge = BgEdge & { data: EdgeData }
 
@@ -332,7 +335,11 @@ function createDiagramStore(documentId: string) {
   const ZONE_Z = 0
   const EDGE_Z = 50
   const NODE_Z = 100
-  const zIndexFor = (kind: 'shape' | 'zone') => (kind === 'zone' ? ZONE_Z : NODE_Z)
+  // Above every shape, so an annotation dropped on an already-busy diagram is
+  // never the one that ends up hidden underneath something else.
+  const ANNOTATION_Z = 150
+  const zIndexFor = (kind: DiagramNode['kind']) =>
+    kind === 'zone' ? ZONE_Z : kind === 'annotation' ? ANNOTATION_Z : NODE_Z
 
   function toVueFlowNode(node: DiagramNode): BgNode {
     const locked = node.locked ?? false
@@ -345,15 +352,19 @@ function createDiagramStore(documentId: string) {
       // Deliberately no `extent: 'parent'`: dragging a node out of its zone is how
       // you ungroup it, and dragging one in is how you group it (see `regroup`).
       zIndex: zIndexFor(node.kind),
-      selectable: !locked,
-      draggable: !locked,
-      connectable: !locked,
-      focusable: !locked,
+      // `undefined` (not `true`) when unlocked: an explicit per-node value beats
+      // Vue Flow's pane-wide `nodesDraggable`/`elementsSelectable`/etc, which is
+      // how presentation mode locks the canvas — only a locked node forces `false`.
+      selectable: locked ? false : undefined,
+      draggable: locked ? false : undefined,
+      connectable: locked ? false : undefined,
+      focusable: locked ? false : undefined,
       data: {
         label: node.label,
         type: node.type ?? '',
         tech: node.tech ?? '',
         sublabel: node.sublabel ?? '',
+        align: node.align ?? 'center',
         shape: node.shape,
         color: node.color,
         border: node.border ?? 'regular',
@@ -413,11 +424,12 @@ function createDiagramStore(documentId: string) {
   function toModelNode(node: BgNode): DiagramNode {
     return {
       id: node.id,
-      kind: node.type === 'zone' ? 'zone' : 'shape',
+      kind: node.type === 'zone' || node.type === 'annotation' ? node.type : 'shape',
       type: node.data?.type ?? '',
       tech: node.data?.tech ?? '',
       label: node.data?.label ?? '',
       sublabel: node.data?.sublabel ?? '',
+      align: node.data?.align ?? 'center',
       shape: node.data?.shape ?? 'rect',
       color: node.data?.color ?? 'slate',
       border: node.data?.border ?? 'regular',
@@ -1049,10 +1061,10 @@ function createDiagramStore(documentId: string) {
       target.has(n.id)
         ? {
             ...n,
-            selectable: !locked,
-            draggable: !locked,
-            connectable: !locked,
-            focusable: !locked,
+            selectable: locked ? false : undefined,
+            draggable: locked ? false : undefined,
+            connectable: locked ? false : undefined,
+            focusable: locked ? false : undefined,
             selected: locked ? false : (n as Partial<GraphNode>).selected,
             data: { ...(n.data as NodeData), locked },
           }
@@ -1613,7 +1625,7 @@ function createDiagramStore(documentId: string) {
     watch([nodes, edges, flows, meta, canvas], persist, { deep: true })
     // The canvas settings and the flows are ours alone — nothing but an edit
     // moves them — so they can be watched directly for what `commit` misses:
-    // the toolbar's theme and grid toggles.
+    // the toolbar's grid/snap toggles.
     watch([flows, meta, canvas], () => (dirty.value = true), { deep: true })
     // A bend point's selection outlives the edge it came from only by accident
     // — deleting a connection, undoing its creation, or clearing its last

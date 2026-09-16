@@ -7,6 +7,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // The extension host imports the editor's API, which only exists inside
+      // VS Code's own process. `tests/extension/vscode.stub.ts` stands in for it.
+      vscode: fileURLToPath(new URL('./tests/extension/vscode.stub.ts', import.meta.url)),
     },
   },
   test: {
