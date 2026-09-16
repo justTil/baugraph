@@ -73,31 +73,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         Presentation mode drops the webview's own chrome too, the same as the
         nav and header it stands in for on the web — just the canvas is left
         to share.
-      -->
-      <template v-if="!presenting">
-        <header class="flex h-10 shrink-0 items-center gap-1 border-b px-2">
-          <SidebarTrigger class="size-7" />
-          <span class="text-muted-foreground truncate font-mono text-xs">
-            {{ fileName }}
-            <span v-if="store.dirty.value" aria-hidden="true">•</span>
-          </span>
-          <div :id="HEADER_ACTIONS_SLOT_ID" class="ml-auto flex items-center gap-1" />
-        </header>
 
-        <div
-          :id="HEADER_SLOT_ID"
-          class="flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1"
-        />
-      </template>
-      <!--
-        Both slot targets stay in the DOM — hidden rather than removed — since
-        the toolbar's own Teleport below reaches for them regardless of
-        whether this view is presenting.
+        Both slot targets stay mounted regardless — `v-show` rather than
+        `v-if`/`v-else` — since the toolbar's own Teleport below reaches for
+        them by id: swapping in a freshly mounted element with the same id
+        would leave whatever was already teleported in behind, stranded on
+        the discarded one.
       -->
-      <div v-else class="hidden">
-        <div :id="HEADER_ACTIONS_SLOT_ID" />
-        <div :id="HEADER_SLOT_ID" />
-      </div>
+      <header v-show="!presenting" class="flex h-10 shrink-0 items-center gap-1 border-b px-2">
+        <SidebarTrigger class="size-7" />
+        <span class="text-muted-foreground truncate font-mono text-xs">
+          {{ fileName }}
+          <span v-if="store.dirty.value" aria-hidden="true">•</span>
+        </span>
+        <div :id="HEADER_ACTIONS_SLOT_ID" class="ml-auto flex items-center gap-1" />
+      </header>
+
+      <div
+        v-show="!presenting"
+        :id="HEADER_SLOT_ID"
+        class="flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1"
+      />
 
       <!--
         Only once the file has been read: the canvas would otherwise mount on a
