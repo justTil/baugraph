@@ -67,6 +67,13 @@ All notable changes to this project will be documented in this file.
   toggle changed a per-diagram setting, switching tabs could silently flip it
   back. It's one setting now — see "One dark mode setting for the whole app"
   above.
+- **The GitHub Pages deploy could fail type-checking over the VS Code
+  extension.** The app's `type-check` step type-checked the extension host
+  test, which imports the extension's `vscode`-dependent code; that only
+  resolved locally because the extension's own dependencies happened to be
+  installed already. On a clean runner it isn't, so the deploy build broke.
+  The extension test suite is now excluded from the app's type-check — it
+  still runs under Vitest, and the extension has its own `type-check` step.
 
 ## [1.28.0]
 
