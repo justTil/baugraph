@@ -30,7 +30,7 @@ export interface NodeType {
   listIcon?: string
   color: ColorKey
   shape?: ShapeKey
-  kind?: 'shape' | 'zone'
+  kind?: 'shape' | 'zone' | 'annotation'
   width?: number
   height?: number
   /** Id of the technology category offered first for this type. */
@@ -70,6 +70,23 @@ export const NODE_TYPE_GROUPS: NodeTypeGroup[] = [
         shape: 'note',
         width: 180,
         height: 84,
+      },
+    ],
+  },
+  {
+    id: 'annotations',
+    label: 'Annotations',
+    types: [
+      {
+        id: 'text',
+        label: 'Text',
+        listIcon: 'type',
+        color: 'slate',
+        shape: 'text',
+        kind: 'annotation',
+        width: 120,
+        height: 36,
+        aliases: ['label', 'caption'],
       },
     ],
   },

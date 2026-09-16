@@ -16,12 +16,12 @@ import {
   nearestSegmentIndex,
 } from '@/features/diagram/lib/edge-path'
 import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { measureText } from '@/features/diagram/lib/text'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
 const {
-  canvas,
   flows,
   reconnectEdge,
   reconnectingEdge,
@@ -36,8 +36,9 @@ const {
 } = useDiagram()
 const { getNodes, screenToFlowCoordinate, findEdge } = useVueFlow()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
+const { mode: appThemeMode } = useAppTheme()
 
-const theme = computed(() => diagramTheme(canvas.theme))
+const theme = computed(() => diagramTheme(appThemeMode.value))
 
 /** Absolute box of a node, including any parent offset Vue Flow has applied. */
 const boxOf = (node: EdgeProps['sourceNode']) => ({
@@ -53,10 +54,20 @@ const boxOf = (node: EdgeProps['sourceNode']) => ({
  * Zones are left out on purpose: a zone is a container, and the nodes a
  * connection runs between routinely sit inside one. Routing around them would
  * send every line that leaves a group on a tour of the canvas.
+ *
+ * Annotations are left out for the opposite reason: they are not part of the
+ * architecture at all, just something drawn on top of it, so a connection
+ * passes straight underneath one exactly as it would under nothing.
  */
 const obstacles = computed(() =>
   getNodes.value
-    .filter((node) => node.type !== 'zone' && node.id !== props.source && node.id !== props.target)
+    .filter(
+      (node) =>
+        node.type !== 'zone' &&
+        node.type !== 'annotation' &&
+        node.id !== props.source &&
+        node.id !== props.target,
+    )
     .map(boxOf),
 )
 

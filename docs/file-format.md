@@ -90,6 +90,16 @@ All in service of readable diffs:
   stands out.
 - **Keys are written in a fixed order** and coordinates are rounded, so
   saving an unchanged diagram twice produces byte-identical output.
+- **Every array is sorted on write**, so a diagram has exactly one file no
+  matter who drew it or in what order. Nodes come out in hierarchy order —
+  a zone, then everything inside it, then the next zone — which also keeps a
+  parent ahead of its children. Connections are grouped by the node they
+  leave, then the one they reach; flows are ordered by id, and a flow's
+  `edges` follow the order the connections are written in above them. Keys
+  inside a `data` block are sorted too. None of this carries meaning: paint
+  order comes from a node's `kind`, and a flow's hops are derived from the
+  graph — so sorting costs nothing and takes "two people built the same
+  diagram in a different order" out of the diff entirely.
 - **`position` and `size` stay on one line**, keeping "moved a node" to a
   one-line diff.
 - **A child's `position` is relative to its `parent` zone**, so moving a

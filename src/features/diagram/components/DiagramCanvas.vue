@@ -14,19 +14,33 @@ import type {
 import { ConnectionMode, PanOnScrollMode, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { AlignCenterHorizontal, AlignCenterVertical, Check, Scaling, Waypoints } from '@lucide/vue'
+import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  Check,
+  Crosshair,
+  Minimize2,
+  Presentation,
+  Scaling,
+  Sparkles,
+  Waypoints,
+} from '@lucide/vue'
 import type { ColorKey, DiagramParseError } from '@/model'
 import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Toggle } from '@/components/ui/toggle'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { isStartupSample } from '@/features/diagram/composables/useEditorTabs'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { canvasId, useCanvas } from '@/features/diagram/composables/useCanvas'
 import { usePanel } from '@/features/workspace/composables/usePanel'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { useSavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
@@ -84,6 +98,10 @@ const {
   replaceDocument,
 } = useDiagram()
 
+// Flags one of the worked examples opened on a first visit, so a newcomer
+// poking at the canvas knows it is not their own diagram.
+const isDemo = computed(() => isStartupSample(documentId))
+
 const {
   fitView,
   screenToFlowCoordinate,
@@ -100,6 +118,7 @@ const { place, placeAtScreen } = usePlacement()
 const { to: connectTo } = useConnectionTarget()
 const { installFlowRuntime, stopFlowRuntime } = useFlows()
 const { active: laserActive } = useLaserPointer()
+const { presenting, exit: exitPresentation, toggle: togglePresentation } = usePresentation()
 
 /** The wrapper the laser pointer tracks the cursor against. */
 const canvasHost = ref<HTMLElement | null>(null)
@@ -107,10 +126,14 @@ const canvasHost = ref<HTMLElement | null>(null)
 // shortcuts below only belong to it while it is the dock's focused panel.
 const { isActive, isVisible } = usePanel()
 
-const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode) }
+// An annotation draws exactly like a shape — icon, label, no chrome of its
+// own — it is only kept a separate Vue Flow type so edges and the z-order
+// can single it out (see `zIndexFor` and the obstacle list in `DiagramEdge`).
+const nodeTypes = { shape: markRaw(ShapeNode), zone: markRaw(ZoneNode), annotation: markRaw(ShapeNode) }
 const edgeTypes = { diagram: markRaw(DiagramEdge) }
 
-const theme = computed(() => diagramTheme(canvas.theme))
+const { mode: appThemeMode } = useAppTheme()
+const theme = computed(() => diagramTheme(appThemeMode.value))
 
 /** Live label/size of whichever node is being resized, for the canvas's own indicator. */
 const resizingNode = computed(() => {
@@ -185,6 +208,19 @@ function setViewMode(next: string | undefined) {
   viewMode.value = next as 'diagram' | 'json'
 }
 
+/**
+ * Presenting always shows the canvas, never raw JSON text sitting in an
+ * editable Monaco instance — the switch back to it is hidden along with the
+ * rest of the editing chrome, so this is what actually gets there. A valid
+ * edit is flushed in first; an invalid one is simply left behind rather than
+ * kept open and editable behind the presenter's back.
+ */
+watch(presenting, (on) => {
+  if (!on || viewMode.value !== 'json') return
+  setViewMode('diagram')
+  viewMode.value = 'diagram'
+})
+
 /** Minimap swatches echo each node's own colour instead of a flat grey. */
 function minimapNodeColor(node: { data?: { color?: ColorKey }; type?: string }) {
   const paint = nodePaint(
@@ -233,6 +269,7 @@ const connectionLineStyle = computed(() =>
  * behind, which made every mis-aimed connection something to undo.
  */
 function onConnect(connection: Connection) {
+  if (presenting.value) return
   commit()
   endCoalesce()
   const from = endpointOf(connection.sourceHandle)
@@ -248,12 +285,14 @@ function onConnect(connection: Connection) {
 /* ------------------------------------------------------- palette drag/drop */
 
 function onDragOver(event: DragEvent) {
+  if (presenting.value) return
   if (!event.dataTransfer?.types.includes(PALETTE_DRAG_TYPE)) return
   event.preventDefault()
   event.dataTransfer.dropEffect = 'copy'
 }
 
 function onDrop(event: DragEvent) {
+  if (presenting.value) return
   const payload = event.dataTransfer?.getData(PALETTE_DRAG_TYPE)
   if (!payload) return
   event.preventDefault()
@@ -277,12 +316,20 @@ const menuOpen = ref(false)
 /** Screen point of the last right-click; anchors the edge label editor. */
 const menuPoint = ref({ x: 0, y: 0 })
 
+/** The menu is forced shut by `:open` while presenting; this keeps it from also moving the selection. */
+function onMenuOpenChange(open: boolean) {
+  if (presenting.value) return
+  menuOpen.value = open
+}
+
 function onContextMenuCapture(event: MouseEvent) {
+  if (presenting.value) return
   menuTarget.value = null
   menuPoint.value = { x: event.clientX, y: event.clientY }
 }
 
 function onNodeContextMenu({ node }: NodeMouseEvent) {
+  if (presenting.value) return
   menuTarget.value = { kind: 'node', id: node.id }
   // Right-clicking outside the current selection moves the selection there, so
   // the menu always acts on what the user is pointing at.
@@ -293,6 +340,7 @@ function onNodeContextMenu({ node }: NodeMouseEvent) {
 }
 
 function onEdgeContextMenu({ edge }: EdgeMouseEvent) {
+  if (presenting.value) return
   menuTarget.value = { kind: 'edge', id: edge.id }
   if (!edge.selected) {
     removeSelectedElements()
@@ -301,10 +349,12 @@ function onEdgeContextMenu({ edge }: EdgeMouseEvent) {
 }
 
 function onSelectionContextMenu() {
+  if (presenting.value) return
   menuTarget.value = { kind: 'selection' }
 }
 
 function onPaneContextMenu(event: MouseEvent) {
+  if (presenting.value) return
   menuTarget.value = {
     kind: 'pane',
     at: screenToFlowCoordinate({ x: event.clientX, y: event.clientY }),
@@ -330,8 +380,19 @@ const editing = ref<{
   left: number
   top: number
   width: number
+  height?: number
+  /** A text annotation edits as a textarea, so Enter writes a line rather than closing it. */
+  multiline?: boolean
 } | null>(null)
-const editorInput = ref<HTMLInputElement | null>(null)
+const editorInput = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
+
+const ALIGN_TEXT: Record<string, string> = { left: 'text-left', center: 'text-center', right: 'text-right' }
+
+/** The alignment the node being edited draws its label with, for the overlay to match. */
+const editingAlign = computed(() => {
+  if (!editing.value || editing.value.kind !== 'node') return 'center'
+  return findNode(editing.value.id)?.data.align ?? 'center'
+})
 
 function focusEditor() {
   nextTick(() => {
@@ -349,13 +410,16 @@ function openEditor(id: string) {
   const host = rect.closest('.vue-flow')?.getBoundingClientRect()
   if (!host) return
 
+  const multiline = node.type === 'annotation'
   editing.value = {
     kind: 'node',
     id,
     value: node.data.label ?? '',
     left: box.left - host.left,
-    top: box.top - host.top + (node.type === 'zone' ? 4 : box.height / 2 - 14),
+    top: box.top - host.top + (multiline || node.type === 'zone' ? 4 : box.height / 2 - 14),
     width: box.width,
+    height: multiline ? Math.max(28, box.height - 8) : undefined,
+    multiline,
   }
   focusEditor()
 }
@@ -408,10 +472,12 @@ function commitEditor(save: boolean) {
 }
 
 function onNodeDoubleClick({ node }: NodeMouseEvent) {
+  if (presenting.value) return
   openEditor(node.id)
 }
 
 function onPaneDoubleClick(event: MouseEvent) {
+  if (presenting.value) return
   place(lastItem.value, screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
 }
 
@@ -534,6 +600,29 @@ function isTyping(target: EventTarget | null): boolean {
 function onKeyDown(event: KeyboardEvent) {
   // The context menu handles its own keys; ⌫ while it is open must not delete.
   if (!isActive.value || menuOpen.value || isTyping(event.target)) return
+
+  // Presenting takes every editing shortcut off the table — only the keys
+  // that drive the presentation itself (and, unusually, still work with the
+  // rest of the canvas locked down) do anything below.
+  if (presenting.value) {
+    switch (event.key) {
+      case 'l':
+      case 'L':
+        laserActive.value = !laserActive.value
+        break
+      case 'p':
+      case 'P':
+        void togglePresentation()
+        break
+      case 'Escape':
+        event.preventDefault()
+        if (laserActive.value) laserActive.value = false
+        else void exitPresentation()
+        break
+    }
+    return
+  }
+
   const meta = event.metaKey || event.ctrlKey
 
   if (meta) {
@@ -606,10 +695,18 @@ function onKeyDown(event: KeyboardEvent) {
       // mid-talk rather than mid-edit.
       laserActive.value = !laserActive.value
       break
+    case 'p':
+    case 'P':
+      // Presentation mode, same reasoning as the laser pointer above.
+      void togglePresentation()
+      break
     case 'Escape':
       if (laserActive.value) {
         event.preventDefault()
         laserActive.value = false
+      } else if (presenting.value) {
+        event.preventDefault()
+        void exitPresentation()
       }
       break
     case 'Enter': {
@@ -690,6 +787,46 @@ watch(savedNotice, (notice) => {
 onBeforeUnmount(() => clearTimeout(savedTimer))
 
 /**
+ * A one-time reminder, shown for a few seconds when presentation mode starts,
+ * that nothing on the canvas answers the pointer or the keyboard any more —
+ * otherwise the first thing a presenter learns about it is a click that does
+ * nothing. Read once and gone, the same as the laser pointer's own hint,
+ * which takes over the same spot the moment it has something more useful to
+ * say.
+ */
+const PRESENTATION_HINT_MS = 4000
+const presentationHint = ref(false)
+let presentationHintTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(presenting, (on) => {
+  clearTimeout(presentationHintTimer)
+  presentationHint.value = on
+  if (on) presentationHintTimer = setTimeout(() => (presentationHint.value = false), PRESENTATION_HINT_MS)
+})
+
+onBeforeUnmount(() => clearTimeout(presentationHintTimer))
+
+/**
+ * The top-centre hint sits lower while presenting, to clear the laser/exit
+ * controls in the corner — but only for the few seconds a presenter needs to
+ * notice that box. Once it's been seen, the hint can sit at its normal height
+ * even if the laser pointer keeps it on screen for the rest of the talk.
+ */
+const PRESENTATION_SPACING_MS = 5000
+const presentationSpacious = ref(false)
+let presentationSpacingTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(presenting, (on) => {
+  clearTimeout(presentationSpacingTimer)
+  presentationSpacious.value = on
+  if (on) {
+    presentationSpacingTimer = setTimeout(() => (presentationSpacious.value = false), PRESENTATION_SPACING_MS)
+  }
+})
+
+onBeforeUnmount(() => clearTimeout(presentationSpacingTimer))
+
+/**
  * Re-fit whenever a document is loaded from disk or storage — but only once Vue
  * Flow has measured the nodes it was just handed, because fitting around boxes
  * of no known size lands on nothing. The timer is the way out for a document
@@ -717,7 +854,9 @@ watch(isVisible, (visible) => {
 </script>
 
 <template>
-  <ContextMenu @update:open="menuOpen = $event">
+  <!-- Controlled rather than left to open itself: presenting forces it shut,
+       since right-clicking is otherwise still one edit away from the canvas. -->
+  <ContextMenu :open="presenting ? false : menuOpen" @update:open="onMenuOpenChange">
     <div
       ref="canvasHost"
       class="relative min-h-0 flex-1"
@@ -762,6 +901,10 @@ watch(isVisible, (visible) => {
           :elevate-nodes-on-select="false"
           :connection-line-style="connectionLineStyle"
           :default-edge-options="{ type: 'diagram' }"
+          :nodes-draggable="!presenting"
+          :nodes-connectable="!presenting"
+          :edges-updatable="!presenting"
+          :elements-selectable="!presenting"
           @connect="onConnect"
           @node-drag-start="onNodeDragStart"
           @node-drag="alignDrag"
@@ -789,6 +932,16 @@ watch(isVisible, (visible) => {
             class="!right-3 !bottom-3 !rounded-md !border"
           />
         </VueFlow>
+
+        <!-- Marks one of the worked examples opened on a first visit, so a
+             newcomer poking at the canvas knows it is not their own diagram. -->
+        <div v-if="isDemo" class="pointer-events-none absolute top-4 left-4 z-20">
+          <Alert class="w-auto shadow-lg">
+            <Sparkles />
+            <AlertTitle>Demo</AlertTitle>
+            <AlertDescription>Sample diagram — not your own work</AlertDescription>
+          </Alert>
+        </div>
 
         <!-- Top-centre indicator, up for as long as a connection's own end is being dragged loose. -->
         <Transition
@@ -875,9 +1028,35 @@ watch(isVisible, (visible) => {
           </g>
         </svg>
 
-        <!-- Inline label editor, positioned over the node or connection being renamed. -->
+        <!--
+          Inline label editor, positioned over the node or connection being
+          renamed. A text annotation edits as a textarea — Enter writes a line
+          instead of closing the editor, the same as the Label field in the
+          inspector — everything else keeps the single-line input, where Enter
+          commits.
+        -->
+        <textarea
+          v-if="editing && editing.multiline"
+          ref="editorInput"
+          v-model="editing.value"
+          class="absolute z-30 resize-none rounded border px-1.5 py-0.5 text-[13px] leading-tight outline-none"
+          :class="ALIGN_TEXT[editingAlign]"
+          :style="{
+            left: `${editing.left}px`,
+            top: `${editing.top}px`,
+            width: `${editing.width}px`,
+            height: `${editing.height}px`,
+            borderColor: theme.selection,
+            background: theme.bg,
+            color: theme.ink,
+          }"
+          spellcheck="false"
+          @keydown.esc.prevent="commitEditor(false)"
+          @keydown.stop
+          @blur="commitEditor(true)"
+        />
         <input
-          v-if="editing"
+          v-else-if="editing"
           ref="editorInput"
           v-model="editing.value"
           class="absolute z-30 rounded border px-1.5 py-0.5 text-center text-[13px] font-semibold outline-none"
@@ -963,7 +1142,7 @@ watch(isVisible, (visible) => {
     </div>
 
     <!-- Always on top, so there is a way back from JSON however it was reached. -->
-    <div class="absolute top-4 right-4 z-40 flex items-center gap-2">
+    <div v-if="!presenting" class="absolute top-4 right-4 z-40 flex items-center gap-2">
       <!--
         Only up while two or more bend points are selected — aligning one
         point against itself means nothing. Sits beside the JSON switch
@@ -1010,31 +1189,86 @@ watch(isVisible, (visible) => {
       </label>
     </div>
 
+    <!--
+      Presentation mode replaces the editing chrome above with just enough to
+      run a call: the toolbar it normally lives in is hidden along with the
+      rest of the app chrome, so the laser pointer needs a switch here too,
+      and there has to be a pointer-driven way back out.
+    -->
+    <div
+      v-else
+      class="absolute top-4 right-4 z-40 flex items-center gap-1 rounded-lg border p-1 shadow-sm"
+      :style="{ background: theme.surface, borderColor: theme.line }"
+    >
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Toggle
+            size="sm"
+            :model-value="laserActive"
+            aria-label="Laser pointer"
+            @update:model-value="laserActive = Boolean($event)"
+          >
+            <Crosshair :size="15" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent>Laser pointer (L)</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button variant="ghost" size="icon" class="size-7" @click="exitPresentation()">
+            <Minimize2 :size="15" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Exit presentation (Esc)</TooltipContent>
+      </Tooltip>
+    </div>
+
     <!-- The presentation laser pointer: a cursor-following glow, on top of everything. -->
     <LaserPointer :host="canvasHost" />
 
-    <!-- Bottom-centre hint while the laser pointer is on. -->
+    <!--
+      Top-centre hint: the laser pointer's own, while it is on, otherwise the
+      one-time reminder that presenting has locked the canvas. The laser wins
+      when both are true, since it is the more useful thing to say.
+    -->
     <Transition
       enter-active-class="transition duration-150 ease-out"
-      enter-from-class="translate-y-1 opacity-0"
+      enter-from-class="-translate-y-1 opacity-0"
       leave-active-class="transition duration-150 ease-in"
-      leave-to-class="translate-y-1 opacity-0"
+      leave-to-class="-translate-y-1 opacity-0"
     >
       <div
-        v-if="laserActive"
-        class="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+        v-if="laserActive || presentationHint"
+        class="pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 transition-[top] duration-300"
+        :class="presenting && presentationSpacious ? 'top-16' : 'top-4'"
       >
         <div
           class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
           :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
         >
-          <span class="size-2 rounded-full bg-[#ff2d2d] shadow-[0_0_6px_#ff2d2d]" />
-          Laser pointer on — hold to draw, press
-          <kbd class="rounded border px-1 font-sans text-[11px]">L</kbd> or
-          <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
+          <template v-if="laserActive">
+            <span class="size-2 rounded-full bg-[#ff2d2d] shadow-[0_0_6px_#ff2d2d]" />
+            Laser pointer on — hold to draw, press
+            <kbd class="rounded border px-1 font-sans text-[11px]">L</kbd> or
+            <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
+          </template>
+          <template v-else>
+            <Presentation :size="13" />
+            Presentation mode — editing is disabled. Press
+            <kbd class="rounded border px-1 font-sans text-[11px]">Esc</kbd> to exit
+          </template>
         </div>
       </div>
     </Transition>
+
+    <!-- Bottom-centre, for as long as presenting is on — unlike the top hint, this doesn't fade. -->
+    <p
+      v-if="presenting"
+      class="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2 text-xs font-medium"
+      :style="{ color: theme.ink, opacity: 0.6 }"
+    >
+      In presentation mode
+    </p>
     </div>
 
     <CanvasContextMenu
@@ -1059,7 +1293,8 @@ watch(isVisible, (visible) => {
 
 /* Vue Flow's default node chrome would double up on the shapes we draw. */
 .vue-flow__node-shape,
-.vue-flow__node-zone {
+.vue-flow__node-zone,
+.vue-flow__node-annotation {
   background: transparent;
   border: none;
   padding: 0;
@@ -1084,7 +1319,8 @@ watch(isVisible, (visible) => {
  * inline style on that wrapper for as long as any node listener is registered.
  */
 .vue-flow__node-shape:not(.selectable),
-.vue-flow__node-zone:not(.selectable) {
+.vue-flow__node-zone:not(.selectable),
+.vue-flow__node-annotation:not(.selectable) {
   pointer-events: none !important;
 }
 

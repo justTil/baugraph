@@ -38,6 +38,7 @@ export const SHAPE_KEYS = [
   'diamond',
   'circle',
   'note',
+  'text',
 ] as const
 export type ShapeKey = (typeof SHAPE_KEYS)[number]
 
@@ -48,6 +49,10 @@ export type ShapeKey = (typeof SHAPE_KEYS)[number]
  */
 export const BORDER_WIDTHS = ['none', 'regular', 'medium', 'thick'] as const
 export type BorderWidth = (typeof BORDER_WIDTHS)[number]
+
+/** Horizontal placement of a node's text within its own box. */
+export const TEXT_ALIGNS = ['left', 'center', 'right'] as const
+export type TextAlign = (typeof TEXT_ALIGNS)[number]
 
 /** Which edge of a node a connection attaches to. `auto` picks the nearest. */
 export const SIDES = ['auto', 'top', 'right', 'bottom', 'left'] as const
@@ -100,8 +105,15 @@ export type Metadata = Record<string, unknown>
 export interface DiagramNode {
   /** Stable identifier. Referenced by edges and by `parent`. */
   id: string
-  /** `shape` = a regular box, `zone` = a labelled container others can sit in. */
-  kind: 'shape' | 'zone'
+  /**
+   * `shape` = a regular box, `zone` = a labelled container others can sit in,
+   * `annotation` = a free-floating overlay — a text label and whatever joins
+   * it later. An annotation carries no connections and is never an obstacle:
+   * it draws on top of everything and a connection routes straight through it
+   * rather than detouring, which is the whole point of dropping one onto a
+   * diagram that already exists without rearranging it.
+   */
+  kind: 'shape' | 'zone' | 'annotation'
   /**
    * What this node *is*, as opposed to how it is drawn (`kind`) or what it is
    * called (`label`): `database`, `api_gateway`, `message_broker`… Ids come from
@@ -119,6 +131,12 @@ export interface DiagramNode {
   label: string
   /** Secondary line under the label — protocol, SLA, cardinality… */
   sublabel?: string
+  /**
+   * Where the label sits within its box. Only a text annotation exposes this —
+   * every other shape centres or left-aligns its label on its own, from the
+   * shape it is drawn on. Omitted means `center`.
+   */
+  align?: TextAlign
   shape: ShapeKey
   color: ColorKey
   /** Weight of the node's outline. Omitted means `regular`. */

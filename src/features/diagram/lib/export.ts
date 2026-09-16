@@ -106,7 +106,23 @@ export async function droppedHandle(
   return handle?.kind === 'file' ? (handle as FileSystemFileHandle) : null
 }
 
+/**
+ * Where a finished export goes.
+ *
+ * A browser tab downloads it, which is what the default below does. A host that
+ * has no downloads — the VS Code webview, which is not allowed to start one —
+ * replaces this with its own way of putting the bytes somewhere.
+ */
+export type DownloadHandler = (filename: string, blob: Blob) => void
+
+let downloadHandler: DownloadHandler | null = null
+
+export function setDownloadHandler(handler: DownloadHandler | null) {
+  downloadHandler = handler
+}
+
 function download(filename: string, blob: Blob) {
+  if (downloadHandler) return downloadHandler(filename, blob)
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

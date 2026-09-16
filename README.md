@@ -35,6 +35,8 @@ source lives in [`docs/`](docs); `npm run docs:dev` runs it locally, and
 | `npm run generate` | Regenerate the JSON Schema and the icon registry |
 | `npm run docs:dev` | VitePress dev server for `docs/`, with its own HMR |
 | `npm run docs:build` | Build `docs/` into `dist/docs/` |
+| `npm run extension:build` | Build the VS Code extension (editor + host) |
+| `npm run extension:package` | Build it and write `extension/baugraph-<version>.vsix` |
 | `./build.sh` | Clean install + type-check + production build (app + docs) |
 | `./manage.sh start [PORT]` | Serve `dist/` behind a load balancer |
 
@@ -282,6 +284,15 @@ Design decisions, all in service of readable diffs:
   spells out what differs from the default, so `"line": "dashed"` stands out.
 - **Keys are written in a fixed order** and coordinates are rounded, so saving an
   unchanged diagram twice produces byte-identical output.
+- **Every array is sorted on write** (`src/model/sort.ts`), so the same diagram has
+  exactly one file no matter who drew it or in what order. Nodes come out in
+  hierarchy order — a zone, then everything inside it, then the next zone, which
+  also keeps a parent ahead of its children — connections are grouped by the node
+  they leave, flows are ordered by id with their `edges` following the order the
+  connections are written in, and the keys of a `data` block are sorted. None of
+  this carries meaning: paint order comes from a node's `kind` and a flow's hops
+  from the graph, so sorting costs nothing and takes "two people drew the same
+  diagram in a different order" out of the diff entirely.
 - **`position` and `size` stay on one line**, keeping "moved a node" to a one-line diff.
 - **A child's `position` is relative to its `parent` zone**, so moving a zone touches
   one line instead of every node inside it. `parent` *is* the grouping, and it chains:
@@ -332,6 +343,35 @@ Exports from the original single-file `diagram-tool.html` are recognised by thei
 shape and converted on open — shapes, sides, routes and Bootstrap icon names are all
 mapped across. See `src/model/migrate.ts`.
 
+## VS Code
+
+A `.baugraph.json` file opens on the canvas inside VS Code, as a custom editor:
+
+```sh
+npm run extension:package     # writes extension/baugraph-<version>.vsix
+code --install-extension extension/baugraph-<version>.vsix
+```
+
+It is the same editor — the web app built for a webview
+(`vite.vscode.config.ts`, entry `src/vscode/main.ts`) — bound to a small host
+bundle (`extension/`) that owns the file. The host never parses a diagram to
+edit one; it moves text, and every change goes through a `WorkspaceEdit`, so
+`⌘S`, undo, revert, hot exit and the source-control diff all behave the way they
+do for a text editor. The format is written by the same `src/model`, so a file
+saved from VS Code and one saved from the browser are byte-identical.
+
+**Format Document** on a diagram file — or `Baugraph: Sort and Normalise Diagram
+File` from the Explorer — rewrites it in the canonical form above, which is how
+a hand-edited or AI-written diagram gets sorted without opening a canvas.
+
+To work on it, press <kbd>F5</kbd> (**Run the VS Code extension**, see
+[`.vscode/launch.json`](.vscode/launch.json)): both halves are rebuilt with
+sourcemaps and an Extension Development Host opens with `examples/` loaded.
+`npm run extension:watch` rebuilds them on save.
+
+See [`docs/vscode.md`](docs/vscode.md) for the rest, and
+[`extension/README.md`](extension/README.md) for building and debugging it.
+
 ## Exports
 
 | Format | Use |
@@ -369,6 +409,9 @@ src/
   components/
     ui/                    shadcn-vue primitives
     layout/                app shell, header, sidebar
+  vscode/                  the editor as VS Code loads it: the webview entry,
+                           the message bridge and the shared protocol
+extension/                 the VS Code extension host (see extension/README.md)
 scripts/                   code generators (JSON Schema, icon registry)
 public/schema/             the published JSON Schema
 examples/                  an example diagram

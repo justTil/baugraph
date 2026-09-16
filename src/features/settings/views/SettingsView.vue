@@ -2,6 +2,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { useActiveDiagram } from '@/features/diagram/composables/useDiagram'
 import { useDocuments } from '@/features/diagram/composables/useDocuments'
 import { discardAllDocuments } from '@/features/diagram/composables/useEditorTabs'
@@ -12,6 +13,7 @@ import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 // the user last worked in - and there may be none open at all.
 const diagram = useActiveDiagram()
 const { documents } = useDocuments()
+const { dark: appDark } = useAppTheme()
 
 function forgetLocalCopies() {
   if (!window.confirm(`Remove all ${documents.value.length} autosaved diagrams from this browser?`))
@@ -24,6 +26,27 @@ function forgetLocalCopies() {
   <div class="mx-auto w-full max-w-2xl space-y-4 overflow-y-auto p-6">
     <Card>
       <CardHeader>
+        <CardTitle>Appearance</CardTitle>
+        <CardDescription>
+          Stored in this browser, not with any diagram — applies to the sidebar,
+          header and every open tab, regardless of which one you're looking at.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-2">
+        <Label>Theme</Label>
+        <SegmentedField
+          :model-value="appDark ? 'dark' : 'light'"
+          :options="[
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]"
+          @update:model-value="appDark = $event === 'dark'"
+        />
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
         <CardTitle>Canvas</CardTitle>
         <CardDescription>
           Stored with the diagram, not with the browser — these apply to
@@ -32,17 +55,6 @@ function forgetLocalCopies() {
         </CardDescription>
       </CardHeader>
       <CardContent v-if="diagram" class="space-y-4">
-        <div class="space-y-2">
-          <Label>Theme</Label>
-          <SegmentedField
-            :model-value="diagram.canvas.theme"
-            :options="[
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]"
-            @update:model-value="diagram.canvas.theme = $event as 'light' | 'dark'"
-          />
-        </div>
         <div class="space-y-2">
           <Label>Grid pitch</Label>
           <SegmentedField

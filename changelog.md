@@ -2,6 +2,72 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.29.0]
+
+### Added
+
+- **A VS Code extension.** `*.baugraph.json` files open on the canvas inside VS
+  Code instead of as JSON — the same editor as the web app, running in a custom
+  editor and writing the same file. Edits go into the document the way a text
+  edit does, so `⌘S`, undo, revert, hot exit, the Timeline and the source-control
+  diff all behave normally, and a split text editor on the same file stays in
+  step as you type. **Format Document** on a diagram file rewrites it in
+  canonical form, `*.baugraph.json` is bound to the published JSON Schema for
+  editing the source by hand, and exports go through a save dialog. Built from
+  this repository with `npm run extension:package`; see `docs/vscode.md`.
+- **Presentation mode.** Toggle it from the toolbar, press **P**, or hit **Esc**
+  to leave — the nav, header, toolbar and inspector all drop away and, where the
+  browser allows it, the page goes full screen too. The laser pointer stays one
+  switch away in a small floating control, since the toolbar it normally lives
+  in is hidden along with everything else. The canvas itself goes view-only for
+  as long as it's on: dragging, connecting, resizing, the right-click menu,
+  double-click rename and every editing shortcut are disabled, with a one-time
+  reminder shown at the top of the canvas — the same spot the laser pointer's
+  own hint uses — so a click that does nothing doesn't come as a surprise. For
+  the first five seconds the hint sits a little lower, clear of the laser/exit
+  controls in the corner, then settles back to its normal spot.
+- **A foldable inspector.** A new button in its header collapses the panel on
+  the right to a thin rail and back, freeing up room to work the canvas without
+  losing the panel entirely. The choice is remembered across reloads.
+- **A "Demo" badge on the worked examples.** The three sample diagrams opened
+  on a first visit now carry a small alert in the top-left corner of the
+  canvas, so it's clear at a glance that what's on screen is a shipped example
+  rather than the user's own work.
+- **One dark mode setting for the whole app.** The moon icon in the toolbar
+  (also in the canvas's right-click menu and a new **Appearance** card in
+  Settings) now switches the sidebar, header, canvas and JSON view together.
+  In the browser it's a single preference stored on the device, defaulting to
+  light, so it stays the same wherever you look instead of changing when you
+  switch tabs. Exports (SVG/PNG/GIF) pick up the same setting, so a downloaded
+  image matches what was on screen.
+- **The VS Code extension follows VS Code's own colour theme by default.**
+  The same toggle there sets an explicit light or dark instead, saved as the
+  `baugraph.theme` setting (Settings UI, settings.json, or the **Baugraph:
+  Diagram Theme…** command, which is also the way back to "match VS Code").
+
+### Changed
+
+- **Diagram files are now written in a canonical order.** Nodes come out in
+  hierarchy order — a zone, then everything inside it — connections are grouped
+  by the node they leave, flows are ordered by id, and the keys of a `data`
+  block are sorted. Array order never carried meaning (paint order comes from a
+  node's `kind`, and a flow's hops from the graph), but it used to be whatever
+  order the diagram happened to be drawn in, so two people building the same
+  diagram produced files full of moved blocks and no changes. The same diagram
+  now has exactly one file. Saving an existing diagram once will show this as a
+  one-off reordering diff.
+- **Toolbar buttons now carry their label alongside the icon** for message
+  flows, play/pause, presentation mode and the laser pointer, so they're easier
+  to scan at a glance. Magnet, grid and the theme toggle stay icon-only.
+
+### Fixed
+
+- **Dark mode used to cover only the canvas, and inconsistently at that.**
+  The sidebar, header and JSON view never picked it up at all, and because the
+  toggle changed a per-diagram setting, switching tabs could silently flip it
+  back. It's one setting now — see "One dark mode setting for the whole app"
+  above.
+
 ## [1.28.0]
 
 ### Added

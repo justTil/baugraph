@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020'
 import { describe, expect, it } from 'vitest'
 import { parse, safeParse, stringify } from '@/model/serialize'
+import { sortDocument } from '@/model/sort'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixturesRoot = resolve(here, '../fixtures')
@@ -106,9 +107,21 @@ for (const version of releaseDirs) {
           }
         })
 
+        /**
+         * Compared against the *canonical* document rather than the one the
+         * fixture happens to spell out: writing sorts every array (see
+         * `model/sort.ts`), so a fixture that predates the sort — or that was
+         * written by hand — legitimately comes back rearranged. Nothing else
+         * about it may change.
+         */
         it(`${name} — round-trips through stringify → parse`, () => {
           const doc = parse(readFileSync(file, 'utf-8'))
-          expect(parse(stringify(doc))).toEqual(doc)
+          expect(parse(stringify(doc))).toEqual(sortDocument(doc))
+        })
+
+        it(`${name} — is written the same way twice`, () => {
+          const once = stringify(parse(readFileSync(file, 'utf-8')))
+          expect(stringify(parse(once))).toBe(once)
         })
       }
     })

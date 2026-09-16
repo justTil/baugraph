@@ -12,16 +12,21 @@ import { CENTERED_SHAPES, contentInset, shapeElements } from '@/features/diagram
 import { fitNodeSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
+import { useAppTheme } from '@/composables/useAppTheme'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 
 const props = defineProps<NodeProps<NodeData>>()
 
-const { canvas, commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
+const { commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
+const { mode: appThemeMode } = useAppTheme()
 const { connecting, from: connectFrom, to: connectTo } = useConnectionTarget()
+const { presenting } = usePresentation()
 
 /** The badge is the only way back: a locked node cannot be selected. */
 function unlock() {
+  if (presenting.value) return
   commit()
   endCoalesce()
   setNodesLocked([props.id], false)
@@ -39,7 +44,7 @@ function onResizeEnd() {
 const width = computed(() => props.dimensions.width || DEFAULT_NODE_SIZE.width)
 const height = computed(() => props.dimensions.height || DEFAULT_NODE_SIZE.height)
 
-const theme = computed(() => diagramTheme(canvas.theme))
+const theme = computed(() => diagramTheme(appThemeMode.value))
 const paint = computed(() =>
   nodePaint({ color: props.data.color, kind: 'shape', border: props.data.border }, theme.value),
 )
@@ -59,6 +64,24 @@ const caption = computed(() => nodeCaption(props.data))
  * A node with no icon centres too — there is nothing for the text to sit beside.
  */
 const centered = computed(() => CENTERED_SHAPES.has(props.data.shape) || !icon.value)
+
+/**
+ * A text annotation picks its own horizontal alignment — left, centre or right
+ * — instead of the shape-driven `centered` rule above, which only ever means
+ * "centre" or "start". Every other node ignores `data.align` entirely.
+ */
+const ALIGN_ROW: Record<string, string> = {
+  left: 'justify-start text-left',
+  center: 'justify-center text-center',
+  right: 'justify-end text-right',
+}
+const contentAlign = computed(() =>
+  props.type === 'annotation'
+    ? ALIGN_ROW[props.data.align] ?? ALIGN_ROW.center
+    : centered.value
+      ? 'justify-center text-center'
+      : '',
+)
 
 /** How much of the row the icon claims, in the same units as the gap below. */
 const ICON_BLOCK = 20 + 10
@@ -120,7 +143,12 @@ const fromHandle = computed(() =>
   connectFrom.value?.nodeId === props.id ? connectFrom.value.id : null,
 )
 
+/**
+ * An annotation is an overlay, not a participant in the graph — it carries no
+ * connection points of its own (see `DiagramNode.kind` in the model).
+ */
 const handles = computed(() => {
+  if (props.type === 'annotation') return []
   const ports = nodePorts(props.data.ports)
   return PORT_SIDES.flatMap((side) => {
     const count = ports[side]
@@ -197,7 +225,7 @@ const handles = computed(() => {
 
     <div
       class="relative flex h-full items-center gap-2.5 px-3"
-      :class="centered ? 'justify-center text-center' : ''"
+      :class="contentAlign"
       :style="{
         paddingTop: `${inset.top}px`,
         paddingRight: `${12 + inset.right}px`,
@@ -219,7 +247,8 @@ const handles = computed(() => {
         :style="{ maxWidth: textWidth }"
       >
         <div
-          class="truncate text-[13px] leading-tight font-semibold"
+          class="text-[13px] leading-tight"
+          :class="type === 'annotation' ? 'whitespace-pre-wrap break-words' : 'truncate font-semibold'"
           :style="{ color: paint.ink }"
         >
           {{ data.label }}
