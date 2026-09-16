@@ -229,7 +229,8 @@ const handles = computed(() => {
         :style="{ maxWidth: textWidth }"
       >
         <div
-          class="truncate text-[13px] leading-tight font-semibold"
+          class="text-[13px] leading-tight"
+          :class="type === 'annotation' ? 'whitespace-pre-wrap break-words' : 'truncate font-semibold'"
           :style="{ color: paint.ink }"
         >
           {{ data.label }}

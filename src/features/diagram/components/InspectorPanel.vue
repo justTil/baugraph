@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -380,7 +381,16 @@ function setRouting(
         <section class="space-y-3 border-b p-3">
           <div class="space-y-1.5">
             <Label class="text-xs">Label</Label>
+            <Textarea
+              v-if="node.type === 'annotation'"
+              :model-value="node.data.label"
+              class="min-h-16 resize-y text-sm"
+              rows="3"
+              @update:model-value="editText(node.id, 'label', String($event))"
+              @blur="endCoalesce()"
+            />
             <Input
+              v-else
               :model-value="node.data.label"
               class="h-8 text-sm"
               @update:model-value="editText(node.id, 'label', String($event))"

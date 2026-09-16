@@ -15,7 +15,7 @@ import {
   mix,
   nodePaint,
 } from '@/features/diagram/lib/theme'
-import { SANS, escapeXml, fitText, measureText } from '@/features/diagram/lib/text'
+import { SANS, escapeXml, fitText, measureText, wrapText } from '@/features/diagram/lib/text'
 import type { FrameOptions } from '@/features/diagram/lib/frame'
 import { frameLayout, frameParts, framed } from '@/features/diagram/lib/frame'
 import type { WatermarkOptions } from '@/features/diagram/lib/watermark'
@@ -154,10 +154,24 @@ const blockWidth = (lines: TextLine[]) =>
  * and the free sublabel. Mirrors `ShapeNode.vue`, so an export says exactly what
  * the canvas says.
  */
-function nodeTextLines(node: DiagramNode, paint: ReturnType<typeof nodePaint>): TextLine[] {
+function nodeTextLines(
+  node: DiagramNode,
+  paint: ReturnType<typeof nodePaint>,
+  labelWrapWidth?: number,
+): TextLine[] {
   const lines: TextLine[] = []
   if (node.label) {
-    lines.push({ role: 'label', size: 13, runs: [{ text: node.label, fill: paint.ink, weight: 600 }] })
+    // A text annotation is drawn unbold, and — being free-form — may carry line
+    // breaks the reader typed in, or a run of text long enough to wrap; every
+    // other node's label is one line, always bold. See `ShapeNode.vue`.
+    const weight = node.shape === 'text' ? 400 : 600
+    const rows = node.label.split('\n')
+    const wrapped = labelWrapWidth
+      ? rows.flatMap((row) => wrapText(row, labelWrapWidth, 13, weight))
+      : rows
+    for (const row of wrapped) {
+      lines.push({ role: 'label', size: 13, runs: [{ text: row, fill: paint.ink, weight }] })
+    }
   }
 
   const caption = nodeCaption(node)
@@ -292,18 +306,23 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
   const inset = contentInset(node.shape, box.height)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2 + inset.top / 2
+  const iconBlock = hasIcon ? ICON_SIZE + ICON_GAP : 0
 
-  const lines = nodeTextLines(node, paint)
+  // A text annotation wraps to the room it is actually drawn in — matching the
+  // `whitespace-pre-wrap` box on screen — rather than running on and being cut
+  // off with an ellipsis the way every other node's single-line label is.
+  const room =
+    (node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right) - iconBlock
+  const available = Math.max(24, room)
+  const wrapWidth = node.shape === 'text' ? available : undefined
+
+  const lines = nodeTextLines(node, paint, wrapWidth)
   const text = blockHeight(lines)
   const top = cy - text / 2
-  const iconBlock = hasIcon ? ICON_SIZE + ICON_GAP : 0
 
   if (centered) {
     // Icon then text, the pair centred as one block: a tapering outline leaves
     // no room at the left edge for the content row every other shape uses.
-    const room =
-      (node.shape === 'diamond' ? box.width * 0.62 : box.width - 24 - inset.right) - iconBlock
-    const available = Math.max(24, room)
     const width = Math.min(available, blockWidth(lines))
     const left = cx - (iconBlock + width) / 2
     if (hasIcon) parts.push(iconGroup(node.icon!, left, cy - ICON_SIZE / 2, paint.accent))
