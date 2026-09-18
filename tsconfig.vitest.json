@@ -1,7 +1,12 @@
 {
   "extends": "./tsconfig.app.json",
   "include": ["env.d.ts", "src/**/*", "src/**/*.vue", "tests/**/*", "vitest.config.ts"],
-  "exclude": [],
+  // The extension host test imports `extension/src/extension.ts`, which needs
+  // the `vscode` ambient types. Those only exist in `extension/node_modules`
+  // (installed separately, via `extension:type-check`) — not here, so a fresh
+  // `npm ci` at the repo root can't resolve them. Type-checking that file is
+  // the extension's own concern, not the web app's.
+  "exclude": ["tests/extension/**"],
   "compilerOptions": {
     "types": ["node"],
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vitest.tsbuildinfo"
