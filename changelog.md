@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
   before this stays byte-identical on the next save. Each author is written on
   one line, and the list is the one array the editor leaves in the order it was
   given — who comes first is the file's decision, not the editor's.
+  In the editor, the inspector's **Diagram** panel (shown when nothing is
+  selected) has a new **Authors** section listing everyone credited, with their
+  email and website as links. Add someone with **Add author**, and hover a name
+  to edit, remove or reorder them — each change is one undo step. A website is
+  only ever linked if it is an `http(s)` address, so a shared file cannot put a
+  script behind the link.
 
 ## [1.29.0]
 
