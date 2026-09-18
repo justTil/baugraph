@@ -1,4 +1,11 @@
-import type { DiagramDocument, DiagramEdge, DiagramNode, MessageFlow } from '@/model/types'
+import type {
+  DiagramAuthor,
+  DiagramDocument,
+  DiagramEdge,
+  DiagramMeta,
+  DiagramNode,
+  MessageFlow,
+} from '@/model/types'
 import { FORMAT_VERSION, PORT_SIDES } from '@/model/types'
 import { EDGE_DEFAULTS, FLOW_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
 import { documentSchema } from '@/model/schema'
@@ -35,6 +42,28 @@ function omitDefaults<T extends object>(value: T, defaults: Partial<T>): Partial
     out[key] = v
   }
   return out as Partial<T>
+}
+
+/**
+ * Drops an author list that credits nobody, and each author's empty contact
+ * fields. Crediting nobody is what a file says by staying silent, so `[]` would
+ * show up as a change in every diagram the moment this feature shipped — the
+ * same reasoning as a node's empty `data` and a document with no `flows`.
+ */
+function trimmedMeta(meta: DiagramMeta): DiagramMeta {
+  const out: DiagramMeta = { ...meta }
+  if (!out.authors?.length) delete out.authors
+  else {
+    out.authors = out.authors.map((author) =>
+      ordered(
+        Object.fromEntries(
+          Object.entries(author).filter(([, v]) => v !== undefined && v !== ''),
+        ) as DiagramAuthor,
+        ['name', 'email', 'website'],
+      ),
+    )
+  }
+  return out
 }
 
 /** Reorders an object's keys to `order`; anything unlisted is appended. */
@@ -186,7 +215,13 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
   return {
     $schema: SCHEMA_URL,
     baugraph: doc.baugraph || FORMAT_VERSION,
-    meta: ordered({ ...doc.meta }, ['title', 'description', 'createdAt', 'updatedAt']),
+    meta: ordered(trimmedMeta(doc.meta), [
+      'title',
+      'description',
+      'authors',
+      'createdAt',
+      'updatedAt',
+    ]),
     canvas: ordered({ ...doc.canvas }, ['theme', 'grid', 'snap', 'snapSize']),
     nodes,
     edges,
@@ -208,9 +243,10 @@ const INLINE_KEYS = new Set(['position', 'size', 'ports'])
  * keyed by edge id, so the keys cannot be listed above — but each override is
  * one small idea ("this one is red") and reads as one line. An edge's manual
  * bend points are a list rather than a map, but the same idea applies: moving
- * one point should touch one line, not four.
+ * one point should touch one line, not four. An author is one person, so adding
+ * or removing a credit is one line as well.
  */
-const INLINE_CHILD_KEYS = new Set(['style', 'waypoints'])
+const INLINE_CHILD_KEYS = new Set(['style', 'waypoints', 'authors'])
 
 function format(value: unknown, indent: string, key?: string, inline = false): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)

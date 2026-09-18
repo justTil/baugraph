@@ -491,7 +491,7 @@ function createDiagramStore(documentId: string) {
     )
     return {
       baugraph: FORMAT_VERSION,
-      meta: { ...meta },
+      meta: { ...meta, ...(meta.authors ? { authors: meta.authors.map((a) => ({ ...a })) } : {}) },
       canvas: { ...canvas },
       nodes: sorted.map(toModelNode),
       edges: edges.value.map(toModelEdge),
@@ -501,7 +501,11 @@ function createDiagramStore(documentId: string) {
 
   /** Replaces the entire editor contents. Does not touch the history stacks. */
   function applyDocument(doc: DiagramDocument) {
-    Object.assign(meta, { description: undefined, createdAt: undefined, updatedAt: undefined }, doc.meta)
+    Object.assign(
+      meta,
+      { description: undefined, authors: undefined, createdAt: undefined, updatedAt: undefined },
+      doc.meta,
+    )
     Object.assign(canvas, doc.canvas)
     nodes.value = doc.nodes.map(toVueFlowNode)
     edges.value = doc.edges.map(toVueFlowEdge)

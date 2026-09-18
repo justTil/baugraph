@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.29.1]
+
+### Added
+
+- **Authors on a diagram.** `meta.authors` credits the people behind a diagram:
+  a list of `{ "name": "…", "email": "…", "website": "…" }` in the order they
+  should be credited, of which only `name` is required. The whole key is
+  optional and is written only when somebody is credited, so every file written
+  before this stays byte-identical on the next save. Each author is written on
+  one line, and the list is the one array the editor leaves in the order it was
+  given — who comes first is the file's decision, not the editor's.
+
 ## [1.29.0]
 
 ### Added

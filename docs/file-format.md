@@ -132,6 +132,16 @@ All in service of readable diffs:
   connection it described.
 - **`data` on any node or edge is yours** — free-form metadata, round-tripped
   untouched. Use it for ticket links, ownership, team conventions.
+- **`meta.authors` credits people, and only a name is required.** Each entry is
+  `{ "name": "…", "email": "…", "website": "…" }` — an address is a way to be
+  reached, not part of being the author, so both contact fields are optional
+  and an empty one is dropped on write. The list is written in crediting order
+  and is left as given: it is the one array the editor does not sort, because
+  who comes first is a decision the file is making. A diagram that credits
+  nobody writes no `authors` key at all, which is exactly what every file
+  written before this existed says — so none of them change on the next save.
+  Each author stays on one line, so adding or removing a credit is a one-line
+  diff.
 - **An edge routes itself unless `waypoints` says otherwise.** Every
   connection is auto-routed around obstacles by default, the only behavior
   this format had before manual routing existed. Giving an edge one or more

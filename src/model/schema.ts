@@ -156,9 +156,37 @@ export const canvasSchema = z.object({
   snapSize: z.number().int().min(1).max(200).default(DEFAULT_CANVAS.snapSize),
 })
 
+/**
+ * A way to reach an author. A plain string rather than a validated format, the
+ * same reasoning as catalogue ids: a diagram is shown as written rather than
+ * refused over an address this build happens to disagree with.
+ */
+const contactSchema = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .optional()
+    // A blank address is the absence of one. Normalising it here rather than on
+    // write is what keeps "what was read" and "what gets written" the same
+    // document, so a file cannot round-trip into a different one.
+    .transform((value) => (value && value.trim() !== '' ? value : undefined))
+
+/**
+ * One credited author. Only `name` is required — an address is a way to be
+ * reached, not part of being the author.
+ */
+export const authorSchema = z.object({
+  name: z.string().min(1, 'an author needs a name').max(200),
+  email: contactSchema(320),
+  website: contactSchema(2048),
+})
+
 export const metaSchema = z.object({
   title: z.string().default('Untitled diagram'),
   description: z.string().optional(),
+  // Optional, never defaulted to `[]`: a file that credits nobody says nothing
+  // about authorship, which is what every file written before this did.
+  authors: z.array(authorSchema).max(50).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 })

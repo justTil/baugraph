@@ -88,7 +88,10 @@ correctly, plus the full JSON Schema to validate against. Format version:
 }
 \`\`\`
 
-- \`meta\` — \`title\` (string), optional \`description\`, \`createdAt\`/\`updatedAt\` (ISO-8601).
+- \`meta\` — \`title\` (string), optional \`description\`, \`authors\`,
+  \`createdAt\`/\`updatedAt\` (ISO-8601). \`authors\` is a list of
+  \`{ "name": "…", "email": "…", "website": "…" }\` in crediting order; only
+  \`name\` is required, and the key is omitted entirely when nobody is credited.
 - \`canvas\` — editor display settings only; safe to omit and let it default.
 - \`nodes\` — boxes and zones. See below.
 - \`edges\` — connections between two node ids.

@@ -8,6 +8,7 @@ export {
   flowSchema,
   canvasSchema,
   metaSchema,
+  authorSchema,
 } from '@/model/schema'
 export { migrate } from '@/model/migrate'
 export {
