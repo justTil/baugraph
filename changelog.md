@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.29.1]
+## [1.30.0]
 
 ### Added
 
@@ -19,6 +19,23 @@ All notable changes to this project will be documented in this file.
   to edit, remove or reorder them — each change is one undo step. A website is
   only ever linked if it is an `http(s)` address, so a shared file cannot put a
   script behind the link.
+
+### Changed
+
+- **The AI skills now teach layout, not just the format.** A new **Layout and
+  placement** section tells an AI how the canvas actually sizes and routes
+  things, so the diagrams it writes open looking drawn rather than dropped:
+  how big a node has to be for its label, caption, sublabel and icon (with
+  per-shape allowances and floors, and a table of real nodes measured by the
+  editor's own fitter), spacing between columns, rows and labelled edges, one
+  main direction on a grid of columns and rows, centre alignment so connectors
+  come out straight, where a zone's children go below its header and how a
+  zone wraps them, how `auto` sides are picked, what connectors route around,
+  and when to spread a fan-out over `ports`. It ends in a checklist to run
+  before handing a file back. The node-type catalogue now lists the size each
+  type starts at, and the node example is sized to fit its own text. The
+  sizes, floors and zone paddings come from the same code the editor runs on,
+  so they stay in step on the next `npm run ai-skills:generate`.
 
 ## [1.29.0]
 
