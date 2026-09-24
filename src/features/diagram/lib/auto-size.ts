@@ -47,7 +47,7 @@ const SLACK = 2
  * Floors per shape. A node never fits so tightly that it stops looking like the
  * thing it is — a two-letter label still gets a cylinder worth calling one.
  */
-const MIN_SIZE: Partial<Record<ShapeKey, { width: number; height: number }>> = {
+export const MIN_SIZE: Partial<Record<ShapeKey, { width: number; height: number }>> = {
   cylinder: { width: 150, height: 90 },
   circle: { width: 100, height: 100 },
   diamond: { width: 150, height: 100 },
@@ -58,7 +58,7 @@ const MIN_SIZE: Partial<Record<ShapeKey, { width: number; height: number }>> = {
   text: { width: 60, height: 32 },
 }
 
-const MIN_DEFAULT = { width: 140, height: 60 }
+export const MIN_DEFAULT = { width: 140, height: 60 }
 
 export interface FitSource extends CaptionSource {
   sublabel?: string
