@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.30.0]
+
+### Added
+
+- **Authors on a diagram.** `meta.authors` credits the people behind a diagram:
+  a list of `{ "name": "…", "email": "…", "website": "…" }` in the order they
+  should be credited, of which only `name` is required. The whole key is
+  optional and is written only when somebody is credited, so every file written
+  before this stays byte-identical on the next save. Each author is written on
+  one line, and the list is the one array the editor leaves in the order it was
+  given — who comes first is the file's decision, not the editor's.
+  In the editor, the inspector's **Diagram** panel (shown when nothing is
+  selected) has a new **Authors** section listing everyone credited, with their
+  email and website as links. Add someone with **Add author**, and hover a name
+  to edit, remove or reorder them — each change is one undo step. A website is
+  only ever linked if it is an `http(s)` address, so a shared file cannot put a
+  script behind the link.
+- **Delete all stored diagrams from the Open dialog.** The **Stored in this
+  browser** list now shows how many diagrams it holds, and has a **Delete all
+  from browser cache** button once there is more than one. You no longer have
+  to delete them one by one. It asks first, and closes any tab still showing
+  one of them.
+- **Cite Baugraph in a thesis.** A new **Cite** entry in the sidebar (also
+  linked from **About**) has references to Baugraph ready to copy, for a
+  thesis, paper or report that shows a diagram drawn with it: APA 7, Harvard,
+  IEEE, a BibTeX/BibLaTeX entry, and a figure caption ("Own illustration,
+  created with Baugraph …"). Type the figure's title to fill in the caption.
+  Each reference names Til Schwarze as author and gives the version you are
+  running, the year that build was made, the GitHub repository, and today as
+  the access date.
+
+### Changed
+
+- **The AI skills now teach layout, not just the format.** A new **Layout and
+  placement** section tells an AI how the canvas actually sizes and routes
+  things, so the diagrams it writes open looking drawn rather than dropped:
+  how big a node has to be for its label, caption, sublabel and icon (with
+  per-shape allowances and floors, and a table of real nodes measured by the
+  editor's own fitter), spacing between columns, rows and labelled edges, one
+  main direction on a grid of columns and rows, centre alignment so connectors
+  come out straight, where a zone's children go below its header and how a
+  zone wraps them, how `auto` sides are picked, what connectors route around,
+  and when to spread a fan-out over `ports`. It ends in a checklist to run
+  before handing a file back. The node-type catalogue now lists the size each
+  type starts at, and the node example is sized to fit its own text. The
+  sizes, floors and zone paddings come from the same code the editor runs on,
+  so they stay in step on the next `npm run ai-skills:generate`.
+
 ## [1.29.0]
 
 ### Added

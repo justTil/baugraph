@@ -6,6 +6,7 @@ import type {
   BorderWidth,
   CanvasSettings,
   ColorKey,
+  DiagramAuthor,
   DiagramDocument,
   DiagramEdge,
   DiagramMeta,
@@ -491,7 +492,7 @@ function createDiagramStore(documentId: string) {
     )
     return {
       baugraph: FORMAT_VERSION,
-      meta: { ...meta },
+      meta: { ...meta, ...(meta.authors ? { authors: meta.authors.map((a) => ({ ...a })) } : {}) },
       canvas: { ...canvas },
       nodes: sorted.map(toModelNode),
       edges: edges.value.map(toModelEdge),
@@ -501,7 +502,11 @@ function createDiagramStore(documentId: string) {
 
   /** Replaces the entire editor contents. Does not touch the history stacks. */
   function applyDocument(doc: DiagramDocument) {
-    Object.assign(meta, { description: undefined, createdAt: undefined, updatedAt: undefined }, doc.meta)
+    Object.assign(
+      meta,
+      { description: undefined, authors: undefined, createdAt: undefined, updatedAt: undefined },
+      doc.meta,
+    )
     Object.assign(canvas, doc.canvas)
     nodes.value = doc.nodes.map(toVueFlowNode)
     edges.value = doc.edges.map(toVueFlowEdge)
@@ -935,6 +940,38 @@ function createDiagramStore(documentId: string) {
 
   function removeFlow(id: string) {
     flows.value = flows.value.filter((flow) => flow.id !== id)
+  }
+
+  /* ---------------------------------------------------------------- authors */
+
+  /**
+   * Authors are addressed by position: the list has no ids, and its order is
+   * the crediting order, so the index *is* the author's identity in the file.
+   * Callers pass a finished author — the schema refuses a blank name, and an
+   * autosave carrying one would fail to load — so drafting happens in the UI.
+   */
+  function addAuthor(author: DiagramAuthor) {
+    meta.authors = [...(meta.authors ?? []), author]
+  }
+
+  function updateAuthor(index: number, author: DiagramAuthor) {
+    if (!meta.authors?.[index]) return
+    meta.authors = meta.authors.map((current, i) => (i === index ? author : current))
+  }
+
+  function removeAuthor(index: number) {
+    const next = (meta.authors ?? []).filter((_, i) => i !== index)
+    // Nobody credited is no list at all, which is what the file says too.
+    meta.authors = next.length ? next : undefined
+  }
+
+  /** Moves an author one place up (`-1`) or down (`1`) the credits. */
+  function moveAuthor(index: number, by: -1 | 1) {
+    const list = [...(meta.authors ?? [])]
+    const to = index + by
+    if (!list[index] || !list[to]) return
+    ;[list[index], list[to]] = [list[to]!, list[index]!]
+    meta.authors = list
   }
 
   /** Adds or drops one connection, and takes the flow with it if it was the last. */
@@ -1700,6 +1737,10 @@ function createDiagramStore(documentId: string) {
     addFlow,
     updateFlow,
     removeFlow,
+    addAuthor,
+    updateAuthor,
+    removeAuthor,
+    moveAuthor,
     toggleFlowEdge,
     setFlowEdgeStyle,
     flowsOnEdge,

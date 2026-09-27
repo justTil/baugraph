@@ -7,6 +7,8 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from '@tailwindcss/vite'
 
 const appVersion = readFileSync(new URL('./version.txt', import.meta.url), 'utf-8').trim()
+// The day this build was made, which dates the version in a citation (see the Cite view).
+const buildDate = new Date().toISOString().slice(0, 10)
 const selfHosted = process.env.SELF_HOSTED === 'true'
 
 // https://vite.dev/config/
@@ -39,6 +41,7 @@ export default defineConfig({
   },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_DATE__: JSON.stringify(buildDate),
     // Set by the self-hosted Docker build (see Dockerfile / build_docker_image_self_hosted.sh)
     // to drop the operator-specific Impressum/Legal links and show a "self-hosted" marker instead.
     __SELF_HOSTED__: JSON.stringify(selfHosted),
