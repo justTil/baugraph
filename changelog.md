@@ -19,6 +19,11 @@ All notable changes to this project will be documented in this file.
   to edit, remove or reorder them — each change is one undo step. A website is
   only ever linked if it is an `http(s)` address, so a shared file cannot put a
   script behind the link.
+- **Delete all stored diagrams from the Open dialog.** The **Stored in this
+  browser** list now shows how many diagrams it holds, and has a **Delete all
+  from browser cache** button once there is more than one. You no longer have
+  to delete them one by one. It asks first, and closes any tab still showing
+  one of them.
 - **Cite Baugraph in a thesis.** A new **Cite** entry in the sidebar (also
   linked from **About**) has references to Baugraph ready to copy, for a
   thesis, paper or report that shows a diagram drawn with it: APA 7, Harvard,
