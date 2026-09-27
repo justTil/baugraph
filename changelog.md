@@ -19,6 +19,14 @@ All notable changes to this project will be documented in this file.
   to edit, remove or reorder them — each change is one undo step. A website is
   only ever linked if it is an `http(s)` address, so a shared file cannot put a
   script behind the link.
+- **Cite Baugraph in a thesis.** A new **Cite** entry in the sidebar (also
+  linked from **About**) has references to Baugraph ready to copy, for a
+  thesis, paper or report that shows a diagram drawn with it: APA 7, Harvard,
+  IEEE, a BibTeX/BibLaTeX entry, and a figure caption ("Own illustration,
+  created with Baugraph …"). Type the figure's title to fill in the caption.
+  Each reference names Til Schwarze as author and gives the version you are
+  running, the year that build was made, the GitHub repository, and today as
+  the access date.
 
 ### Changed
 
