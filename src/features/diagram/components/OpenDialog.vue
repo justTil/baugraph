@@ -16,6 +16,7 @@ import { safeParse } from '@/model'
 import { linkDocumentFile } from '@/features/diagram/composables/useDocumentFile'
 import { ensureDocument, useDocuments } from '@/features/diagram/composables/useDocuments'
 import {
+  discardAllDocuments,
   discardDocument,
   openDocumentTab,
   openDocumentTabFrom,
@@ -90,6 +91,19 @@ function onDrop(event: DragEvent) {
 function discard(entry: { id: string; title: string }) {
   if (!window.confirm(`Delete “${entry.title}” from this browser? This cannot be undone.`)) return
   discardDocument(entry.id)
+}
+
+/**
+ * Clears the whole list in one go rather than one confirm per row. Tabs still
+ * showing any of them close too, the same as deleting a single entry.
+ */
+function discardAll() {
+  const count = documents.value.length
+  const message =
+    `Delete all ${count} diagrams stored in this browser? ` +
+    'Open tabs showing them close too. This cannot be undone.'
+  if (!window.confirm(message)) return
+  discardAllDocuments()
 }
 
 function openStored(id: string) {
@@ -174,7 +188,21 @@ function loadPasted() {
       </Tabs>
 
       <div v-if="documents.length" class="space-y-2">
-        <p class="text-muted-foreground text-xs font-medium">Stored in this browser</p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-muted-foreground text-xs font-medium">
+            Stored in this browser ({{ documents.length }})
+          </p>
+          <Button
+            v-if="documents.length > 1"
+            variant="ghost"
+            size="sm"
+            class="text-muted-foreground hover:text-destructive h-7 px-2 text-xs"
+            @click="discardAll"
+          >
+            <Trash2 class="size-3.5" />
+            Delete all from browser cache
+          </Button>
+        </div>
         <ul class="max-h-48 space-y-1 overflow-y-auto">
           <li v-for="entry in documents" :key="entry.id" class="flex items-center gap-1">
             <button

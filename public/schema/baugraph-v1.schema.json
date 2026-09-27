@@ -13,9 +13,6 @@
       "type": "string"
     },
     "meta": {
-      "default": {
-        "title": "Untitled diagram"
-      },
       "type": "object",
       "properties": {
         "title": {
@@ -24,6 +21,31 @@
         },
         "description": {
           "type": "string"
+        },
+        "authors": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "email": {
+                "type": "string",
+                "maxLength": 320
+              },
+              "website": {
+                "type": "string",
+                "maxLength": 2048
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
         },
         "createdAt": {
           "type": "string"

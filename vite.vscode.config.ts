@@ -23,6 +23,8 @@ import tailwindcss from '@tailwindcss/vite'
  * allowed to load from.
  */
 const appVersion = readFileSync(new URL('./version.txt', import.meta.url), 'utf-8').trim()
+// The day this build was made, which dates the version in a citation (see the Cite view).
+const buildDate = new Date().toISOString().slice(0, 10)
 
 export default defineConfig({
   base: './',
@@ -38,6 +40,7 @@ export default defineConfig({
   },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_DATE__: JSON.stringify(buildDate),
     // The extension is not a deployment, so there is no operator behind it and
     // nothing to show the self-hosted marker for.
     __SELF_HOSTED__: JSON.stringify(true),
