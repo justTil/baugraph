@@ -316,9 +316,26 @@ export interface CanvasSettings {
   snapSize: number
 }
 
+/**
+ * Someone credited with the diagram. Only a name is required: the other two are
+ * ways to reach that person, and a diagram that names its author without
+ * publishing an address is a complete credit.
+ */
+export interface DiagramAuthor {
+  name: string
+  email?: string
+  website?: string
+}
+
 export interface DiagramMeta {
   title: string
   description?: string
+  /**
+   * Who made this diagram, in the order they should be credited. Optional and
+   * omitted when empty, so a file written before this existed — or by someone
+   * who does not care to sign — stays exactly as it was.
+   */
+  authors?: DiagramAuthor[]
   /** ISO-8601. Optional so a hand-written file stays valid. */
   createdAt?: string
   updatedAt?: string

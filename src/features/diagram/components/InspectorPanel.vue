@@ -35,6 +35,7 @@ import IconPicker from '@/features/diagram/components/IconPicker.vue'
 import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 import EdgeFlowSection from '@/features/diagram/components/EdgeFlowSection.vue'
+import AuthorsSection from '@/features/diagram/components/AuthorsSection.vue'
 import type { PortSide, Side, Vec2 } from '@/model'
 import { MAX_PORTS, PORT_SIDES, SHAPE_KEYS, nodePorts } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
@@ -948,6 +949,8 @@ function setRouting(
             {{ stats.nodes }} nodes · {{ stats.zones }} zones · {{ stats.edges }} connections
           </p>
         </section>
+
+        <AuthorsSection />
 
         <section v-if="lockedCount" class="space-y-2 border-b p-3">
           <Label class="text-xs">Locked</Label>

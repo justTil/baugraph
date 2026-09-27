@@ -67,6 +67,9 @@ const credits = [
           GitHub
           <ExternalLink class="size-3.5" />
         </Button>
+        <Button variant="ghost" size="sm" @click="openView('cite')">
+          Cite in a thesis
+        </Button>
         <Button v-if="!selfHosted" variant="ghost" size="sm" @click="openView('legal')">
           Legal &amp; privacy
         </Button>

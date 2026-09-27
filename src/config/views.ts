@@ -11,5 +11,6 @@ export const views: Record<string, Component> = {
   legal: defineAsyncComponent(() => import('@/features/legal/views/LegalView.vue')),
   license: defineAsyncComponent(() => import('@/features/license/views/LicenseView.vue')),
   about: defineAsyncComponent(() => import('@/features/about/views/AboutView.vue')),
+  cite: defineAsyncComponent(() => import('@/features/cite/views/CiteView.vue')),
   changelog: defineAsyncComponent(() => import('@/features/changelog/views/ChangelogView.vue')),
 }
