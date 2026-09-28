@@ -69,7 +69,7 @@ const {
   updateNodeSize,
   setNodePorts,
   autoSizeNodes,
-  fitSizeOf,
+  minSizeOf,
   setNodeType,
   setNodeTech,
   updateEdgeData,
@@ -111,7 +111,7 @@ const nodeSize = computed(() => (node.value ? sizeOf(node.value) : { width: 0, h
 /** Typing a smaller number than this would clip the node's own text. */
 const sizeFloor = computed(() => {
   if (!node.value) return { width: 40, height: 34 }
-  return node.value.type === 'zone' ? fitZoneMinSize(node.value.data) : fitSizeOf(node.value)
+  return node.value.type === 'zone' ? fitZoneMinSize(node.value.data) : minSizeOf(node.value)
 })
 
 /**
@@ -274,9 +274,9 @@ function editText(id: string, field: 'label' | 'sublabel', value: string) {
   updateNodeData(id, { [field]: value })
 }
 
-function editEdgeLabel(id: string, value: string) {
-  commit(`edge:${id}:label`)
-  updateEdgeData(id, { label: value })
+function editEdgeText(id: string, field: 'label' | 'labelInfo', value: string) {
+  commit(`edge:${id}:${field}`)
+  updateEdgeData(id, { [field]: value })
 }
 
 function setSize(id: string, patch: { width?: number; height?: number }) {
@@ -667,15 +667,32 @@ function setRouting(
           </p>
         </section>
 
-        <section class="space-y-1.5 border-b p-3">
-          <Label class="text-xs">Label</Label>
-          <Input
-            :model-value="edge.data!.label"
-            class="h-8 text-sm"
-            placeholder="HTTP POST /orders"
-            @update:model-value="editEdgeLabel(edge.id, String($event))"
-            @blur="endCoalesce()"
-          />
+        <section class="space-y-3 border-b p-3">
+          <div class="space-y-1.5">
+            <Label class="text-xs">Label</Label>
+            <Input
+              :model-value="edge.data!.label"
+              class="h-8 text-sm"
+              placeholder="HTTP POST /orders"
+              @update:model-value="editEdgeText(edge.id, 'label', String($event))"
+              @blur="endCoalesce()"
+            />
+          </div>
+          <!--
+            Too much to draw on the line: the label carries an info icon instead,
+            and this shows when it is hovered.
+          -->
+          <div class="space-y-1.5">
+            <Label class="text-xs">Additional info</Label>
+            <Textarea
+              :model-value="edge.data!.labelInfo"
+              class="min-h-16 resize-y text-sm"
+              rows="3"
+              placeholder="payload, SLA, retries… shown when the label's info icon is hovered"
+              @update:model-value="editEdgeText(edge.id, 'labelInfo', String($event))"
+              @blur="endCoalesce()"
+            />
+          </div>
         </section>
 
         <!--

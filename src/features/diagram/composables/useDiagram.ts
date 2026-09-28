@@ -45,6 +45,7 @@ import {
   ZONE_PADDING,
   fitNodeSize,
   fitZoneHeaderWidth,
+  minNodeSize,
 } from '@/features/diagram/lib/auto-size'
 
 /** Payload carried on every Vue Flow node; mirrors the model's presentation fields. */
@@ -76,6 +77,8 @@ export interface NodeData {
 /** Payload carried on every Vue Flow edge. */
 export interface EdgeData {
   label: string
+  /** See `DiagramEdge.labelInfo`. Empty means none. */
+  labelInfo: string
   sourceSide: Side
   targetSide: Side
   /** Which connection point on each side, 1-based. See `DiagramEdge.sourcePort`. */
@@ -389,6 +392,7 @@ function createDiagramStore(documentId: string) {
       targetHandle: null,
       data: {
         label: edge.label ?? '',
+        labelInfo: edge.labelInfo ?? '',
         sourceSide: edge.sourceSide,
         targetSide: edge.targetSide,
         sourcePort: edge.sourcePort ?? 1,
@@ -454,6 +458,7 @@ function createDiagramStore(documentId: string) {
       sourcePort: edge.data?.sourcePort ?? 1,
       targetPort: edge.data?.targetPort ?? 1,
       label: edge.data?.label ?? '',
+      labelInfo: edge.data?.labelInfo ?? '',
       route: edge.data?.route ?? 'orthogonal',
       line: edge.data?.line ?? 'solid',
       width: edge.data?.width ?? 'regular',
@@ -1400,30 +1405,47 @@ function createDiagramStore(documentId: string) {
   /* ------------------------------------------------------------- auto-sizing */
 
   /**
-   * The smallest box a node can be drawn in without clipping what is on it.
+   * The box a node's content is comfortably drawn in.
    *
-   * This is the size a node is created at, the floor a resize drag stops at, and
-   * what "Fit" snaps back to — so the invariant the canvas relies on ("what the
-   * node is, is on the node") cannot be lost to a box that is too small.
+   * This is the size a node is created at and what "Fit" snaps back to. The
+   * floor a resize stops at is `minSizeOf` — thinner, but still never so small
+   * that "what the node is, is on the node" is lost to a box that clips it.
    */
   function fitSizeOf(node: BgNode): { width: number; height: number } {
+    return fitNodeSize(fitSourceOf(node))
+  }
+
+  /**
+   * The smallest box a node can be resized to by hand: as wide as `fitSizeOf`,
+   * but only as tall as its text actually needs, so a node can be made thinner
+   * than the size it arrives at. See `minNodeSize`.
+   */
+  function minSizeOf(node: BgNode): { width: number; height: number } {
+    return minNodeSize(fitSourceOf(node))
+  }
+
+  function fitSourceOf(node: BgNode) {
     const data = (node.data ?? {}) as Partial<NodeData>
-    return fitNodeSize({
+    return {
       label: data.label,
       type: data.type,
       tech: data.tech,
       sublabel: data.sublabel,
       shape: data.shape,
       icon: data.icon,
-    })
+    }
   }
 
-  /** Grows a node to fit its content, leaving a larger hand-set size alone. */
+  /**
+   * Grows a node to fit its content, leaving a larger hand-set size alone. Grows
+   * only as far as the content needs — the resize floor, not the arrival size —
+   * so renaming a node that was made thin by hand does not undo that.
+   */
   function growToFit(id: string) {
     const node = nodes.value.find((n) => n.id === id)
     if (!node || node.type === 'zone') return
     const current = sizeOf(node)
-    const fit = fitSizeOf(node)
+    const fit = minSizeOf(node)
     const width = Math.max(current.width, fit.width)
     const height = Math.max(current.height, fit.height)
     if (width === current.width && height === current.height) return
@@ -1730,6 +1752,7 @@ function createDiagramStore(documentId: string) {
     autoSizeNodes,
     autoSizeSelection,
     fitSizeOf,
+    minSizeOf,
     setNodeType,
     setNodeTech,
     updateEdgeData,

@@ -334,6 +334,10 @@
             "default": "",
             "type": "string"
           },
+          "labelInfo": {
+            "default": "",
+            "type": "string"
+          },
           "route": {
             "default": "orthogonal",
             "type": "string",

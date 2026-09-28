@@ -193,6 +193,12 @@ export interface DiagramEdge {
   /** Which connection point on `targetSide` this end attaches to. See `sourcePort`. */
   targetPort?: number
   label?: string
+  /**
+   * Longer text behind the label — a payload, an SLA, a caveat — too much to
+   * draw on the line. The editor marks the label with an info icon and shows
+   * this on hover. Plain text; newlines are kept. Omitted means none.
+   */
+  labelInfo?: string
   route: Route
   line: LineStyle
   /** Weight of the line. Omitted means `regular`. */
