@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.31.0]
+
+### Added
+
+- **Additional info on a connection's label.** A connection can now carry a
+  longer note behind its label — a payload, an SLA, a retry policy — in the new
+  **Additional info** field under **Label** in the inspector. A label with info
+  shows an info icon, and hovering the label shows the text. Info on a
+  connection without a label is drawn as an icon-only chip, so it is still easy
+  to find. An SVG export includes the text as a native hover tooltip. In the
+  file it is an optional `labelInfo` string on the edge, written only when it is
+  set, so every existing diagram opens and saves exactly as before.
+
+### Changed
+
+- **Nodes can be made thinner.** Dragging a node's top or bottom edge, or
+  typing a height in the inspector, now goes down to what the node's text
+  actually needs (a label-only box can be 30px tall), not the taller size a new
+  node starts at. New nodes and **Fit** (⇧⌘F) still use the roomier default,
+  and renaming a thin node no longer resets it to that height.
+
 ## [1.30.0]
 
 ### Added
