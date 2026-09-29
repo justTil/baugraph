@@ -4,6 +4,7 @@ import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
 import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
 import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
+import { EDGE_LABEL_FONT, EDGE_LABEL_INFO_ICON, edgeLabelBox } from '@/features/diagram/lib/edge-label'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, fadeOf, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
@@ -60,13 +61,20 @@ const ICON_SIZE = 20
 /** The canvas's `gap-2.5` between an icon and the text beside it. */
 const ICON_GAP = 10
 
-function iconGroup(id: string, x: number, y: number, color: string): string {
+function iconGroup(
+  id: string,
+  x: number,
+  y: number,
+  color: string,
+  size = ICON_SIZE,
+  strokeWidth = 1.75,
+): string {
   const inner = iconInnerMarkup(id)
   if (!inner) return ''
-  const scale = ICON_SIZE / 24
+  const scale = size / 24
   return (
     `<g transform="translate(${x},${y}) scale(${scale})" fill="none" stroke="${color}" ` +
-    `stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${inner}</g>`
+    `stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${inner}</g>`
   )
 }
 
@@ -822,13 +830,24 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
         out += `<path d="${arrowHeadPath(geometry.start, geometry.startDir, stroke)}" fill="${color}"/>`
       }
 
-      if (edge.label) {
-        const width = measureText(edge.label, 11) + 13
-        out +=
-          `<rect x="${geometry.mid.x - width / 2}" y="${geometry.mid.y - 9}" width="${width}" ` +
-          `height="18" rx="4" fill="${theme.bg}" stroke="${mix(color, theme.bg, 0.72)}" stroke-width="1"/>` +
-          `<text x="${geometry.mid.x}" y="${geometry.mid.y + 4}" text-anchor="middle" ` +
-          `font-size="11" fill="${theme.muted}">${escapeXml(edge.label)}</text>`
+      const label = edgeLabelBox(edge.label, edge.labelInfo, geometry.mid, measureText)
+      if (label) {
+        let chip =
+          `<rect x="${label.x}" y="${label.y}" width="${label.width}" ` +
+          `height="${label.height}" rx="4" fill="${theme.bg}" stroke="${mix(color, theme.bg, 0.72)}" stroke-width="1"/>`
+        if (edge.label) {
+          chip +=
+            `<text x="${label.textX}" y="${label.textY}" text-anchor="middle" ` +
+            `font-size="${EDGE_LABEL_FONT}" fill="${theme.muted}">${escapeXml(edge.label)}</text>`
+        }
+        if (label.icon) {
+          // The canvas shows the info on hover; an SVG viewer does the same
+          // with a `<title>`. A raster export keeps the icon as a marker that
+          // there is more to this connection than fits on the line.
+          chip += iconGroup('info', label.icon.x, label.icon.y, theme.muted, EDGE_LABEL_INFO_ICON, 2.25)
+          chip = `<g><title>${escapeXml(edge.labelInfo!)}</title>${chip}</g>`
+        }
+        out += chip
       }
       return out
     })

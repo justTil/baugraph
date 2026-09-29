@@ -111,6 +111,7 @@ const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'targetSide',
   'targetPort',
   'label',
+  'labelInfo',
   'route',
   'waypoints',
   'line',

@@ -70,6 +70,11 @@ handle, so width, the thing a diagram gets tidied with most, takes no
 aiming. Pulling a zone's left or top edge in moves only that edge: what is
 inside the zone stays exactly where it is on the canvas.
 
+A node can be pulled thinner than the size it arrived at — down to what its
+text needs, with a few pixels to spare — for a row of slim bars or a label
+that should not take up a whole box. Width still stops where the caption
+would be cut off.
+
 `⇧⌘F` hands the decision back: it sizes the selection to its own text, wraps
 a selected zone around its contents, and with nothing selected does the lot —
 how an older diagram full of clipped captions gets fixed in one keystroke.

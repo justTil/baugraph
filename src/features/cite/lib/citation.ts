@@ -2,20 +2,28 @@
  * Ready-made references to Baugraph itself, for a thesis, paper or report that
  * shows a diagram drawn with it.
  *
- * Everything is built from plain arguments rather than the build-time globals,
- * so the formats can be tested without a Vite build — the view passes in
- * `__APP_VERSION__` and `__BUILD_DATE__`.
+ * The version is always the one this build was made from — `version.txt`,
+ * baked in as `__APP_VERSION__` (see `vite.config.ts`) — and is deliberately not
+ * an argument: a reference has to name the version the reader actually used,
+ * and nothing calling this can hand it a stale one. The test run defines the
+ * same globals from the same file (see `vitest.config.ts`).
  */
 
 export const citationAuthor = { given: 'Til', family: 'Schwarze' }
 export const citationTitle = 'Baugraph'
 export const citationUrl = 'https://github.com/justTil/baugraph'
+/** The running build's version, e.g. `1.31.0`. */
+export const citationVersion = __APP_VERSION__
+/** The day the running build was made, as `YYYY-MM-DD`. */
+export const citationBuildDate = __BUILD_DATE__
 
 export interface CitationInput {
-  /** The Baugraph version, e.g. `1.30.0`. */
-  version: string
-  /** When this build was made (ISO `YYYY-MM-DD`); its year dates the software. */
-  buildDate: string
+  /**
+   * When the build was made (ISO `YYYY-MM-DD`); its year dates the software.
+   * Omitted means the running build's own date, which is what the app always
+   * wants — only a test has reason to pin it.
+   */
+  buildDate?: string
   /** When the reader used it, cited as the access date. */
   accessed: Date
   /** The title of the figure being captioned; blank falls back to a placeholder. */
@@ -79,8 +87,9 @@ function yearOf(buildDate: string, fallback: Date) {
 }
 
 export function citations(input: CitationInput): Citation[] {
-  const { version, accessed } = input
-  const year = yearOf(input.buildDate, accessed)
+  const { accessed } = input
+  const version = citationVersion
+  const year = yearOf(input.buildDate ?? citationBuildDate, accessed)
   const { given, family } = citationAuthor
   const initial = `${given[0]}.`
   const day = accessed.getDate()

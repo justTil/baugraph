@@ -111,6 +111,9 @@ export const edgeSchema = z.object({
   sourcePort: portCountSchema.default(EDGE_DEFAULTS.sourcePort),
   targetPort: portCountSchema.default(EDGE_DEFAULTS.targetPort),
   label: z.string().default(EDGE_DEFAULTS.label),
+  // Optional, and empty when a file written before it existed is opened, so every
+  // older diagram reads — and writes back — exactly as it did.
+  labelInfo: z.string().default(EDGE_DEFAULTS.labelInfo),
   route: z.enum(ROUTES).default(EDGE_DEFAULTS.route),
   line: z.enum(LINE_STYLES).default(EDGE_DEFAULTS.line),
   width: z.enum(LINE_WIDTHS).default(EDGE_DEFAULTS.width),
