@@ -70,6 +70,7 @@ export const EDGE_DEFAULTS = {
   sourcePort: 1,
   targetPort: 1,
   label: '',
+  labelInfo: '',
   route: 'orthogonal',
   line: 'solid',
   width: 'regular',

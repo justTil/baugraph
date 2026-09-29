@@ -3,6 +3,8 @@ import type { CSSProperties } from 'vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Connection, EdgeProps } from '@vue-flow/core'
 import { useHandle, useVueFlow } from '@vue-flow/core'
+import { Info } from '@lucide/vue'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { EdgeData, NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
@@ -18,6 +20,7 @@ import {
 import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
 import { useAppTheme } from '@/composables/useAppTheme'
 import { measureText } from '@/features/diagram/lib/text'
+import { EDGE_LABEL_INFO_ICON, edgeLabelBox } from '@/features/diagram/lib/edge-label'
 
 const props = defineProps<EdgeProps<EdgeData>>()
 
@@ -498,14 +501,18 @@ const haloPath = computed(() => {
   return points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join('')
 })
 
+/**
+ * The chip at the middle of the line. Additional info adds an icon to it — and
+ * is enough on its own to draw one, icon only, so info written on an unlabelled
+ * connection is still findable.
+ */
 const label = computed(() => {
-  if (!props.data.label) return null
-  const width = measureText(props.data.label, 11) + 13
+  const box = edgeLabelBox(props.data.label, props.data.labelInfo, geometry.value.mid, measureText)
+  if (!box) return null
   return {
+    ...box,
     text: props.data.label,
-    x: geometry.value.mid.x - width / 2,
-    y: geometry.value.mid.y - 9,
-    width,
+    info: props.data.labelInfo.trim() ? props.data.labelInfo : '',
     fill: theme.value.bg,
     stroke: mix(stroke.value, theme.value.bg, 0.72),
     color: props.selected ? theme.value.selection : theme.value.muted,
@@ -529,7 +536,7 @@ const pausedTag = computed(() => {
   return {
     text,
     x: geometry.value.mid.x - width / 2,
-    y: geometry.value.mid.y + (props.data.label ? 10 : -8),
+    y: geometry.value.mid.y + (label.value ? 10 : -8),
     width,
   }
 })
@@ -586,20 +593,20 @@ const pausedTag = computed(() => {
     <!-- Messages travelling this connection, and any moving line under them. -->
     <FlowTokens :edge-id="id" :path="geometry.path" :line-width="lineWidth" />
 
-    <template v-if="label">
+    <template v-if="label && !label.icon">
       <rect
         :x="label.x"
         :y="label.y"
         :width="label.width"
-        height="18"
+        :height="label.height"
         rx="4"
         :fill="label.fill"
         :stroke="label.stroke"
         stroke-width="1"
       />
       <text
-        :x="geometry.mid.x"
-        :y="geometry.mid.y + 4"
+        :x="label.textX"
+        :y="label.textY"
         text-anchor="middle"
         font-size="11"
         :fill="label.color"
@@ -608,6 +615,56 @@ const pausedTag = computed(() => {
         {{ label.text }}
       </text>
     </template>
+    <!--
+      A label carrying additional info: the whole chip is the hover target, not
+      just the icon — a 11px icon is a hard thing to land a pointer on while the
+      canvas is zoomed out.
+    -->
+    <Tooltip v-else-if="label && label.icon" :delay-duration="150">
+      <TooltipTrigger as-child>
+        <g class="bg-edge__label--info">
+          <rect
+            :x="label.x"
+            :y="label.y"
+            :width="label.width"
+            :height="label.height"
+            rx="4"
+            :fill="label.fill"
+            :stroke="label.stroke"
+            stroke-width="1"
+          />
+          <text
+            v-if="label.text"
+            :x="label.textX"
+            :y="label.textY"
+            text-anchor="middle"
+            font-size="11"
+            :fill="label.color"
+            class="pointer-events-none select-none"
+          >
+            {{ label.text }}
+          </text>
+          <Info
+            :x="label.icon.x"
+            :y="label.icon.y"
+            :size="EDGE_LABEL_INFO_ICON"
+            :stroke-width="2.25"
+            :color="label.color"
+            class="pointer-events-none"
+          />
+        </g>
+      </TooltipTrigger>
+      <!--
+        Vue keeps creating elements in the SVG namespace even once they are
+        portalled out to <body> — the tooltip would come out as an SVG <div>
+        that never renders. A foreignObject is the one place that namespace ends.
+      -->
+      <foreignObject width="0" height="0">
+        <TooltipContent side="top" :side-offset="6" class="block">
+          <p class="max-w-xs text-left break-words whitespace-pre-wrap">{{ label.info }}</p>
+        </TooltipContent>
+      </foreignObject>
+    </Tooltip>
 
     <g v-if="pausedTag" class="pointer-events-none select-none">
       <rect
@@ -762,6 +819,15 @@ const pausedTag = computed(() => {
 .bg-edge__grab-add--armed {
   stroke-opacity: 0.25;
   cursor: copy;
+}
+
+/*
+ * Vue Flow only lets an edge's visible stroke take the pointer, which would
+ * leave a label's fill dead to hover and the info in it unreachable.
+ */
+.bg-edge__label--info {
+  pointer-events: all;
+  cursor: help;
 }
 
 .bg-edge__waypoint-hit {

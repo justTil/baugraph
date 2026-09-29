@@ -7,10 +7,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { openView } from '@/features/workspace/composables/useWorkspace'
 import type { CitationStyle } from '@/features/cite/lib/citation'
-import { citationAuthor, citationUrl, citations } from '@/features/cite/lib/citation'
-
-const version = __APP_VERSION__
-const buildDate = __BUILD_DATE__
+import {
+  citationAuthor,
+  citationBuildDate as buildDate,
+  citationUrl,
+  citationVersion as version,
+  citations,
+} from '@/features/cite/lib/citation'
 
 /** Only ever fills the caption — the reference is to Baugraph, not the figure. */
 const figureTitle = ref('')
@@ -19,7 +22,7 @@ const figureTitle = ref('')
 const accessed = new Date()
 
 const entries = computed(() =>
-  citations({ version, buildDate, accessed, figureTitle: figureTitle.value }),
+  citations({ accessed, figureTitle: figureTitle.value }),
 )
 
 /** Which entry just got copied, so its button can say so for a moment. */
