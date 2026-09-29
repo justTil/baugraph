@@ -142,6 +142,12 @@ All in service of readable diffs:
   written before this existed says — so none of them change on the next save.
   Each author stays on one line, so adding or removing a credit is a one-line
   diff.
+- **`labelInfo` is the long version of an edge's `label`.** A payload, an
+  SLA, a retry policy — anything too long to draw on the line. The editor
+  marks the label with an info icon and shows the text on hover (an SVG
+  export carries it as a `<title>`, so SVG viewers do the same). Newlines are
+  kept. An edge without it writes no `labelInfo` key, so every file written
+  before it existed stays exactly as it was.
 - **An edge routes itself unless `waypoints` says otherwise.** Every
   connection is auto-routed around obstacles by default, the only behavior
   this format had before manual routing existed. Giving an edge one or more

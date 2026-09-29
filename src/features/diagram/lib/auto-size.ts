@@ -32,6 +32,17 @@ const ICON_GAP_X = 10
 /** The `px-3` on the content row, and the breathing room above and below it. */
 const PAD_X = 12
 const PAD_Y = 11
+/**
+ * The breathing room a node keeps above and below its text once it has been
+ * pulled thinner by hand. Just enough that the text never touches the outline.
+ */
+const PAD_Y_THIN = 4
+
+/**
+ * The thinnest any node may be made, whatever it carries — a label-less bar
+ * still has to be something a pointer can grab and a connection can meet.
+ */
+export const MIN_THIN_HEIGHT = 20
 
 /** Fitted sizes land on the grid, so auto-sized nodes still line up. */
 const STEP = 10
@@ -124,6 +135,30 @@ function clamp(size: FitSize, shape: ShapeKey): FitSize {
  * a plain box carrying the same two lines.
  */
 export function fitNodeSize(node: FitSource): FitSize {
+  return clamp(contentSize(node, PAD_Y), node.shape ?? 'rect')
+}
+
+/**
+ * The smallest box a node may be resized to by hand.
+ *
+ * Width is the same as `fitNodeSize` — a narrower box cuts its label off. Height
+ * is what the text actually takes, not the per-shape floor a new node is given:
+ * those floors are about how a node looks when it arrives, and a diagram that
+ * wants a row of thin bars, or a label-only box no taller than its line of text,
+ * is entitled to one. Tapering shapes keep the room their outline eats — a thin
+ * diamond still has to hold its text between its points.
+ */
+export function minNodeSize(node: FitSource): FitSize {
+  const fit = fitNodeSize(node)
+  const thin = contentSize(node, PAD_Y_THIN)
+  return {
+    width: fit.width,
+    height: Math.min(fit.height, Math.max(MIN_THIN_HEIGHT, roundUp(thin.height))),
+  }
+}
+
+/** The box a node's content takes with `padY` above and below it, before any floor. */
+function contentSize(node: FitSource, padY: number): FitSize {
   const shape = node.shape ?? 'rect'
   const hasIcon = !!node.icon
   const text = textBlock(node)
@@ -141,7 +176,7 @@ export function fitNodeSize(node: FitSource): FitSize {
   // text cannot use.
   const inset = contentInset(shape, 0)
   let width = content.width + PAD_X * 2 + inset.right
-  let height = content.height + PAD_Y * 2
+  let height = content.height + padY * 2
 
   switch (shape) {
     case 'cylinder': {
@@ -166,18 +201,18 @@ export function fitNodeSize(node: FitSource): FitSize {
       // Usable width shrinks towards the top and bottom points, so the box has
       // to be wider and taller than the text it carries.
       width = content.width / 0.55 + PAD_X * 2
-      height = content.height * 1.8 + PAD_Y * 2
+      height = content.height * 1.8 + padY * 2
       break
     case 'circle': {
       // Square, sized by whichever axis the content strains harder.
-      const side = Math.max(content.width / 0.72 + PAD_X, content.height / 0.62 + PAD_Y)
+      const side = Math.max(content.width / 0.72 + PAD_X, content.height / 0.62 + padY)
       width = side
       height = side
       break
     }
   }
 
-  return clamp({ width, height }, shape)
+  return { width, height }
 }
 
 /* -------------------------------------------------------------------- zones */

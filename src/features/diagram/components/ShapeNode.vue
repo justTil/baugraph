@@ -9,7 +9,7 @@ import type { PortSide } from '@/model'
 import { DEFAULT_NODE_SIZE, PORT_SIDES, nodePorts } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, shapeElements } from '@/features/diagram/lib/shapes'
-import { fitNodeSize } from '@/features/diagram/lib/auto-size'
+import { minNodeSize } from '@/features/diagram/lib/auto-size'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
 import { diagramTheme, nodePaint } from '@/features/diagram/lib/theme'
 import { useAppTheme } from '@/composables/useAppTheme'
@@ -97,9 +97,13 @@ const textWidth = computed(() => {
   return `${Math.max(24, width.value * share - (icon.value ? ICON_BLOCK : 0))}px`
 })
 
-/** A resize drag stops here, so a node can never be pulled in over its own text. */
+/**
+ * A resize drag stops here, so a node can never be pulled in over its own text —
+ * but it can be pulled thinner than the size it arrived at, down to what that
+ * text actually needs (see `minNodeSize`).
+ */
 const fit = computed(() =>
-  fitNodeSize({
+  minNodeSize({
     label: props.data.label,
     type: props.data.type,
     tech: props.data.tech,

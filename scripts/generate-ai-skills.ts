@@ -242,6 +242,9 @@ writing it in another order is still valid and will simply be re-sorted.
   meaningful once the side is not \`auto\` and the node's \`ports\` gives that side
   more than one point.
 - \`label\` — optional text on the line.
+- \`labelInfo\` — optional longer text behind the label (payload, SLA, retry
+  policy…). The editor marks the label with an info icon and shows this on
+  hover, so it can be as long as it needs to be. Newlines are kept. Omit for none.
 - \`route\` — one of ${enumList(ROUTES)}.
 - \`line\` — one of ${enumList(LINE_STYLES)}.
 - \`width\` — one of ${enumList(LINE_WIDTHS)}. Omit for the default.
@@ -355,7 +358,10 @@ Then add what the shape needs:
 - \`diamond\`: the content width ÷ 0.55, and 1.8 × the content height
 - \`circle\`: square, sized by whichever axis the content needs more
 
-Every shape also has a floor that it never goes below: ${shapeFloors}. A new
+Every shape also has a floor a new node never starts below: ${shapeFloors}.
+A user may make a node thinner than that by hand — down to what its text needs
+with 4px above and below — so a deliberately thin bar in an existing file is
+not a mistake to correct. A new
 node dropped from the palette starts at ${dims(DEFAULT_NODE_SIZE)}, or larger if
 its content needs more room. The node-type catalogue below lists each type's
 starting size.
