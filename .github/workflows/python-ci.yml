@@ -1,10 +1,12 @@
-name: CI
+name: Python CI
 
+# Manual only: test, lint and build the package without publishing it.
 on:
-  push:
-    branches-ignore:
-      - release
-  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: Projects/baugraph-py
 
 jobs:
   test:
@@ -27,8 +29,6 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -50,8 +50,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

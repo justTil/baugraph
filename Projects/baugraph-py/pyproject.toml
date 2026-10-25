@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
 name = "baugraph"
-dynamic = ["version"]
+version = "1.32.0"
 requires-python = ">=3.12"
 description = "A python library for creating baugraph diagrams"
 license = { file = "LICENSE" }
@@ -16,13 +16,6 @@ keywords = ["baugraph", "diagram", "graph", "visualization", "architecture"]
 
 #[project.optional-dependencies]
 #dev = ["pytest", "pytest-asyncio", "ruff"]
-
-[tool.hatch.version]
-source = "vcs"
-raw-options = { local_scheme = "no-local-version" }
-
-[tool.hatch.build.hooks.vcs]
-version-file = "src/baugraph/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/baugraph"]

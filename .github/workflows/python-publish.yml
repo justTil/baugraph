@@ -1,19 +1,31 @@
-name: Publish
+name: Python Publish
 
+# Manual only. The branch picked in "Run workflow" decides the target:
+#   pre-release/testpypi-v*  -> TestPyPI
+#   release-py/pypi-v*       -> PyPI
+# Any other branch fails before building.
 on:
-  push:
-    branches:
-      - release/**
-    tags:
-      - "v*"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: Projects/baugraph-py
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Check branch
+        working-directory: .
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/pre-release/testpypi-v*|refs/heads/release-py/pypi-v*) ;;
+            *)
+              echo "::error::Publishing is only allowed from pre-release/testpypi-v* or release-py/pypi-v* branches, not '$GITHUB_REF'."
+              exit 1
+              ;;
+          esac
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -22,11 +34,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: Projects/baugraph-py/dist/
 
   publish-testpypi:
     needs: build
-    if: github.ref_type == 'branch'
+    if: startsWith(github.ref, 'refs/heads/pre-release/testpypi-v')
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -43,7 +55,7 @@ jobs:
 
   publish-pypi:
     needs: build
-    if: github.ref_type == 'tag'
+    if: startsWith(github.ref, 'refs/heads/release-py/pypi-v')
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
