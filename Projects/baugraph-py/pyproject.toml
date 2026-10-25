@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "baugraph"
+version = "1.32.0"
+requires-python = ">=3.12"
+description = "A python library for creating baugraph diagrams"
+license = { file = "LICENSE" }
+authors = [{ name = "Til Schwarze", email = "til@baugraph.com" }]
+readme = "README.md"
+keywords = ["baugraph", "diagram", "graph", "visualization", "architecture"]
+
+#dependencies = ["aiokafka"]
+
+#[project.optional-dependencies]
+#dev = ["pytest", "pytest-asyncio", "ruff"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/baugraph"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
