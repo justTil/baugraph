@@ -70,18 +70,35 @@ function add(item: PaletteItem) {
   if (!place(item)) return
   open.value = false
 }
+
+/**
+ * `B` closes it again, the same key that opened it. Handled here rather than by
+ * the canvas: the dialog holds the focus while it is open, and stopping the key
+ * here keeps the canvas from reading it as "open" a moment later. A `b` typed
+ * into the search box is just a letter.
+ */
+function onKeydown(event: KeyboardEvent) {
+  if (event.key.toLowerCase() !== 'b' || event.metaKey || event.ctrlKey || event.altKey) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('input, textarea, [contenteditable="true"]')) return
+  event.preventDefault()
+  event.stopPropagation()
+  open.value = false
+}
 </script>
 
 <template>
   <Dialog v-model:open="open">
     <!-- A fixed height, so the dialog stays put while a search narrows what is in it. -->
-    <DialogContent class="flex h-[min(85vh,52rem)] flex-col gap-3 sm:max-w-5xl">
+    <DialogContent class="flex h-[min(85vh,52rem)] flex-col gap-3 sm:max-w-5xl" @keydown="onKeydown">
       <DialogHeader>
         <DialogTitle>Palette overview</DialogTitle>
         <DialogDescription>
           Every building block Baugraph ships, grouped the way the palette groups them.
           <template v-if="documentId">Click an entry to drop it on the canvas.</template>
           <template v-else>Open a diagram to drop entries onto its canvas.</template>
+          {{ ' ' }}<strong class="text-foreground font-semibold">Press B</strong> to open or close this
+          overview.
         </DialogDescription>
       </DialogHeader>
 

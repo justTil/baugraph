@@ -98,7 +98,7 @@ function onDragStart(event: DragEvent, item: PaletteItem) {
       >
         <LayoutGrid class="size-3.5" />
         Browse all palettes
-        <kbd class="bg-muted ml-auto rounded px-1 font-mono text-[10px]">B</kbd>
+        <span class="text-foreground ml-auto text-[11px] font-semibold">Press B</span>
       </Button>
     </SidebarGroupContent>
   </SidebarGroup>

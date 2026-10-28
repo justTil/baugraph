@@ -16,7 +16,7 @@ const SHORTCUTS: [string, string][] = [
   ['Space / middle-drag', 'pan the canvas'],
   ['⌘ + scroll, pinch', 'zoom (plain scroll pans)'],
   ['F', 'fit diagram to window'],
-  ['B', 'browse all palettes — every node type and technology at once'],
+  ['B', 'open or close the palette overview — every node type and technology at once'],
   ['L', 'laser pointer for presenting (hold to draw, Esc to exit)'],
   ['P', 'presentation mode — full screen, chrome hidden, for screen-sharing (Esc to exit)'],
   ['⇧⌘F', 'size the selection to its own text (all of it, if nothing is selected)'],
