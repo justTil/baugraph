@@ -42,6 +42,13 @@ export interface NodeType {
 export interface NodeTypeGroup {
   id: string
   label: string
+  /**
+   * The building blocks of one industry — a bank's ledger, a telco's charging
+   * system — rather than a technical role every architecture shares. The
+   * palette lists these in a section of their own, folded away until wanted,
+   * and each can be hidden in Settings.
+   */
+  industry?: boolean
   types: NodeType[]
 }
 
@@ -301,7 +308,97 @@ export const NODE_TYPE_GROUPS: NodeTypeGroup[] = [
       { id: 'location', label: 'Location', icon: 'map-pin', color: 'pink' },
     ],
   },
+
+  /* ------------------------------------------------------------ industries */
+
+  {
+    id: 'banking',
+    label: 'Banking & payments',
+    industry: true,
+    types: [
+      { id: 'core_banking', label: 'Core Banking', icon: 'landmark', color: 'blue', tech: 'core_banking', aliases: ['cbs', 'account system'] },
+      { id: 'ledger', label: 'Ledger', icon: 'book-open-check', color: 'green', shape: 'cylinder', tech: 'core_banking', aliases: ['general ledger', 'gl', 'accounting'] },
+      { id: 'payment_hub', label: 'Payment Hub', icon: 'arrow-right-left', color: 'pink', tech: 'payment_networks', aliases: ['payment engine', 'payments', 'ach', 'rtp', 'instant payments'] },
+      { id: 'card_processor', label: 'Card Processor', icon: 'credit-card', color: 'pink', tech: 'payment_providers', aliases: ['card issuing', 'acquirer', 'issuer', 'authorisation'] },
+      { id: 'clearing_settlement', label: 'Clearing & Settlement', icon: 'scale', color: 'purple', tech: 'payment_networks', aliases: ['clearing house', 'settlement', 'csm'] },
+      { id: 'kyc_aml', label: 'KYC / AML', icon: 'id-card', color: 'amber', aliases: ['know your customer', 'anti money laundering', 'compliance', 'onboarding'] },
+      { id: 'fraud_detection', label: 'Fraud Detection', icon: 'shield-alert', color: 'red', aliases: ['fraud', 'transaction monitoring'] },
+      { id: 'risk_engine', label: 'Risk Engine', icon: 'gauge', color: 'amber', aliases: ['risk', 'credit scoring', 'scoring'] },
+      { id: 'open_banking_api', label: 'Open Banking API', icon: 'plug-zap', color: 'teal', aliases: ['psd2', 'open finance', 'xs2a'] },
+      { id: 'atm', label: 'ATM', icon: 'banknote', color: 'slate', aliases: ['cash machine', 'cash point'] },
+      { id: 'branch', label: 'Branch / Teller', icon: 'building', color: 'slate', aliases: ['teller', 'counter', 'bank branch'] },
+    ],
+  },
+  {
+    id: 'telco',
+    label: 'Telco',
+    industry: true,
+    types: [
+      { id: 'ran', label: 'RAN / Base Station', icon: 'radio-tower', color: 'blue', tech: 'telco_network', aliases: ['radio access network', 'gnodeb', 'enodeb', 'cell site', '5g nr'] },
+      { id: 'core_network', label: 'Core Network', icon: 'waypoints', color: 'blue', tech: 'telco_network', aliases: ['5gc', 'epc', 'packet core', 'amf', 'smf', 'upf', 'mobile core'] },
+      { id: 'subscriber_db', label: 'Subscriber DB', icon: 'database', color: 'green', shape: 'cylinder', tech: 'telco_network', aliases: ['hss', 'hlr', 'udm', 'udr', 'subscriber data'] },
+      { id: 'ims', label: 'IMS', icon: 'phone', color: 'purple', tech: 'telco_network', aliases: ['ip multimedia subsystem', 'volte', 'vonr', 'voip'] },
+      { id: 'smsc', label: 'SMSC', icon: 'message-square', color: 'amber', tech: 'telco_network', aliases: ['sms', 'sms centre', 'sms center'] },
+      { id: 'charging', label: 'Charging (OCS)', icon: 'coins', color: 'pink', tech: 'telco_bss', aliases: ['ocs', 'chf', 'online charging', 'rating', 'convergent charging'] },
+      { id: 'oss', label: 'OSS', icon: 'monitor-cog', color: 'teal', tech: 'telco_bss', aliases: ['operations support system', 'network management', 'service assurance', 'inventory'] },
+      { id: 'bss', label: 'BSS', icon: 'briefcase-business', color: 'purple', tech: 'telco_bss', aliases: ['business support system', 'billing', 'crm', 'product catalogue'] },
+      { id: 'provisioning', label: 'Provisioning', icon: 'list-checks', color: 'teal', tech: 'telco_bss', aliases: ['activation', 'service activation', 'order fulfilment'] },
+      { id: 'esim', label: 'eSIM', icon: 'card-sim', color: 'slate', aliases: ['sim', 'euicc', 'rsp', 'sm-dp+'] },
+    ],
+  },
+  {
+    id: 'insurance',
+    label: 'Insurance',
+    industry: true,
+    types: [
+      { id: 'policy_admin', label: 'Policy Administration', icon: 'file-text', color: 'blue', tech: 'insurance', aliases: ['pas', 'policy system', 'policy admin'] },
+      { id: 'claims', label: 'Claims', icon: 'clipboard-list', color: 'amber', tech: 'insurance', aliases: ['claims management', 'fnol', 'loss'] },
+      { id: 'underwriting', label: 'Underwriting', icon: 'signature', color: 'purple', tech: 'insurance', aliases: ['risk selection', 'underwriter'] },
+      { id: 'rating_engine', label: 'Rating Engine', icon: 'calculator', color: 'teal', tech: 'insurance', aliases: ['rating', 'pricing', 'quote', 'premium'] },
+      { id: 'broker_portal', label: 'Broker Portal', icon: 'handshake', color: 'slate', aliases: ['agent portal', 'intermediary', 'distribution'] },
+    ],
+  },
+  {
+    id: 'healthcare',
+    label: 'Healthcare',
+    industry: true,
+    types: [
+      { id: 'ehr', label: 'EHR', icon: 'clipboard-plus', color: 'red', tech: 'healthcare', aliases: ['emr', 'electronic health record', 'electronic medical record', 'clinical system'] },
+      { id: 'pacs', label: 'PACS', icon: 'scan', color: 'blue', aliases: ['imaging', 'dicom', 'radiology', 'vna'] },
+      { id: 'lab_system', label: 'Lab System', icon: 'test-tube', color: 'teal', aliases: ['lis', 'lims', 'laboratory'] },
+      { id: 'interface_engine', label: 'Interface Engine', icon: 'arrow-left-right', color: 'amber', tech: 'healthcare_integration', aliases: ['hl7', 'fhir', 'integration engine', 'hie'] },
+      { id: 'patient_portal', label: 'Patient Portal', icon: 'heart-pulse', color: 'pink', tech: 'healthcare', aliases: ['patient app', 'mychart', 'telehealth'] },
+    ],
+  },
+  {
+    id: 'retail',
+    label: 'Retail & e-commerce',
+    industry: true,
+    types: [
+      { id: 'pos', label: 'POS', icon: 'scan-barcode', color: 'amber', aliases: ['point of sale', 'till', 'cash register', 'checkout terminal'] },
+      { id: 'order_management', label: 'Order Management', icon: 'package-check', color: 'blue', tech: 'commerce', aliases: ['oms', 'order management system', 'fulfilment'] },
+      { id: 'inventory', label: 'Inventory / WMS', icon: 'warehouse', color: 'green', aliases: ['wms', 'warehouse management', 'stock'] },
+      { id: 'pim', label: 'PIM', icon: 'tags', color: 'purple', tech: 'commerce', aliases: ['product information management', 'product catalogue', 'catalog'] },
+      { id: 'checkout', label: 'Checkout', icon: 'shopping-cart', color: 'pink', tech: 'commerce', aliases: ['cart', 'basket', 'storefront'] },
+    ],
+  },
+  {
+    id: 'manufacturing',
+    label: 'Manufacturing & IoT',
+    industry: true,
+    types: [
+      { id: 'plc', label: 'PLC', icon: 'circuit-board', color: 'slate', tech: 'industrial_automation', aliases: ['programmable logic controller', 'controller'] },
+      { id: 'scada', label: 'SCADA', icon: 'monitor-cog', color: 'teal', tech: 'industrial_automation', aliases: ['hmi', 'control system', 'ics', 'dcs'] },
+      { id: 'mes', label: 'MES', icon: 'factory', color: 'amber', aliases: ['manufacturing execution system', 'shop floor'] },
+      { id: 'historian', label: 'Historian', icon: 'chart-line', color: 'green', shape: 'cylinder', tech: 'industrial_data', aliases: ['process historian', 'time series', 'plant data'] },
+      { id: 'edge_gateway', label: 'Edge Gateway', icon: 'router', color: 'teal', tech: 'industrial_automation', aliases: ['iot gateway', 'edge', 'field gateway'] },
+      { id: 'digital_twin', label: 'Digital Twin', icon: 'rotate-3d', color: 'purple', aliases: ['twin', 'simulation', '3d model'] },
+    ],
+  },
 ]
+
+/** The industry packs, in the order the palette and Settings list them. */
+export const INDUSTRY_GROUPS: NodeTypeGroup[] = NODE_TYPE_GROUPS.filter((group) => group.industry)
 
 export const NODE_TYPES: NodeType[] = NODE_TYPE_GROUPS.flatMap((group) => group.types)
 

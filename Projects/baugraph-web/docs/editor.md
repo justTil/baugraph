@@ -47,9 +47,12 @@ Every node carries two things beyond its name, and both are drawn on it:
   panel.
 
 Both are picked in the inspector (or from a node's right-click menu) out of
-searchable catalogues: ~90 node types and ~250 technologies grouped by what
+searchable catalogues: ~150 node types and ~420 technologies grouped by what
 they are — databases, message brokers, integration and ESB, caches, clouds,
-CI/CD, identity, observability. The palette's own technology groups are the
+CI/CD, identity, observability — plus industry packs for banking and payments,
+telco, insurance, healthcare, retail and manufacturing. The packs sit folded in
+their own **Industries** section of the palette, and each can be hidden in
+Settings. The palette's own technology groups are the
 shortcut: drag `Apache Kafka` straight onto the canvas and you get an amber
 queue that is already a topic running Kafka.
 

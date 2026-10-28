@@ -42,6 +42,8 @@ export interface PaletteGroup {
   label: string
   /** Technology groups start collapsed; there are a lot of them. */
   kind: 'types' | 'tech'
+  /** One industry's building blocks or products. See `NodeTypeGroup.industry`. */
+  industry?: boolean
   items: PaletteItem[]
 }
 
@@ -86,12 +88,14 @@ export const PALETTE: PaletteGroup[] = [
     id: group.id,
     label: group.label,
     kind: 'types' as const,
+    industry: group.industry,
     items: group.types.map(itemFromType),
   })),
   ...TECH_CATEGORIES.map((category) => ({
     id: `tech:${category.id}`,
     label: category.label,
     kind: 'tech' as const,
+    industry: category.industry,
     items: category.items.map((tech) => itemFromTech(tech, category)),
   })),
 ]

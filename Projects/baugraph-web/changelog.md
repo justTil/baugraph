@@ -21,6 +21,39 @@ All notable changes to this project will be documented in this file.
   so the canvas always matches the list. Every move is one undo step. A search
   box finds nodes by name, type, technology or id, and the panel remembers
   whether you left it open.
+- **Industry palettes.** Six packs of node types for the systems a general
+  palette has no name for — banking and payments, telco, insurance,
+  healthcare, retail and manufacturing — each type with its own Lucide icon,
+  colour and search aliases (listed below). The technology catalogue gains
+  the products that go with them: Temenos Transact, Finastra, FIS, Fiserv,
+  Mambu, Thought Machine Vault, Avaloq, SWIFT, SEPA, ISO 20022, Adyen, Stripe,
+  Ericsson, Nokia, Huawei, Amdocs, Netcracker, CSG, Oracle Communications,
+  Guidewire, Duck Creek, Sapiens, Epic, Oracle Health, Mirth Connect,
+  InterSystems HealthShare, SAP Commerce, Salesforce Commerce Cloud, Shopify,
+  commercetools, Adobe Commerce, Siemens SIMATIC, Rockwell Automation, OPC UA
+  and AVEVA PI. Picking one on an untyped node gives it the matching type, the
+  same as any other technology. The packs sit in their own **Industries**
+  section of the palette, each folded until opened, and a new **Industry
+  palettes** card in Settings hides the ones you don't work in. A hidden pack
+  still turns up when you search for it. In the right-click menus the packs
+  are grouped under one **Industries** submenu, so the general groups stay a
+  short list. The AI skills are regenerated, so an assistant writing a
+  diagram knows the new types and technologies too. Nothing changes in the
+  file format: these are new `type` and `tech` ids, and an older Baugraph
+  opens a diagram using them with the names spelled out from the id.
+  - **Banking & payments** — Core Banking, Ledger, Payment Hub, Card
+    Processor, Clearing & Settlement, KYC / AML, Fraud Detection, Risk Engine,
+    Open Banking API, ATM, Branch / Teller.
+  - **Telco** — RAN / Base Station, Core Network, Subscriber DB (HSS/HLR/UDM),
+    IMS, SMSC, Charging (OCS), OSS, BSS, Provisioning, eSIM.
+  - **Insurance** — Policy Administration, Claims, Underwriting, Rating
+    Engine, Broker Portal.
+  - **Healthcare** — EHR, PACS, Lab System, Interface Engine (HL7/FHIR),
+    Patient Portal.
+  - **Retail & e-commerce** — POS, Order Management, Inventory / WMS, PIM,
+    Checkout.
+  - **Manufacturing & IoT** — PLC, SCADA, MES, Historian, Edge Gateway,
+    Digital Twin.
 
 ### Fixed
 

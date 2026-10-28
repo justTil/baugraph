@@ -20,7 +20,7 @@ features:
   - title: Diagram as code
     details: A diagram is one .baugraph.json file — node ids from labels, defaults omitted, keys in a fixed order — so a diff shows exactly what changed and nothing else.
   - title: Rich node catalogue
-    details: ~90 node types and ~250 technologies, grouped by category and searchable from the palette, context menu and inspector alike.
+    details: ~150 node types and ~420 technologies, including industry packs for banking, telco, insurance, healthcare, retail and manufacturing, grouped by category and searchable from the palette, context menu and inspector alike.
   - title: Zones and grouping
     details: Wrap nodes in labelled, nestable zones — a VPC, a cluster, a bounded context — and move the group as one.
   - title: Animated message flows

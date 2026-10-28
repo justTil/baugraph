@@ -32,6 +32,12 @@ export interface TechCategory {
    * Ids come from `node-types.ts`.
    */
   nodeType: string
+  /**
+   * Products of one industry rather than a technical role — see
+   * `NodeTypeGroup.industry`. The context menus gather these under a submenu
+   * of their own so they do not crowd out the general-purpose categories.
+   */
+  industry?: boolean
   items: TechItem[]
 }
 
@@ -551,6 +557,131 @@ export const TECH_CATEGORIES: TechCategory[] = [
       { id: 'mlflow', label: 'MLflow' },
       { id: 'kubeflow', label: 'Kubeflow' },
     ],
+  },
+
+  /* ------------------------------------------------------------ industries */
+
+  {
+    id: 'core_banking',
+    label: 'Core banking platforms',
+    nodeType: 'core_banking',
+    industry: true,
+    items: [
+      { id: 'temenos_transact', label: 'Temenos Transact', aliases: ['temenos', 't24'] },
+      { id: 'finastra', label: 'Finastra', aliases: ['fusion', 'misys'] },
+      { id: 'fis', label: 'FIS', aliases: ['systematics', 'fis profile'] },
+      { id: 'fiserv', label: 'Fiserv', aliases: ['fiserv dna', 'premier'] },
+      { id: 'mambu', label: 'Mambu' },
+      { id: 'thought_machine_vault', label: 'Thought Machine Vault', aliases: ['thought machine'] },
+      { id: 'avaloq', label: 'Avaloq' },
+    ],
+  },
+  {
+    id: 'payment_networks',
+    label: 'Payment networks & standards',
+    nodeType: 'payment_hub',
+    industry: true,
+    items: [
+      // `swift` is already the programming language.
+      { id: 'swift_network', label: 'SWIFT', aliases: ['swiftnet', 'swift gpi', 'mt'] },
+      { id: 'sepa', label: 'SEPA', aliases: ['sct', 'sdd', 'sepa instant'] },
+      { id: 'iso_20022', label: 'ISO 20022', aliases: ['pacs.008', 'camt', 'mx'] },
+    ],
+  },
+  {
+    id: 'payment_providers',
+    label: 'Payment service providers',
+    nodeType: 'payment',
+    industry: true,
+    items: [
+      { id: 'adyen', label: 'Adyen' },
+      { id: 'stripe', label: 'Stripe' },
+    ],
+  },
+  {
+    id: 'telco_network',
+    label: 'Telco network vendors',
+    nodeType: 'core_network',
+    industry: true,
+    items: [
+      { id: 'ericsson', label: 'Ericsson' },
+      { id: 'nokia', label: 'Nokia' },
+      { id: 'huawei', label: 'Huawei' },
+    ],
+  },
+  {
+    id: 'telco_bss',
+    label: 'Telco OSS/BSS',
+    nodeType: 'bss',
+    industry: true,
+    items: [
+      { id: 'amdocs', label: 'Amdocs' },
+      { id: 'netcracker', label: 'Netcracker' },
+      { id: 'csg', label: 'CSG' },
+      { id: 'oracle_communications', label: 'Oracle Communications', aliases: ['oracle brm', 'brm'] },
+    ],
+  },
+  {
+    id: 'insurance',
+    label: 'Insurance platforms',
+    nodeType: 'policy_admin',
+    industry: true,
+    items: [
+      { id: 'guidewire', label: 'Guidewire', aliases: ['policycenter', 'claimcenter', 'billingcenter'] },
+      { id: 'duck_creek', label: 'Duck Creek' },
+      { id: 'sapiens', label: 'Sapiens' },
+    ],
+  },
+  {
+    id: 'healthcare',
+    label: 'Healthcare systems',
+    nodeType: 'ehr',
+    industry: true,
+    items: [
+      { id: 'epic', label: 'Epic', aliases: ['epic systems', 'mychart'] },
+      { id: 'oracle_health', label: 'Oracle Health', aliases: ['cerner'] },
+    ],
+  },
+  {
+    id: 'healthcare_integration',
+    label: 'Healthcare integration engines',
+    nodeType: 'interface_engine',
+    industry: true,
+    items: [
+      { id: 'mirth_connect', label: 'Mirth Connect', aliases: ['nextgen connect', 'mirth'] },
+      { id: 'intersystems_healthshare', label: 'InterSystems HealthShare', aliases: ['intersystems', 'iris for health'] },
+    ],
+  },
+  {
+    id: 'commerce',
+    label: 'Commerce platforms',
+    nodeType: 'order_management',
+    industry: true,
+    items: [
+      { id: 'sap_commerce', label: 'SAP Commerce', aliases: ['hybris', 'sap commerce cloud'] },
+      { id: 'salesforce_commerce_cloud', label: 'Salesforce Commerce Cloud', aliases: ['sfcc', 'demandware'] },
+      { id: 'shopify', label: 'Shopify' },
+      { id: 'commercetools', label: 'commercetools' },
+      { id: 'adobe_commerce', label: 'Adobe Commerce', aliases: ['magento'] },
+    ],
+  },
+  {
+    id: 'industrial_automation',
+    label: 'Industrial automation',
+    nodeType: 'plc',
+    industry: true,
+    items: [
+      { id: 'siemens_simatic', label: 'Siemens SIMATIC', aliases: ['siemens', 's7', 'tia portal'] },
+      { id: 'rockwell_automation', label: 'Rockwell Automation', aliases: ['allen-bradley', 'controllogix'] },
+      { id: 'opc_ua', label: 'OPC UA', aliases: ['opc'] },
+    ],
+  },
+  {
+    id: 'industrial_data',
+    label: 'Industrial data',
+    nodeType: 'historian',
+    industry: true,
+    items: [{ id: 'aveva_pi', label: 'AVEVA PI', aliases: ['osisoft pi', 'pi system'] }],
   },
 ]
 

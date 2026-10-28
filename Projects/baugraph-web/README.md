@@ -80,9 +80,11 @@ Every node carries two things beyond its name, and both are drawn on it:
   screenshot has to carry, so it is on the node rather than buried in a panel.
 
 Both are picked in the inspector (or from a node's right-click menu) out of
-searchable catalogues: ~90 node types and ~250 technologies grouped by what they
+searchable catalogues: ~150 node types and ~420 technologies grouped by what they
 are — databases, message brokers, integration and ESB, caches, clouds, CI/CD,
-identity, observability. The palette's own technology groups are the shortcut:
+identity, observability — plus industry packs for banking and payments, telco,
+insurance, healthcare, retail and manufacturing. The packs sit folded in their own
+**Industries** section of the palette, and each can be hidden in Settings. The palette's own technology groups are the shortcut:
 drag `Apache Kafka` straight onto the canvas and you get an amber queue that is
 already a topic running Kafka.
 
@@ -442,7 +444,7 @@ back to showing the id, humanised).
 
 ### Icons
 
-Icons come from [Lucide](https://lucide.dev) (ISC). A curated subset of ~240 is
+Icons come from [Lucide](https://lucide.dev) (ISC). A curated subset of ~265 is
 bundled — importing all ~3500 would dominate the bundle and make the picker
 unusable. To add one, put its PascalCase name in `CURATED` in
 `scripts/generate-icons.ts` and run:

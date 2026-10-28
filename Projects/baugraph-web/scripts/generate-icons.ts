@@ -80,6 +80,13 @@ const CURATED: Record<string, string[]> = {
     'NotebookPen', 'BookOpen', 'Beaker', 'FlaskConical', 'Microscope', 'Atom',
     'Dna', 'Hash', 'AtSign', 'Percent', 'Sigma', 'Binary', 'Command', 'Type',
   ],
+  'Industries': [
+    'BookOpenCheck', 'PlugZap', 'Coins', 'Phone', 'PhoneCall', 'CardSim',
+    'MonitorCog', 'BriefcaseBusiness', 'Signature', 'Calculator', 'Handshake',
+    'Umbrella', 'ClipboardPlus', 'Scan', 'TestTube', 'HeartPulse', 'Stethoscope',
+    'Hospital', 'Pill', 'ScanBarcode', 'PackageCheck', 'CircuitBoard', 'Rotate3d',
+    'ChartCandlestick',
+  ],
   'Geometry': [
     'Circle', 'Square', 'Triangle', 'Hexagon', 'Diamond', 'Pentagon', 'Octagon',
     'Cylinder', 'Frame', 'Group', 'Ungroup', 'Grid2x2', 'Rows3', 'Columns3',

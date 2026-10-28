@@ -2,10 +2,15 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { useAppTheme } from '@/composables/useAppTheme'
 import { useActiveDiagram } from '@/features/diagram/composables/useDiagram'
 import { useDocuments } from '@/features/diagram/composables/useDocuments'
 import { discardAllDocuments } from '@/features/diagram/composables/useEditorTabs'
+import { useIndustries } from '@/features/diagram/composables/useIndustries'
+import { INDUSTRY_GROUPS } from '@/features/diagram/data/node-types'
+import { iconComponent } from '@/features/diagram/data/icons'
+import { COLOR_HEX } from '@/features/diagram/lib/theme'
 import { SCHEMA_URL } from '@/model'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 
@@ -14,6 +19,7 @@ import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 const diagram = useActiveDiagram()
 const { documents } = useDocuments()
 const { dark: appDark } = useAppTheme()
+const { isShown, setShown } = useIndustries()
 
 function forgetLocalCopies() {
   if (!window.confirm(`Remove all ${documents.value.length} autosaved diagrams from this browser?`))
@@ -42,6 +48,37 @@ function forgetLocalCopies() {
           ]"
           @update:model-value="appDark = $event === 'dark'"
         />
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>Industry palettes</CardTitle>
+        <CardDescription>
+          Stored in this browser. A hidden pack leaves the palette but still turns up
+          when you search it, and diagrams that use its nodes draw exactly as before.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-3">
+        <label
+          v-for="group in INDUSTRY_GROUPS"
+          :key="group.id"
+          class="flex cursor-pointer items-center gap-3 text-sm"
+        >
+          <component
+            :is="iconComponent(group.types[0]?.icon) ?? 'span'"
+            class="size-4 shrink-0"
+            :style="{ color: COLOR_HEX[group.types[0]?.color ?? 'slate'] }"
+          />
+          <span class="flex-1">
+            {{ group.label }}
+            <span class="text-muted-foreground">· {{ group.types.length }} node types</span>
+          </span>
+          <Switch
+            :model-value="isShown(group.id)"
+            @update:model-value="setShown(group.id, Boolean($event))"
+          />
+        </label>
       </CardContent>
     </Card>
 
