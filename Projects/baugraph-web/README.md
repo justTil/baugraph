@@ -80,9 +80,11 @@ Every node carries two things beyond its name, and both are drawn on it:
   screenshot has to carry, so it is on the node rather than buried in a panel.
 
 Both are picked in the inspector (or from a node's right-click menu) out of
-searchable catalogues: ~90 node types and ~250 technologies grouped by what they
+searchable catalogues: ~150 node types and ~420 technologies grouped by what they
 are — databases, message brokers, integration and ESB, caches, clouds, CI/CD,
-identity, observability. The palette's own technology groups are the shortcut:
+identity, observability — plus industry packs for banking and payments, telco,
+insurance, healthcare, retail and manufacturing. The packs sit folded in their own
+**Industries** section of the palette, and each can be hidden in Settings. The palette's own technology groups are the shortcut:
 drag `Apache Kafka` straight onto the canvas and you get an amber queue that is
 already a topic running Kafka.
 
@@ -117,6 +119,11 @@ Lock a node or zone with `⇧⌘L` and it drops out of reach — not selectable,
 draggable, not connectable — which is what makes rearranging the contents of a zone
 bearable. A locked node carries a small lock badge; clicking it unlocks that node
 again, and the inspector can unlock everything at once.
+
+The **Layers** tab on the left edge of the canvas lists every node, nested the way
+its zones nest. Click a row to select the node, double-click it to bring it into
+view, lock or unlock it from the row, and drag rows onto a zone (or onto empty
+space) to regroup them — the nodes move on the canvas to match.
 
 ### Message flows
 
@@ -192,6 +199,7 @@ connections they travel instead.
 | `Shift` + drag | rubber-band select |
 | scroll / pinch | pan / zoom |
 | `F` | fit the view to the diagram |
+| `B` | browse all palettes |
 | `⇧⌘F` | size the selection to its text (everything, if nothing is selected) |
 | `Enter` | rename the selected node |
 | `⌘D` / `⌘G` | duplicate / wrap in a zone |
@@ -399,7 +407,8 @@ src/
   model/                   the .baugraph.json format — types, zod schema,
                            (de)serialisation, migration, id generation
   features/diagram/
-    components/            canvas, custom nodes and edges, palette, inspector
+    components/            canvas, custom nodes and edges, palette, inspector,
+                           layers panel
     composables/           editor state, undo/redo, autosave, placement,
                            the GSAP message-flow runtime
     lib/                   shape geometry, edge routing, flow traversal,
@@ -436,7 +445,7 @@ back to showing the id, humanised).
 
 ### Icons
 
-Icons come from [Lucide](https://lucide.dev) (ISC). A curated subset of ~240 is
+Icons come from [Lucide](https://lucide.dev) (ISC). A curated subset of ~265 is
 bundled — importing all ~3500 would dominate the bundle and make the picker
 unusable. To add one, put its PascalCase name in `CURATED` in
 `scripts/generate-icons.ts` and run:

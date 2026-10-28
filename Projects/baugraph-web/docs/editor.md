@@ -47,9 +47,12 @@ Every node carries two things beyond its name, and both are drawn on it:
   panel.
 
 Both are picked in the inspector (or from a node's right-click menu) out of
-searchable catalogues: ~90 node types and ~250 technologies grouped by what
+searchable catalogues: ~150 node types and ~420 technologies grouped by what
 they are — databases, message brokers, integration and ESB, caches, clouds,
-CI/CD, identity, observability. The palette's own technology groups are the
+CI/CD, identity, observability — plus industry packs for banking and payments,
+telco, insurance, healthcare, retail and manufacturing. The packs sit folded in
+their own **Industries** section of the palette, and each can be hidden in
+Settings. The palette's own technology groups are the
 shortcut: drag `Apache Kafka` straight onto the canvas and you get an amber
 queue that is already a topic running Kafka.
 
@@ -95,6 +98,25 @@ not draggable, not connectable — which is what makes rearranging the
 contents of a zone bearable. A locked node carries a small lock badge;
 clicking it unlocks that node again, and the inspector can unlock everything
 at once.
+
+## Layers
+
+The **Layers** tab on the left edge of the canvas opens a list of every node
+in the diagram, nested the way its zones nest. It is the quick way around a
+diagram too big to read at a glance:
+
+- **Click** a row to select that node; `⌘`- or `⇧`-click adds it to the
+  selection. **Double-click** it, or use its locate button, to bring it into
+  view.
+- **Hover** a row to lock or unlock it. Clicking a locked node's row shows
+  you where it is, since a locked node cannot be selected.
+- **Drag** rows to regroup them. Drop onto a zone to move into it, onto
+  another node to join the zone that node is in, or onto empty space to take
+  it out of every zone. A node that doesn't already sit inside its new zone
+  is set down under the zone's contents, and the zone grows to fit; one taken
+  out is set down just clear of it. Either way, the canvas ends up matching
+  the list.
+- **Search** by name, type, technology or id.
 
 ## Everyday editing
 

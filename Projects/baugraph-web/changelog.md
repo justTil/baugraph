@@ -2,6 +2,87 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.33.0]
+
+### Added
+
+- **A layers panel, for finding and regrouping nodes without hunting the
+  canvas.** A **Layers** tab on the left edge of the canvas opens a list of
+  every node in the diagram, nested the way its zones nest: zones first, then
+  everything else by name. Click a row to select that node (⌘- or ⇧-click adds
+  it to the selection), and double-click it — or use its locate button — to
+  bring it into view. Hover a row to lock or unlock it; a locked node keeps its
+  lock icon in the list, and clicking it shows you where it is. Drag rows to
+  regroup them: drop onto a zone to move into it, onto another node to join
+  the zone that node is in, or onto empty space to take it out of every zone.
+  Dragging a selected row moves the whole selection. A node that doesn't
+  already sit inside its new zone is set down under what the zone holds, and
+  the zone grows to fit it. One taken out is set down just clear of the zone,
+  so the canvas always matches the list. Every move is one undo step. A search
+  box finds nodes by name, type, technology or id, and the panel remembers
+  whether you left it open.
+- **Industry palettes.** Six packs of node types for the systems a general
+  palette has no name for — banking and payments, telco, insurance,
+  healthcare, retail and manufacturing — each type with its own Lucide icon,
+  colour and search aliases (listed below). The technology catalogue gains
+  the products that go with them: Temenos Transact, Finastra, FIS, Fiserv,
+  Mambu, Thought Machine Vault, Avaloq, SWIFT, SEPA, ISO 20022, Adyen, Stripe,
+  Ericsson, Nokia, Huawei, Amdocs, Netcracker, CSG, Oracle Communications,
+  Guidewire, Duck Creek, Sapiens, Epic, Oracle Health, Mirth Connect,
+  InterSystems HealthShare, SAP Commerce, Salesforce Commerce Cloud, Shopify,
+  commercetools, Adobe Commerce, Siemens SIMATIC, Rockwell Automation, OPC UA
+  and AVEVA PI. Picking one on an untyped node gives it the matching type, the
+  same as any other technology. The packs sit in their own **Industries**
+  section of the palette, each folded until opened, and a new **Industry
+  palettes** card in Settings hides the ones you don't work in. A hidden pack
+  still turns up when you search for it. In the right-click menus the packs
+  are grouped under one **Industries** submenu, so the general groups stay a
+  short list. The AI skills are regenerated, so an assistant writing a
+  diagram knows the new types and technologies too. Nothing changes in the
+  file format: these are new `type` and `tech` ids, and an older Baugraph
+  opens a diagram using them with the names spelled out from the id.
+  - **Banking & payments** — Core Banking, Ledger, Payment Hub, Card
+    Processor, Clearing & Settlement, KYC / AML, Fraud Detection, Risk Engine,
+    Open Banking API, ATM, Branch / Teller.
+  - **Telco** — RAN / Base Station, Core Network, Subscriber DB (HSS/HLR/UDM),
+    IMS, SMSC, Charging (OCS), OSS, BSS, Provisioning, eSIM.
+  - **Insurance** — Policy Administration, Claims, Underwriting, Rating
+    Engine, Broker Portal.
+  - **Healthcare** — EHR, PACS, Lab System, Interface Engine (HL7/FHIR),
+    Patient Portal.
+  - **Retail & e-commerce** — POS, Order Management, Inventory / WMS, PIM,
+    Checkout.
+  - **Manufacturing & IoT** — PLC, SCADA, MES, Historian, Edge Gateway,
+    Digital Twin.
+- **A palette overview.** **Browse all palettes**, under the palette's search
+  box — or `B` on the canvas, which closes it again too — opens everything the
+  palette can add, laid out side by side instead of folded into a narrow
+  column: every node-type group, the industry packs, and on a second tab the
+  whole technology catalogue, with the node type each technology arrives as.
+  One search narrows both tabs, clicking an entry drops it on the canvas, and
+  each industry pack has an **In palette** switch to show or hide it in the
+  sidebar.
+
+### Fixed
+
+- **Connections that have to go around no longer hug the node they leave.**
+  Two stacked nodes joined side to side — out of the right of one, into the
+  left of the other — drew the leg that crosses between them pressed against
+  the upper node instead of halfway down the gap. Any leg of a detour that is
+  free to move now sits in the middle of the space it runs through. The end
+  that enters a node also turns in as close to it as the other end turns out,
+  instead of a full step further away, so those connections are shorter and
+  read the same at both ends. The canvas and SVG/PNG exports both draw the new
+  routes.
+
+## [1.32.0]
+
+Skipped for the editor: this version went to restructuring the repository to
+make room for a new Python package, `baugraph`. The editor moved to
+`Projects/baugraph-web`, the package was set up in `Projects/baugraph-py`,
+and the build and publish pipelines were updated to match. Baugraph itself is
+unchanged from 1.31.0.
+
 ## [1.31.0]
 
 ### Added

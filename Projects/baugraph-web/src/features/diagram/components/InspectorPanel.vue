@@ -1002,6 +1002,8 @@ function setRouting(
             <dd>pan canvas</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">F</kbd></dt>
             <dd>fit view to content</dd>
+            <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">B</kbd></dt>
+            <dd>browse all palettes</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">L</kbd></dt>
             <dd>laser pointer for presenting</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">P</kbd></dt>

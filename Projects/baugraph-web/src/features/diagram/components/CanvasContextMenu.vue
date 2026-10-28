@@ -181,6 +181,15 @@ const typeGroups = computed(() => {
   })).filter((group) => group.types.length > 0)
 })
 
+/**
+ * Industry entries sit under one "Industries" submenu in each list, so the
+ * general-purpose groups these menus are mostly used for stay a short list.
+ */
+const general = <T extends { industry?: boolean }>(groups: readonly T[]) =>
+  groups.filter((group) => !group.industry)
+const industries = <T extends { industry?: boolean }>(groups: readonly T[]) =>
+  groups.filter((group) => group.industry)
+
 /** Palette groups split by what they add: node types, then technologies. */
 const paletteTypeGroups = computed(() => PALETTE.filter((group) => group.kind === 'types'))
 const paletteTechGroups = computed(() => PALETTE.filter((group) => group.kind === 'tech'))
@@ -360,7 +369,7 @@ function copySelectionIds() {
         <ContextMenuSubContent class="max-h-80">
           <ContextMenuItem @select="act(() => setNodeType(node!.id, ''))">No type</ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuSub v-for="group in typeGroups" :key="group.id">
+          <ContextMenuSub v-for="group in general(typeGroups)" :key="group.id">
             <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
             <ContextMenuSubContent class="max-h-80">
               <ContextMenuRadioGroup :model-value="node.data?.type">
@@ -373,6 +382,26 @@ function copySelectionIds() {
                   {{ type.label }}
                 </ContextMenuRadioItem>
               </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSub v-if="industries(typeGroups).length">
+            <ContextMenuSubTrigger>Industries</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-80">
+              <ContextMenuSub v-for="group in industries(typeGroups)" :key="group.id">
+                <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
+                <ContextMenuSubContent class="max-h-80">
+                  <ContextMenuRadioGroup :model-value="node.data?.type">
+                    <ContextMenuRadioItem
+                      v-for="type in group.types"
+                      :key="type.id"
+                      :value="type.id"
+                      @select="act(() => setNodeType(node!.id, type.id))"
+                    >
+                      {{ type.label }}
+                    </ContextMenuRadioItem>
+                  </ContextMenuRadioGroup>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
             </ContextMenuSubContent>
           </ContextMenuSub>
         </ContextMenuSubContent>
@@ -388,7 +417,7 @@ function copySelectionIds() {
             No technology
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuSub v-for="category in techCategoriesWithCustom" :key="category.id">
+          <ContextMenuSub v-for="category in general(techCategoriesWithCustom)" :key="category.id">
             <ContextMenuSubTrigger>{{ category.label }}</ContextMenuSubTrigger>
             <ContextMenuSubContent class="max-h-80">
               <ContextMenuRadioGroup :model-value="node.data?.tech">
@@ -401,6 +430,26 @@ function copySelectionIds() {
                   {{ item.label }}
                 </ContextMenuRadioItem>
               </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSub v-if="industries(techCategoriesWithCustom).length">
+            <ContextMenuSubTrigger>Industries</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-80">
+              <ContextMenuSub v-for="category in industries(techCategoriesWithCustom)" :key="category.id">
+                <ContextMenuSubTrigger>{{ category.label }}</ContextMenuSubTrigger>
+                <ContextMenuSubContent class="max-h-80">
+                  <ContextMenuRadioGroup :model-value="node.data?.tech">
+                    <ContextMenuRadioItem
+                      v-for="item in category.items"
+                      :key="item.id"
+                      :value="item.id"
+                      @select="act(() => setNodeTech(node!.id, item.id))"
+                    >
+                      {{ item.label }}
+                    </ContextMenuRadioItem>
+                  </ContextMenuRadioGroup>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
             </ContextMenuSubContent>
           </ContextMenuSub>
         </ContextMenuSubContent>
@@ -880,7 +929,7 @@ function copySelectionIds() {
           Add node here
         </ContextMenuSubTrigger>
         <ContextMenuSubContent class="max-h-80">
-          <ContextMenuSub v-for="group in paletteTypeGroups" :key="group.id">
+          <ContextMenuSub v-for="group in general(paletteTypeGroups)" :key="group.id">
             <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
             <ContextMenuSubContent class="max-h-80">
               <ContextMenuItem
@@ -896,6 +945,27 @@ function copySelectionIds() {
               </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
+          <ContextMenuSub v-if="industries(paletteTypeGroups).length">
+            <ContextMenuSubTrigger>Industries</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-80">
+              <ContextMenuSub v-for="group in industries(paletteTypeGroups)" :key="group.id">
+                <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
+                <ContextMenuSubContent class="max-h-80">
+                  <ContextMenuItem
+                    v-for="item in group.items"
+                    :key="item.type"
+                    @select="addHere(item)"
+                  >
+                    <span
+                      class="size-3 rounded-full border border-black/20 dark:border-white/20"
+                      :style="{ background: COLOR_HEX[item.color] }"
+                    />
+                    {{ item.label }}
+                  </ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
         </ContextMenuSubContent>
       </ContextMenuSub>
 
@@ -905,7 +975,7 @@ function copySelectionIds() {
           Add technology here
         </ContextMenuSubTrigger>
         <ContextMenuSubContent class="max-h-80">
-          <ContextMenuSub v-for="group in paletteTechGroups" :key="group.id">
+          <ContextMenuSub v-for="group in general(paletteTechGroups)" :key="group.id">
             <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
             <ContextMenuSubContent class="max-h-80">
               <ContextMenuItem
@@ -919,6 +989,27 @@ function copySelectionIds() {
                 />
                 {{ item.label }}
               </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSub v-if="industries(paletteTechGroups).length">
+            <ContextMenuSubTrigger>Industries</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-80">
+              <ContextMenuSub v-for="group in industries(paletteTechGroups)" :key="group.id">
+                <ContextMenuSubTrigger>{{ group.label }}</ContextMenuSubTrigger>
+                <ContextMenuSubContent class="max-h-80">
+                  <ContextMenuItem
+                    v-for="item in group.items"
+                    :key="item.tech"
+                    @select="addHere(item)"
+                  >
+                    <span
+                      class="size-3 rounded-full border border-black/20 dark:border-white/20"
+                      :style="{ background: COLOR_HEX[item.color] }"
+                    />
+                    {{ item.label }}
+                  </ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
             </ContextMenuSubContent>
           </ContextMenuSub>
         </ContextMenuSubContent>

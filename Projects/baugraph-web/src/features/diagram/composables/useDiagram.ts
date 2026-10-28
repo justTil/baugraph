@@ -1305,6 +1305,167 @@ function createDiagramStore(documentId: string) {
     ]
   }
 
+  /** How far apart nodes are set down when they are moved into or out of a zone. */
+  const SET_DOWN_GAP = 40
+
+  /**
+   * Grows a zone, and every zone it sits in, until it holds its contents with
+   * the same margin `fitZone` wraps them in. Unlike `fitZone` it never shrinks:
+   * a zone drawn roomy stays roomy, it just gets bigger where something now
+   * sticks out of it.
+   */
+  function growZone(id: string) {
+    // Vue Flow measures a resized zone on the next frame, so a zone grown on
+    // the way up would still read at its old size to the one around it.
+    const grown = new Map<string, { width: number; height: number }>()
+    const sizeNow = (node: BgNode) => grown.get(node.id) ?? sizeOf(node)
+    const seen = new Set<string>()
+    let zone = nodes.value.find((n) => n.id === id)
+
+    while (zone?.type === 'zone' && !seen.has(zone.id)) {
+      const zoneId = zone.id
+      seen.add(zoneId)
+      const children = nodes.value.filter((n) => n.parentNode === zoneId)
+      if (children.length) {
+        const size = sizeNow(zone)
+        const boxes = children.map((child) => ({ at: child.position, size: sizeNow(child) }))
+        const x1 = Math.min(0, Math.min(...boxes.map((b) => b.at.x)) - ZONE_PADDING)
+        const y1 = Math.min(0, Math.min(...boxes.map((b) => b.at.y)) - ZONE_PADDING - ZONE_HEADROOM)
+        const x2 = Math.max(size.width, Math.max(...boxes.map((b) => b.at.x + b.size.width)) + ZONE_PADDING)
+        const y2 = Math.max(size.height, Math.max(...boxes.map((b) => b.at.y + b.size.height)) + ZONE_PADDING)
+
+        if (x1 < 0 || y1 < 0 || x2 > size.width || y2 > size.height) {
+          const next = { width: x2 - x1, height: y2 - y1 }
+          grown.set(zoneId, next)
+          const childIds = new Set(children.map((child) => child.id))
+          nodes.value = nodes.value.map((n) => {
+            if (n.id === zoneId) {
+              return {
+                ...n,
+                position: { x: n.position.x + x1, y: n.position.y + y1 },
+                style: { ...(n.style as object), width: `${next.width}px`, height: `${next.height}px` },
+              }
+            }
+            if (!childIds.has(n.id)) return n
+            return { ...n, position: { x: n.position.x - x1, y: n.position.y - y1 } }
+          })
+        }
+      }
+      const parentId = zone.parentNode
+      zone = parentId ? nodes.value.find((n) => n.id === parentId) : undefined
+    }
+  }
+
+  /**
+   * Puts nodes into a zone, or with `null` takes them out to the top level —
+   * for the layers panel, where membership is chosen first and the canvas has
+   * to be brought into line with it afterwards.
+   *
+   * On the canvas it is the other way round: where a node sits decides which
+   * zone it is in (see `regroup`). So a node is moved here only as far as that
+   * rule needs. One that already sits inside its new zone stays exactly where
+   * it is. One that does not is set down inside it, under what the zone holds
+   * already, and the zone grows to take it. One taken out of a zone is set
+   * down just clear of it. Either way, the next drag on the canvas finds the
+   * node where its membership says it is, and leaves it there.
+   *
+   * Several nodes move as one block, keeping their arrangement. Locked nodes
+   * stay where they are, and a zone cannot be put inside itself.
+   */
+  function moveToGroup(ids: Iterable<string>, parentId: string | null): boolean {
+    const wanted = new Set(ids)
+    const byId = new Map(nodes.value.map((n) => [n.id, n]))
+    if (parentId !== null && byId.get(parentId)?.type !== 'zone') return false
+    if (parentId !== null && withDescendants(wanted).has(parentId)) return false
+
+    // Anything inside another node being moved comes along with it already.
+    const isInsideMoved = (node: BgNode) => {
+      const seen = new Set<string>([node.id])
+      for (let up = node.parentNode; up && !seen.has(up); up = byId.get(up)?.parentNode) {
+        if (wanted.has(up)) return true
+        seen.add(up)
+      }
+      return false
+    }
+    const moving = nodes.value.filter(
+      (n) =>
+        wanted.has(n.id) &&
+        !(n.data as NodeData | undefined)?.locked &&
+        !isInsideMoved(n) &&
+        (n.parentNode ?? null) !== parentId,
+    )
+    if (!moving.length) return false
+
+    const movingIds = new Set(moving.map((n) => n.id))
+    reparent(movingIds, parentId)
+
+    // Everything below is in canvas coordinates; `position` is the parent's.
+    const current = () => nodes.value.filter((n) => movingIds.has(n.id))
+    const bounds = () => {
+      const boxes = current().map((n) => ({ at: absolutePosition(n), size: sizeOf(n) }))
+      const x = Math.min(...boxes.map((b) => b.at.x))
+      const y = Math.min(...boxes.map((b) => b.at.y))
+      return {
+        x,
+        y,
+        width: Math.max(...boxes.map((b) => b.at.x + b.size.width)) - x,
+        height: Math.max(...boxes.map((b) => b.at.y + b.size.height)) - y,
+      }
+    }
+    const ignore = withDescendants(movingIds)
+    const zoneOf = (n: BgNode) => {
+      const at = absolutePosition(n)
+      const size = sizeOf(n)
+      return zoneAt({ x: at.x + size.width / 2, y: at.y + size.height / 2 }, ignore)?.id ?? null
+    }
+    const shift = (dx: number, dy: number) => {
+      nodes.value = nodes.value.map((n) =>
+        movingIds.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n,
+      )
+    }
+
+    if (!current().every((n) => zoneOf(n) === parentId)) {
+      const box = bounds()
+      if (parentId !== null) {
+        const zone = byId.get(parentId)!
+        const origin = absolutePosition(zone)
+        const others = nodes.value.filter((n) => n.parentNode === parentId && !movingIds.has(n.id))
+        const slot = others.length
+          ? {
+              x: origin.x + Math.min(...others.map((n) => n.position.x)),
+              y:
+                origin.y +
+                Math.max(...others.map((n) => n.position.y + sizeOf(n).height)) +
+                SET_DOWN_GAP,
+            }
+          : { x: origin.x + ZONE_PADDING, y: origin.y + ZONE_PADDING + ZONE_HEADROOM }
+        // Not snapped: lined up under what the zone already holds beats
+        // lined up with the grid, which the zone's own padding is not on.
+        shift(slot.x - box.x, slot.y - box.y)
+      } else {
+        // Out past the right-hand edge of whichever zone it still sits in —
+        // and past the next one, should that be where it lands.
+        for (let tries = 0; tries < 20; tries++) {
+          const { x, y, width, height } = bounds()
+          let host = zoneAt({ x: x + width / 2, y: y + height / 2 }, ignore)
+          if (!host) break
+          const seen = new Set<string>()
+          while (host.parentNode && !seen.has(host.id)) {
+            seen.add(host.id)
+            const up: BgNode | undefined = byId.get(host.parentNode)
+            if (!up) break
+            host = up
+          }
+          const right = absolutePosition(host).x + sizeOf(host).width
+          shift(right + SET_DOWN_GAP - x, 0)
+        }
+      }
+    }
+
+    if (parentId !== null) growZone(parentId)
+    return true
+  }
+
   /** Releases the selected zones' contents; the frames themselves stay put. */
   function ungroupSelection() {
     const zones = selectedNodes.value.filter((n) => n.type === 'zone')
@@ -1743,6 +1904,7 @@ function createDiagramStore(documentId: string) {
     groupSelection,
     ungroupSelection,
     regroup,
+    moveToGroup,
     setNodesLocked,
     lockSelection,
     unlockAll,
