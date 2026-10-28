@@ -645,7 +645,18 @@ function detour(
 
   const stateOf = (ix: number, iy: number, dir: number) => (iy * nx + ix) * 4 + dir
   const start = stateOf(sx, sy, dirOf(sa.normal))
-  const goal = stateOf(tx, ty, dirOf({ x: -ta.normal.x, y: -ta.normal.y }))
+  /*
+   * Arriving at `t1` is not quite the end: the line still has to turn in towards
+   * `t`, and may do so right there — the same freedom the source end has to
+   * turn at `s1`. Insisting on arriving already headed for `t` meant the last
+   * bend could never sit on the stub, and was pushed out to whichever grid line
+   * lay beyond it, leaving the target end with twice the approach the source
+   * end has. The goal is a state past every real one, reached from `t1` by that
+   * final turn.
+   */
+  const inward = dirOf({ x: -ta.normal.x, y: -ta.normal.y })
+  const outward = dirOf(ta.normal)
+  const goal = nx * ny * 4
   const heuristic = (ix: number, iy: number) =>
     (Math.abs(xs[ix]! - xs[tx]!) + Math.abs(ys[iy]! - ys[ty]!)) * COST_SCALE
 
@@ -669,6 +680,15 @@ function detour(
     const ix = cell % nx
     const iy = (cell - ix) / nx
     const g = best.get(state)!
+
+    if (ix === tx && iy === ty && dir !== outward) {
+      const cost = g + (dir === inward ? 0 : TURN_COST * COST_SCALE)
+      if (cost < (best.get(goal) ?? Infinity)) {
+        best.set(goal, cost)
+        cameFrom.set(goal, state)
+        heapPush(costs, items, cost, goal)
+      }
+    }
 
     for (let step = 0; step < 4; step++) {
       const jx = ix + (step === 0 ? 1 : step === 2 ? -1 : 0)
@@ -698,14 +718,96 @@ function detour(
   if (!best.has(goal)) return null
 
   const points: Vec[] = []
-  for (let state: number | undefined = goal; state !== undefined; state = cameFrom.get(state)) {
+  for (
+    let state: number | undefined = cameFrom.get(goal);
+    state !== undefined;
+    state = cameFrom.get(state)
+  ) {
     const cell = (state - (state % 4)) / 4
     const ix = cell % nx
     points.push({ x: xs[ix]!, y: ys[(cell - ix) / nx]! })
     if (points.length > nx * ny) return null
   }
   points.reverse()
-  return simplify([s, ...points, t])
+  return simplify(centreLegs(simplify([s, ...points, t]), [...boxes, ...ends], walls, stub))
+}
+
+/**
+ * Slides every free leg of a detour into the middle of the lane it runs along.
+ *
+ * A leg is free when the legs either side of it carry on the same way — a Z,
+ * not a U. Moving one of those along its neighbours lengthens one by exactly
+ * what it takes off the other, so where it sits costs nothing, and the search
+ * has no reason of its own to put it anywhere in particular. `CENTER_BIAS` is
+ * meant to break that tie, but it is charged at the turn, against the gap
+ * measured *across that turn's own position* — and for a leg setting off from
+ * beside a node, the turn sits past the node's edge, where the gap runs
+ * straight on past the node the leg is about to pass under. The middle of that
+ * is nowhere near the lane the leg actually ends up in, so the leg came out
+ * pressed against the node it had just left: two stacked nodes joined side to
+ * side drew their crossing leg hugging the upper one instead of halfway down
+ * the gap between them.
+ *
+ * Measured here instead, once the whole route is known, against everything
+ * across the leg's full length. The middle is taken between the boxes as they
+ * are drawn, then held inside the clearance the route was found with, so a
+ * lane between a node and its neighbour reads as centred whatever margin each
+ * side is kept at. The legs at either end are stubs, and never shrink below
+ * `stub`, so a line still leaves and enters its nodes square.
+ */
+function centreLegs(points: Vec[], solids: Box[], walls: Box[], stub: number): Vec[] {
+  const out = points.map((p) => ({ ...p }))
+  const last = out.length - 1
+
+  for (let k = 1; k <= last - 2; k++) {
+    const p = out[k]!
+    const q = out[k + 1]!
+    const before = out[k - 1]!
+    const after = out[k + 2]!
+    // The axis the leg slides along, and the one it runs along.
+    const m = Math.abs(p.y - q.y) < 0.5 ? 'y' : 'x'
+    const o = m === 'y' ? 'x' : 'y'
+
+    const into = Math.sign(p[m] - before[m])
+    const onward = Math.sign(after[m] - q[m])
+    if (!into || into !== onward) continue
+
+    const from = k - 1 === 0 ? before[m] + into * stub : before[m]
+    const to = k + 1 === last - 1 ? after[m] - onward * stub : after[m]
+    const spanLo = Math.min(p[o], q[o])
+    const spanHi = Math.max(p[o], q[o])
+
+    /** The open run either side of the leg, among boxes that cross its span. */
+    const lane = (boxes: Box[], ends: [number, number]): [number, number] | null => {
+      let lo = Math.min(...ends)
+      let hi = Math.max(...ends)
+      for (const b of boxes) {
+        const oLo = b[o]
+        const oHi = b[o] + (o === 'x' ? b.width : b.height)
+        if (oHi <= spanLo + 0.5 || oLo >= spanHi - 0.5) continue
+        const mLo = b[m]
+        const mHi = b[m] + (m === 'x' ? b.width : b.height)
+        if (mHi <= p[m] + 0.5) lo = Math.max(lo, mHi)
+        else if (mLo >= p[m] - 0.5) hi = Math.min(hi, mLo)
+        // The leg runs through it: whatever let that happen, it is not ours to move.
+        else return null
+      }
+      return [lo, hi]
+    }
+
+    // The stubs only limit where the leg may go, not where the middle is: a leg
+    // passing right under the node it is about to enter is centred between
+    // that node and whatever is on its other side, not between the end of the
+    // stub and it.
+    const drawn = lane(solids, [before[m], after[m]])
+    const kept = lane(walls, [from, to])
+    if (!drawn || !kept || kept[1] - kept[0] < 1) continue
+
+    const at = tick(clamp((drawn[0] + drawn[1]) / 2, kept[0], kept[1]))
+    p[m] = at
+    q[m] = at
+  }
+  return out
 }
 
 /** Tries for a detour with proper clearance, then for any detour at all. */

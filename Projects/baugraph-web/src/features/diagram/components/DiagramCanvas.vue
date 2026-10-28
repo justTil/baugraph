@@ -45,12 +45,14 @@ import type { SavedNotice } from '@/features/diagram/composables/useDocumentFile
 import { useSavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
+import { useLayersPanel } from '@/features/diagram/composables/useLayersPanel'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
 import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
 import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
 import type { MenuTarget } from '@/features/diagram/components/CanvasContextMenu.vue'
 import CanvasContextMenu from '@/features/diagram/components/CanvasContextMenu.vue'
 import LaserPointer from '@/features/diagram/components/LaserPointer.vue'
+import LayersPanel from '@/features/diagram/components/LayersPanel.vue'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
 import type { AlignGuide } from '@/features/diagram/lib/align-snap'
 import { alignSnap } from '@/features/diagram/lib/align-snap'
@@ -119,6 +121,7 @@ const { to: connectTo } = useConnectionTarget()
 const { installFlowRuntime, stopFlowRuntime } = useFlows()
 const { active: laserActive } = useLaserPointer()
 const { presenting, exit: exitPresentation, toggle: togglePresentation } = usePresentation()
+const { open: layersOpen } = useLayersPanel()
 
 /** The wrapper the laser pointer tracks the cursor against. */
 const canvasHost = ref<HTMLElement | null>(null)
@@ -186,6 +189,14 @@ const JsonEditor = defineAsyncComponent({
 const viewMode = ref<'diagram' | 'json'>('diagram')
 const jsonDraft = ref('')
 const jsonError = ref<DiagramParseError | null>(null)
+
+/**
+ * The layers panel opens over the canvas's left edge, so the notices that
+ * otherwise sit in that corner move out from under it while it is open.
+ */
+const cornerLeft = computed(() =>
+  layersOpen.value && !presenting.value && viewMode.value === 'diagram' ? 'left-[17.75rem]' : 'left-4',
+)
 
 /**
  * Switching to JSON snapshots the current document as text; switching back
@@ -935,7 +946,7 @@ watch(isVisible, (visible) => {
 
         <!-- Marks one of the worked examples opened on a first visit, so a
              newcomer poking at the canvas knows it is not their own diagram. -->
-        <div v-if="isDemo" class="pointer-events-none absolute top-4 left-4 z-20">
+        <div v-if="isDemo" class="pointer-events-none absolute top-4 z-20" :class="cornerLeft">
           <Alert class="w-auto shadow-lg">
             <Sparkles />
             <AlertTitle>Demo</AlertTitle>
@@ -1081,7 +1092,8 @@ watch(isVisible, (visible) => {
           two never show together, because saving is what ends the first.
         -->
         <div
-          class="pointer-events-none absolute bottom-4 left-4 z-20 flex max-w-[min(22rem,calc(100%-2rem))] flex-col gap-2"
+          class="pointer-events-none absolute bottom-4 z-20 flex max-w-[min(22rem,calc(100%-2rem))] flex-col gap-2"
+          :class="cornerLeft"
         >
           <Transition
             mode="out-in"
@@ -1115,6 +1127,9 @@ watch(isVisible, (visible) => {
         </div>
       </div>
     </ContextMenuTrigger>
+
+    <!-- Every node in the diagram, nested by zone; folds away to a tab on the left edge. -->
+    <LayersPanel v-if="!presenting && viewMode === 'diagram'" />
 
     <!-- The diagram's document as editable text — the way in for JSON pasted from an AI assistant. -->
     <div

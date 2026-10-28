@@ -118,6 +118,11 @@ draggable, not connectable — which is what makes rearranging the contents of a
 bearable. A locked node carries a small lock badge; clicking it unlocks that node
 again, and the inspector can unlock everything at once.
 
+The **Layers** tab on the left edge of the canvas lists every node, nested the way
+its zones nest. Click a row to select the node, double-click it to bring it into
+view, lock or unlock it from the row, and drag rows onto a zone (or onto empty
+space) to regroup them — the nodes move on the canvas to match.
+
 ### Message flows
 
 A diagram can show a message moving through it. Select the node it starts at and
@@ -399,7 +404,8 @@ src/
   model/                   the .baugraph.json format — types, zod schema,
                            (de)serialisation, migration, id generation
   features/diagram/
-    components/            canvas, custom nodes and edges, palette, inspector
+    components/            canvas, custom nodes and edges, palette, inspector,
+                           layers panel
     composables/           editor state, undo/redo, autosave, placement,
                            the GSAP message-flow runtime
     lib/                   shape geometry, edge routing, flow traversal,

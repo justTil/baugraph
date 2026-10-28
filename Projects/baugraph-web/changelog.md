@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.33.0]
+
+### Added
+
+- **A layers panel, for finding and regrouping nodes without hunting the
+  canvas.** A **Layers** tab on the left edge of the canvas opens a list of
+  every node in the diagram, nested the way its zones nest: zones first, then
+  everything else by name. Click a row to select that node (⌘- or ⇧-click adds
+  it to the selection), and double-click it — or use its locate button — to
+  bring it into view. Hover a row to lock or unlock it; a locked node keeps its
+  lock icon in the list, and clicking it shows you where it is. Drag rows to
+  regroup them: drop onto a zone to move into it, onto another node to join
+  the zone that node is in, or onto empty space to take it out of every zone.
+  Dragging a selected row moves the whole selection. A node that doesn't
+  already sit inside its new zone is set down under what the zone holds, and
+  the zone grows to fit it. One taken out is set down just clear of the zone,
+  so the canvas always matches the list. Every move is one undo step. A search
+  box finds nodes by name, type, technology or id, and the panel remembers
+  whether you left it open.
+
+### Fixed
+
+- **Connections that have to go around no longer hug the node they leave.**
+  Two stacked nodes joined side to side — out of the right of one, into the
+  left of the other — drew the leg that crosses between them pressed against
+  the upper node instead of halfway down the gap. Any leg of a detour that is
+  free to move now sits in the middle of the space it runs through. The end
+  that enters a node also turns in as close to it as the other end turns out,
+  instead of a full step further away, so those connections are shorter and
+  read the same at both ends. The canvas and SVG/PNG exports both draw the new
+  routes.
+
+## [1.32.0]
+
+Skipped for the editor: this version went to restructuring the repository to
+make room for a new Python package, `baugraph`. The editor moved to
+`Projects/baugraph-web`, the package was set up in `Projects/baugraph-py`,
+and the build and publish pipelines were updated to match. Baugraph itself is
+unchanged from 1.31.0.
+
 ## [1.31.0]
 
 ### Added
