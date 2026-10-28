@@ -46,6 +46,7 @@ import { useSavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
 import { useLayersPanel } from '@/features/diagram/composables/useLayersPanel'
+import { usePaletteOverview } from '@/features/diagram/composables/usePaletteOverview'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
 import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
 import DiagramEdge from '@/features/diagram/components/DiagramEdge.vue'
@@ -122,6 +123,7 @@ const { installFlowRuntime, stopFlowRuntime } = useFlows()
 const { active: laserActive } = useLaserPointer()
 const { presenting, exit: exitPresentation, toggle: togglePresentation } = usePresentation()
 const { open: layersOpen } = useLayersPanel()
+const { open: paletteOverviewOpen } = usePaletteOverview()
 
 /** The wrapper the laser pointer tracks the cursor against. */
 const canvasHost = ref<HTMLElement | null>(null)
@@ -710,6 +712,12 @@ function onKeyDown(event: KeyboardEvent) {
     case 'P':
       // Presentation mode, same reasoning as the laser pointer above.
       void togglePresentation()
+      break
+    case 'b':
+    case 'B':
+      // "Browse": everything the palette can add, laid out at once.
+      event.preventDefault()
+      paletteOverviewOpen.value = true
       break
     case 'Escape':
       if (laserActive.value) {

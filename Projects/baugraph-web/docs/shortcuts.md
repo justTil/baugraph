@@ -5,6 +5,7 @@
 | `Shift` + drag | Rubber-band select |
 | Scroll / pinch | Pan / zoom |
 | `F` | Fit the view to the diagram |
+| `B` | Browse all palettes — every node type and technology at once |
 | `⇧⌘F` | Size the selection to its text (everything, if nothing is selected) |
 | `Enter` | Rename the selected node |
 | `⌘D` | Duplicate the selection |

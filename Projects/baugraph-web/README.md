@@ -199,6 +199,7 @@ connections they travel instead.
 | `Shift` + drag | rubber-band select |
 | scroll / pinch | pan / zoom |
 | `F` | fit the view to the diagram |
+| `B` | browse all palettes |
 | `⇧⌘F` | size the selection to its text (everything, if nothing is selected) |
 | `Enter` | rename the selected node |
 | `⌘D` / `⌘G` | duplicate / wrap in a zone |

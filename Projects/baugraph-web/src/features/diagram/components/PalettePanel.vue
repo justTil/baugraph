@@ -19,12 +19,13 @@ import { COLOR_HEX } from '@/features/diagram/lib/theme'
 import { PALETTE_DRAG_TYPE } from '@/features/diagram/lib/drag'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import { useIndustries } from '@/features/diagram/composables/useIndustries'
+import { usePaletteOverview } from '@/features/diagram/composables/usePaletteOverview'
 
 const { place } = usePlacement()
 const { isShown } = useIndustries()
 
 const query = ref('')
-const overviewOpen = ref(false)
+const { open: overviewOpen } = usePaletteOverview()
 const searching = computed(() => query.value.trim().length > 0)
 
 /**
@@ -97,6 +98,7 @@ function onDragStart(event: DragEvent, item: PaletteItem) {
       >
         <LayoutGrid class="size-3.5" />
         Browse all palettes
+        <kbd class="bg-muted ml-auto rounded px-1 font-mono text-[10px]">B</kbd>
       </Button>
     </SidebarGroupContent>
   </SidebarGroup>

@@ -55,12 +55,12 @@ All notable changes to this project will be documented in this file.
   - **Manufacturing & IoT** — PLC, SCADA, MES, Historian, Edge Gateway,
     Digital Twin.
 - **A palette overview.** **Browse all palettes**, under the palette's search
-  box, opens everything the palette can add, laid out side by side instead of
-  folded into a narrow column: every node-type group, the industry packs, and
-  on a second tab the whole technology catalogue, with the node type each
-  technology arrives as. One search narrows both tabs, clicking an entry drops
-  it on the canvas, and each industry pack has an **In palette** switch to show
-  or hide it in the sidebar.
+  box — or `B` on the canvas — opens everything the palette can add, laid out
+  side by side instead of folded into a narrow column: every node-type group,
+  the industry packs, and on a second tab the whole technology catalogue, with
+  the node type each technology arrives as. One search narrows both tabs,
+  clicking an entry drops it on the canvas, and each industry pack has an **In
+  palette** switch to show or hide it in the sidebar.
 
 ### Fixed
 
