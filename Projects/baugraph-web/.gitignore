@@ -1,0 +1,53 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+
+# VitePress (docs/)
+docs/.vitepress/cache
+docs/.vitepress/dist
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+# Debugging the VS Code extension is part of this repository's workflow, so the
+# configuration that does it is committed along with the extension itself.
+!.vscode/launch.json
+!.vscode/tasks.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+
+.eslintcache
+
+# Cypress
+/cypress/videos/
+/cypress/screenshots/
+
+# Vitest
+__screenshots__/
+
+# Vite
+*.timestamp-*-*.mjs
+
+# VS Code extension build output (see extension/.gitignore)
+extension/dist
+extension/media
+extension/schema
+VSCodeExtension/output
