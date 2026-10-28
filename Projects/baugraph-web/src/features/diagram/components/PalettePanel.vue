@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { ChevronRight, Search } from '@lucide/vue'
+import { ChevronRight, LayoutGrid, Search } from '@lucide/vue'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -10,6 +10,8 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import PaletteOverviewDialog from '@/features/diagram/components/PaletteOverviewDialog.vue'
 import type { PaletteGroup, PaletteItem } from '@/features/diagram/data/palette'
 import { PALETTE, searchPalette } from '@/features/diagram/data/palette'
 import { iconComponent } from '@/features/diagram/data/icons'
@@ -22,6 +24,7 @@ const { place } = usePlacement()
 const { isShown } = useIndustries()
 
 const query = ref('')
+const overviewOpen = ref(false)
 const searching = computed(() => query.value.trim().length > 0)
 
 /**
@@ -85,8 +88,20 @@ function onDragStart(event: DragEvent, item: PaletteItem) {
           class="h-8 pl-8 text-xs"
         />
       </div>
+      <!-- The sidebar is too narrow to show what exists; this lays it all out. -->
+      <Button
+        variant="ghost"
+        size="sm"
+        class="text-muted-foreground h-7 w-full justify-start gap-2 px-2 text-xs group-data-[collapsible=icon]:hidden"
+        @click="overviewOpen = true"
+      >
+        <LayoutGrid class="size-3.5" />
+        Browse all palettes
+      </Button>
     </SidebarGroupContent>
   </SidebarGroup>
+
+  <PaletteOverviewDialog v-model:open="overviewOpen" />
 
   <template v-for="section in sections" :key="section.id">
     <SidebarGroup v-if="section.label" class="pb-0">
