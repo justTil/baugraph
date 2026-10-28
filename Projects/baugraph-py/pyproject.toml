@@ -12,10 +12,8 @@ authors = [{ name = "Til Schwarze", email = "til@baugraph.com" }]
 readme = "README.md"
 keywords = ["baugraph", "diagram", "graph", "visualization", "architecture"]
 
-#dependencies = ["aiokafka"]
-
-#[project.optional-dependencies]
-#dev = ["pytest", "pytest-asyncio", "ruff"]
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/baugraph"]
@@ -23,4 +21,3 @@ packages = ["src/baugraph"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-asyncio_mode = "auto"
