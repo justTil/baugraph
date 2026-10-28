@@ -240,11 +240,15 @@ const dropTint = computed(() => `color-mix(in srgb, ${theme.value.selection} 10%
 </script>
 
 <template>
-  <!-- Folded away: a tab on the canvas's left edge, labelled down its length. -->
+  <!--
+    Folded away: a tab on the canvas's left edge, labelled down its length. It
+    sits in the upper part of that edge, but never so high that it runs into
+    the notice in the top-left corner on a short canvas.
+  -->
   <button
     v-if="!open"
     type="button"
-    class="absolute top-1/2 left-0 z-30 flex -translate-y-1/2 flex-col items-center gap-2 rounded-r-lg border border-l-0 px-1.5 py-3 text-xs font-medium shadow-sm"
+    class="absolute top-[max(25%,6rem)] left-0 z-30 flex flex-col items-center gap-2 rounded-r-lg border border-l-0 px-1.5 py-3 text-xs font-medium shadow-sm"
     :style="{ background: theme.surface, borderColor: theme.line, color: theme.ink }"
     aria-label="Open layers"
     @click="open = true"
