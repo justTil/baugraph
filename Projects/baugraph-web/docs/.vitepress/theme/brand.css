@@ -1,0 +1,74 @@
+/*
+ * The Baugraph brand on VitePress's default theme: the same tokens and
+ * typefaces as the app (src/style.css), mapped onto
+ * VitePress's own variables. VitePress toggles `.dark` on <html>, as the app does.
+ */
+
+:root {
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f5f7fb;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #f5f7fb;
+  --vp-c-divider: #dde2ec;
+  --vp-c-gutter: #dde2ec;
+  --vp-c-border: #5b6478;
+  --vp-c-text-1: #111827;
+  --vp-c-text-2: #545d70;
+
+  /* action-blue is what you click; links and the primary button both use it. */
+  --vp-c-brand-1: #2563eb;
+  --vp-c-brand-2: #1d4ed8;
+  --vp-c-brand-3: #2563eb;
+  --vp-c-brand-soft: #e3ebfd;
+
+  --vp-home-hero-name-color: #172554;
+
+  --vp-font-family-base: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --vp-font-family-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.dark {
+  --vp-c-bg: #0d1222;
+  --vp-c-bg-alt: #151b2e;
+  --vp-c-bg-elv: #151b2e;
+  --vp-c-bg-soft: #151b2e;
+  --vp-c-divider: #252d45;
+  --vp-c-gutter: #252d45;
+  --vp-c-border: #9aa3b8;
+  --vp-c-text-1: #e8ecf6;
+  --vp-c-text-2: #a3abbd;
+
+  --vp-c-brand-1: #60a5fa;
+  --vp-c-brand-2: #93c5fd;
+  --vp-c-brand-3: #60a5fa;
+  --vp-c-brand-soft: #1b2a52;
+
+  --vp-home-hero-name-color: #dbe4ff;
+}
+
+/* The primary button carries on-action text, which is dark on the dark theme's light blue. */
+.dark {
+  --vp-button-brand-text: #0d1222;
+  --vp-button-brand-hover-text: #0d1222;
+  --vp-button-brand-active-text: #0d1222;
+}
+
+/* Headlines in Jost, sentence case, navy — the wordmark's family. */
+.vp-doc h1,
+.vp-doc h2,
+.VPHero .name,
+.VPHero .text {
+  font-family: Jost, 'Futura PT', Futura, system-ui, sans-serif;
+  font-weight: 500;
+  color: var(--vp-home-hero-name-color);
+}
+
+.vp-doc h1 {
+  letter-spacing: -0.01em;
+}
+
+.VPHero .name,
+.VPHero .text {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}

@@ -84,14 +84,14 @@ export const supervisoryAuthority = {
 }
 
 /**
- * `src/style.css` pulls Geist from fonts.googleapis.com at runtime, which sends
+ * `src/style.css` pulls Jost, IBM Plex Sans and IBM Plex Mono from fonts.googleapis.com at runtime, which sends
  * the visitor's IP to Google. Self-host the font files and set this to `false`
  * to drop both the transfer and the disclosure section below.
  */
 export const usesGoogleFonts = true
 
 /** Shown as "Stand" / "Last updated". ISO date. */
-export const lastUpdated = '2026-09-06'
+export const lastUpdated = '2026-10-30'
 
 /** True while any placeholder is still unresolved. */
 export const hasPlaceholders = [
@@ -198,8 +198,8 @@ const de: LegalDocument[] = [
         ? [{
             heading: 'Externe Schriftarten (Google Fonts)',
             paragraphs: [
-              'Zur einheitlichen Darstellung von Schriften wird die Schriftart „Geist" beim Aufruf '
-              + 'der Seite von einem Server von Google geladen (Google Ireland Limited, Gordon '
+              'Zur einheitlichen Darstellung von Schriften werden die Schriftarten „Jost", „IBM Plex '
+              + 'Sans" und „IBM Plex Mono" beim Aufruf der Seite von einem Server von Google geladen (Google Ireland Limited, Gordon '
               + 'House, Barrow Street, Dublin 4, Irland). Dabei wird Ihre IP-Adresse an Google '
               + 'übermittelt. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; das berechtigte '
               + 'Interesse liegt in der einheitlichen Darstellung des Schriftbilds.',
@@ -418,8 +418,8 @@ const en: LegalDocument[] = [
         ? [{
             heading: 'External fonts (Google Fonts)',
             paragraphs: [
-              'To present type consistently, the "Geist" typeface is loaded from a Google server '
-              + 'when the page opens (Google Ireland Limited, Gordon House, Barrow Street, '
+              'To present type consistently, the "Jost", "IBM Plex Sans" and "IBM Plex Mono" '
+              + 'typefaces are loaded from a Google server when the page opens (Google Ireland Limited, Gordon House, Barrow Street, '
               + 'Dublin 4, Ireland). Your IP address is transmitted to Google in the process. The '
               + 'legal basis is Art. 6(1)(f) GDPR; the legitimate interest is a consistent '
               + 'presentation of the site.',

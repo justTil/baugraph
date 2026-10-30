@@ -51,3 +51,6 @@ extension/dist
 extension/media
 extension/schema
 VSCodeExtension/output
+
+# Brand kit drop (logos, tokens); what the app uses is copied into src/assets/brand and public/
+new_assets/

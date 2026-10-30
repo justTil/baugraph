@@ -33,7 +33,7 @@ const tone = (kind: ChangeKind) =>
     <header class="space-y-1">
       <div class="flex items-center gap-2">
         <Sparkles class="text-muted-foreground size-5" />
-        <h1 class="text-2xl font-semibold tracking-tight">What's new</h1>
+        <h1 class="font-heading text-navy text-2xl font-medium tracking-tight">What's new</h1>
       </div>
       <p class="text-muted-foreground text-sm">
         Every notable change to Baugraph, newest first. You're on
@@ -56,7 +56,7 @@ const tone = (kind: ChangeKind) =>
         <Card>
           <CardHeader>
             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h2 class="text-lg font-semibold tracking-tight">
+              <h2 class="font-heading text-lg font-medium">
                 {{ release.version }}
               </h2>
               <span

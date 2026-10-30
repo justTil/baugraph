@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/sidebar'
 import { useNavigation } from '@/composables/useNavigation'
 import PalettePanel from '@/features/diagram/components/PalettePanel.vue'
+import markLight from '@/assets/brand/baugraph-mark.svg'
+import markDark from '@/assets/brand/baugraph-mark-on-dark.svg'
 
 const { groups, isActive, isOpen, isVisible, setActiveItem } = useNavigation()
 
@@ -30,16 +32,15 @@ const selfHosted = __SELF_HOSTED__
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" class="cursor-default hover:bg-transparent">
             <!--
-              Wordmark: "BG" in the UI sans. public/favicon.svg carries the same
-              two letters as outlines and still needs redrawing to match Geist.
+              The bg mark, with its colours baked in (an <img> can't inherit
+              them), so the dark theme swaps in its own file.
             -->
-            <div
-              class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg font-sans text-[13px] leading-none font-bold tracking-tight"
-            >
-              BG
-            </div>
+            <span class="flex size-8 shrink-0 items-center justify-center">
+              <img :src="markLight" alt="" class="w-8 dark:hidden">
+              <img :src="markDark" alt="" class="hidden w-8 dark:block">
+            </span>
             <div class="grid flex-1 text-left leading-tight">
-              <span class="truncate font-semibold">Baugraph</span>
+              <span class="text-navy truncate font-semibold">Baugraph</span>
               <span class="text-muted-foreground truncate text-xs">
                 <template v-if="selfHosted">Self-hosted</template>
                 <template v-else>Architecture diagrams</template>

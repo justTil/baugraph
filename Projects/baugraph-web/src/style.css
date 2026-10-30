@@ -1,5 +1,12 @@
 
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+/*
+ * Brand type: Jost for headings (the wordmark's
+ * family), IBM Plex Sans for everything else, Plex Mono for file names and
+ * JSON. Plex Sans carries 500 and 700 as well as the brand's 400/600 because
+ * the canvas and the shadcn components already ask for those weights, and a
+ * missing weight would snap to its neighbour on screen but not in an export.
+ */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500;600;700&family=Jost:wght@500;600&display=swap');
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -8,8 +15,25 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-sans: 'Geist', sans-serif;
-    --font-heading: var(--font-sans);
+    /* Kept in step with `SANS` in src/features/diagram/lib/text.ts, which the canvas measures and exports with. */
+    --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-heading: Jost, "Futura PT", Futura, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    /* The brand palette itself, for the few places that speak in brand terms rather than shadcn roles. */
+    --color-surface-100: var(--surface-100);
+    --color-surface-200: var(--surface-200);
+    --color-hairline: var(--hairline);
+    --color-construction-line: var(--construction-line);
+    --color-border-strong: var(--border-strong);
+    --color-ink: var(--ink);
+    --color-ink-muted: var(--ink-muted);
+    --color-navy: var(--navy);
+    --color-electric-blue: var(--electric-blue);
+    --color-action-blue: var(--action-blue);
+    --color-on-action: var(--on-action);
+    --color-blue-tint: var(--blue-tint);
+
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -42,92 +66,122 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
-    --radius-sm: calc(var(--radius) - 4px);
-    --radius-md: calc(var(--radius) - 2px);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) + 4px);
+
+    /*
+     * The brand's radii are mapped by role, not by name: shadcn's controls ask
+     * for `rounded-lg` and its panels and dialogs for `rounded-xl`, so those get
+     * the brand's button (6px) and panel (12px) radius respectively.
+     */
+    --radius-sm: 3px;
+    --radius-md: 6px;
+    --radius-lg: 6px;
+    --radius-xl: var(--radius);
 }
 
+/*
+ * Brand tokens, copied from the brand kit's tokens.css rather than imported: that
+ * file switches on `[data-theme]` and `prefers-color-scheme`, while the app has
+ * exactly one switch, the `.dark` class (see `useAppTheme`).
+ *
+ * These colour the app's chrome only. The canvas, its nodes, edges and message
+ * flows resolve their own colours in src/features/diagram/lib/theme.ts, so a
+ * diagram looks the same however the UI around it is themed.
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --success: oklch(0.596 0.145 163.225);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --surface-100: #f5f7fb;
+    --surface-200: #ffffff;
+    --hairline: #dde2ec;
+    --construction-line: #c3c9d6;
+    --border-strong: #5b6478;
+    --ink: #111827;
+    --ink-muted: #545d70;
+    --navy: #172554;
+    --electric-blue: #3b82f6;
+    --action-blue: #2563eb;
+    --on-action: #ffffff;
+    --blue-tint: #e3ebfd;
+    --focus-ring: var(--electric-blue);
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --surface-100: #0d1222;
+    --surface-200: #151b2e;
+    --hairline: #252d45;
+    --construction-line: #353d55;
+    --border-strong: #9aa3b8;
+    --ink: #e8ecf6;
+    --ink-muted: #a3abbd;
+    --navy: #dbe4ff;
+    --electric-blue: #60a5fa;
+    --action-blue: #60a5fa;
+    --on-action: #0d1222;
+    --blue-tint: #1b2a52;
+}
+
+/*
+ * shadcn's roles, expressed in brand tokens. Both themes share this block and
+ * only the tokens above differ; `.dark` is listed so the roles re-resolve
+ * wherever that class lands, not only on the root.
+ */
+:root, .dark {
+    --background: var(--surface-100);
+    --foreground: var(--ink);
+    --card: var(--surface-200);
+    --card-foreground: var(--ink);
+    --popover: var(--surface-200);
+    --popover-foreground: var(--ink);
+    --primary: var(--action-blue);
+    --primary-foreground: var(--on-action);
+    --secondary: var(--blue-tint);
+    --secondary-foreground: var(--ink);
+    /* The brand has no step between its two surfaces; tab strips and code chips need one. */
+    --muted: color-mix(in oklab, var(--hairline) 55%, var(--surface-100));
+    --muted-foreground: var(--ink-muted);
+    --accent: var(--blue-tint);
+    --accent-foreground: var(--ink);
+    --border: var(--hairline);
+    --input: var(--border-strong);
+    --ring: var(--focus-ring);
+    --chart-1: var(--electric-blue);
+    --chart-2: var(--navy);
+    --chart-3: var(--action-blue);
+    --chart-4: var(--ink-muted);
+    --chart-5: var(--construction-line);
+    --radius: 12px;
+    --sidebar: var(--surface-200);
+    --sidebar-foreground: var(--ink);
+    --sidebar-primary: var(--action-blue);
+    --sidebar-primary-foreground: var(--on-action);
+    --sidebar-accent: var(--blue-tint);
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: var(--hairline);
+    --sidebar-ring: var(--focus-ring);
+
+    /* The palette has no warm colour; status colours are the product's own. */
+    --destructive: oklch(0.577 0.245 27.325);
+    --success: oklch(0.596 0.145 163.225);
+}
+
+.dark {
     --destructive: oklch(0.704 0.191 22.216);
     --success: oklch(0.723 0.153 163.225);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
     }
   body {
     @apply bg-background text-foreground;
     @apply font-sans;
     }
 }
+
+/* Titles in dialogs, cards and sheets. The class is shadcn's hook; nothing defined it until now. */
+@utility cn-font-heading {
+    font-family: var(--font-heading);
+}
+
 /*
  * Dockview, wired to the shadcn tokens above rather than one of its bundled
  * palettes, so the workspace follows `.dark` along with everything else.
@@ -199,8 +253,9 @@
     box-shadow: inset 0 2px 0 0 var(--muted-foreground);
 }
 
+/* electric-blue is the brand's "selected or in focus"; action-blue stays for what you click. */
 .dockview-theme-baugraph .dv-active-group .dv-tab.dv-active-tab {
-    box-shadow: inset 0 2px 0 0 var(--primary);
+    box-shadow: inset 0 2px 0 0 var(--electric-blue);
 }
 
 .dockview-theme-baugraph .dv-tab:focus-visible {
