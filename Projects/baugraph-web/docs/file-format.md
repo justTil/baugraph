@@ -148,6 +148,16 @@ All in service of readable diffs:
   export carries it as a `<title>`, so SVG viewers do the same). Newlines are
   kept. An edge without it writes no `labelInfo` key, so every file written
   before it existed stays exactly as it was.
+- **3D is optional and on top.** `planes` lists the levels of the
+  [3D view](./3d-view), ground first; a node's `plane` names the one it
+  stands on and `extrusion` (`flat`, `low`, `regular`, `tall`, `tower`) how
+  tall it stands. The 2D canvas and every export ignore all three, nodes keep
+  their 2D `position`, and a file without them is written exactly as before.
+  A node without `plane` follows its zone, and one with no zone stands on the
+  first plane — so a whole zone moves with one line. `planes` is the one
+  array besides `meta.authors` that is never sorted, because its order is the
+  stacking; each plane stays on one line, and a `plane` naming one the file
+  does not define is rejected on open, the same as a dangling `parent`.
 - **An edge routes itself unless `waypoints` says otherwise.** Every
   connection is auto-routed around obstacles by default, the only behavior
   this format had before manual routing existed. Giving an edge one or more

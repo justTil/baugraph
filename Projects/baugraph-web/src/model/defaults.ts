@@ -3,6 +3,7 @@ import type {
   DiagramDocument,
   DiagramEdge,
   DiagramNode,
+  DiagramPlane,
   MessageFlow,
   NodePorts,
 } from '@/model/types'
@@ -40,8 +41,15 @@ export const NODE_DEFAULTS = {
   align: 'center',
   icon: '',
   parent: null,
+  plane: null,
+  extrusion: 'regular',
   locked: false,
 } as const satisfies Partial<DiagramNode>
+
+export const PLANE_DEFAULTS = {
+  label: '',
+  color: 'slate',
+} as const satisfies Partial<DiagramPlane>
 
 /** What every side offers before any connection point is added to it. */
 export const DEFAULT_PORTS: NodePorts = { top: 1, right: 1, bottom: 1, left: 1 }
@@ -62,6 +70,36 @@ export function nodePorts(ports?: Partial<NodePorts>): NodePorts {
     }
   }
   return out
+}
+
+/**
+ * The plane a node actually stands on in the 3D view: its own, else the nearest
+ * zone around it that names one, else the ground — the first plane listed. A
+ * plane that no longer exists counts as none, so a half-edited document still
+ * draws. `null` only for a diagram with no planes at all.
+ *
+ * Takes a lookup rather than a list so the editor, which holds Vue Flow nodes,
+ * and the renderer, which holds the file's, can both ask without converting.
+ */
+export function nodePlane(
+  id: string,
+  lookup: (id: string) => { plane?: string | null; parent?: string | null } | undefined,
+  planes: readonly { id: string }[] | undefined,
+): string | null {
+  const ground = planes?.[0]
+  if (!ground) return null
+  const seen = new Set<string>()
+  let currentId: string | null | undefined = id
+  // Walks the zone chain the same way the schema checks it, so a parent cycle
+  // in a bad file ends the walk rather than spinning it.
+  while (currentId && !seen.has(currentId)) {
+    seen.add(currentId)
+    const current = lookup(currentId)
+    if (!current) break
+    if (current.plane && planes.some((p) => p.id === current.plane)) return current.plane
+    currentId = current.parent
+  }
+  return ground.id
 }
 
 export const EDGE_DEFAULTS = {

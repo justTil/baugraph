@@ -88,6 +88,42 @@
         }
       }
     },
+    "planes": {
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          },
+          "label": {
+            "default": "",
+            "type": "string"
+          },
+          "color": {
+            "default": "slate",
+            "type": "string",
+            "enum": [
+              "slate",
+              "blue",
+              "teal",
+              "green",
+              "amber",
+              "red",
+              "purple",
+              "pink"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
     "nodes": {
       "default": [],
       "type": "array",
@@ -251,6 +287,31 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "plane": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extrusion": {
+            "default": "regular",
+            "type": "string",
+            "enum": [
+              "flat",
+              "low",
+              "regular",
+              "tall",
+              "tower"
             ]
           },
           "locked": {

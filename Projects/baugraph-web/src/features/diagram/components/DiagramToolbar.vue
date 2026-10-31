@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
+  Box,
   Check,
   Copy,
   Crosshair,
@@ -32,6 +33,7 @@ import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
 import { useCanvas } from '@/features/diagram/composables/useCanvas'
 import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
+import { useView3D } from '@/features/diagram/composables/useView3D'
 import { AI_SKILLS_MARKDOWN } from '@/features/diagram/data/ai-skills.generated'
 
 const emit = defineEmits<{
@@ -56,8 +58,22 @@ const { paused, openFlowEditor } = useFlows()
 const { active: laserActive } = useLaserPointer()
 const { presenting, toggle: togglePresentation } = usePresentation()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
+const { active: view3d, commands: view3dCommands } = useView3D()
 
-const zoomLabel = computed(() => `${Math.round(viewport.value.zoom * 100)}%`)
+// The zoom row drives whichever view is on screen. A perspective camera has no
+// zoom percentage worth reading, so 3D says what it is instead.
+const zoomLabel = computed(() => (view3d.value ? '3D' : `${Math.round(viewport.value.zoom * 100)}%`))
+
+function zoom(by: 'in' | 'out') {
+  if (view3d.value) view3dCommands.value?.zoom(by === 'in' ? 0.8 : 1.25)
+  else if (by === 'in') zoomIn()
+  else zoomOut()
+}
+
+function fit() {
+  if (view3d.value) view3dCommands.value?.frame()
+  else fitView({ padding: 0.2 })
+}
 
 function onTitleInput() {
   commit('meta.title')
@@ -134,19 +150,19 @@ async function copyAiSkills() {
 
   <Separator orientation="vertical" class="mx-1 h-4" />
 
-  <Button variant="ghost" size="icon" class="size-8" title="Zoom out" @click="zoomOut()">
+  <Button variant="ghost" size="icon" class="size-8" title="Zoom out" @click="zoom('out')">
     <ZoomOut />
   </Button>
   <span class="text-muted-foreground w-11 text-center font-mono text-xs tabular-nums">
     {{ zoomLabel }}
   </span>
-  <Button variant="ghost" size="icon" class="size-8" title="Zoom in" @click="zoomIn()">
+  <Button variant="ghost" size="icon" class="size-8" title="Zoom in" @click="zoom('in')">
     <ZoomIn />
   </Button>
 
   <Tooltip>
     <TooltipTrigger as-child>
-      <Button variant="ghost" size="icon" class="size-8" @click="fitView({ padding: 0.2 })">
+      <Button variant="ghost" size="icon" class="size-8" @click="fit">
         <Maximize />
       </Button>
     </TooltipTrigger>
@@ -181,6 +197,25 @@ async function copyAiSkills() {
         </Button>
       </TooltipTrigger>
       <TooltipContent>{{ paused ? 'Play message flows' : 'Pause message flows' }}</TooltipContent>
+    </Tooltip>
+
+    <!--
+      The diagram stood up by plane. A way of looking, not an edit: the file
+      does not change, and it opens flat again next time.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="view3d"
+          aria-label="3D view"
+          @update:model-value="view3d = Boolean($event)"
+        >
+          <Box />
+          3D
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>3D view (3) — the diagram stacked by plane</TooltipContent>
     </Tooltip>
 
     <!--

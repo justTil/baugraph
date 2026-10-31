@@ -1,0 +1,10 @@
+{
+  "baugraph": "1.0",
+  "meta": { "title": "Two planes share an id" },
+  "planes": [
+    { "id": "dmz", "label": "DMZ" },
+    { "id": "dmz", "label": "Perimeter" }
+  ],
+  "nodes": [],
+  "edges": []
+}

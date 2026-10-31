@@ -817,6 +817,13 @@ export function webAppDocument(): DiagramDocument {
       description: 'Example diagram shipped with Baugraph.',
     },
     canvas: { theme: 'light', grid: true, snap: true, snapSize: 10 },
+    // The tiers this diagram is named after, as planes of the 3D view — ground
+    // first. Nothing here changes the 2D drawing; press 3 to see the stack.
+    planes: [
+      { id: 'data', label: 'Data tier', color: 'green' },
+      { id: 'application', label: 'Application tier', color: 'blue' },
+      { id: 'edge', label: 'Edge', color: 'amber' },
+    ],
     nodes: autoSized([
       {
         id: 'browser',
@@ -830,6 +837,7 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 40, y: 190 },
         size: { width: 100, height: 100 },
         parent: null,
+        plane: 'edge',
       },
       {
         id: 'cdn',
@@ -844,6 +852,7 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 200, y: 205 },
         size: { width: 160, height: 62 },
         parent: null,
+        plane: 'edge',
       },
       {
         id: 'app',
@@ -857,6 +866,7 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 420, y: 60 },
         size: { width: 320, height: 400 },
         parent: null,
+        plane: 'application',
       },
       {
         id: 'lb',
@@ -913,6 +923,7 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 820, y: 60 },
         size: { width: 168, height: 70 },
         parent: null,
+        plane: 'data',
       },
       {
         id: 'db',
@@ -927,6 +938,8 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 820, y: 190 },
         size: { width: 168, height: 70 },
         parent: null,
+        plane: 'data',
+        extrusion: 'tall',
       },
       {
         id: 'objects',
@@ -941,6 +954,7 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 820, y: 320 },
         size: { width: 168, height: 70 },
         parent: null,
+        plane: 'data',
       },
       {
         id: 'queue',
@@ -955,6 +969,7 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 460, y: 540 },
         size: { width: 200, height: 62 },
         parent: null,
+        plane: 'application',
       },
       {
         id: 'worker',
@@ -969,6 +984,7 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 820, y: 470 },
         size: { width: 180, height: 62 },
         parent: null,
+        plane: 'application',
       },
     ]),
     edges: [

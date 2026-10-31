@@ -31,6 +31,19 @@ const SHORTCUTS: [string, string][] = [
   ['⇧⌘S', 'save to a different file'],
   ['⌫', 'delete selection'],
   ['arrows', 'nudge (⇧ = ×5)'],
+  ['3', '3D view — the diagram stacked by plane'],
+]
+
+/** Keys that mean something else while the 3D view is up. */
+const SHORTCUTS_3D: [string, string][] = [
+  ['drag / right-drag', 'orbit / pan the camera'],
+  ['scroll', 'zoom'],
+  ['click / ⇧-click', 'select / add to the selection'],
+  ['double-click', 'fly to a node (empty space: fit everything)'],
+  ['↑ / ↓', 'move the selection one plane up / down'],
+  ['← / →', 'spotlight the previous / next message flow'],
+  ['F', 'fit the stack'],
+  ['R', 'turntable — a slow spin, for leaving it on screen'],
 ]
 </script>
 
@@ -160,6 +173,41 @@ const SHORTCUTS: [string, string][] = [
             working on a diagram that animates. Exported SVGs keep their animation; PNGs, being
             one frame, leave it out.
           </p>
+        </section>
+
+        <section class="space-y-2">
+          <h3 class="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+            3D view
+          </h3>
+          <p>
+            Press <kbd class="bg-muted rounded px-1 font-mono">3</kbd> (or <em>3D</em> in the
+            toolbar) and the diagram stands up in layers. Height means what you decide it means:
+            add <em>planes</em> — a DMZ, an application tier, a data tier; dev, test and prod —
+            and put nodes on them. Nothing moves: every node keeps its place on the canvas and is
+            only lifted onto its plane, so a connection that crosses a boundary becomes a vertical
+            cable and stands out from any angle.
+          </p>
+          <p>
+            Planes are added and named under <em>3D planes</em> in the inspector when nothing is
+            selected, or from the stack legend in the 3D view. A node's <em>3D</em> section picks
+            its plane and its height — <em>Tall</em> or <em>Tower</em> for what carries the most
+            or matters the most. A node that names no plane follows its zone, so putting a zone on
+            a plane takes everything in it along. All of it is optional: the 2D canvas and every
+            export ignore it, and a diagram without planes opens exactly as before.
+          </p>
+          <p>
+            Message flows run through the stack too. Step through them with
+            <kbd class="bg-muted rounded px-1 font-mono">←</kbd>
+            <kbd class="bg-muted rounded px-1 font-mono">→</kbd>: each one in turn is drawn at full
+            strength while everything it does not touch fades back — which works in presentation
+            mode as well, where a click on a node flies to it.
+          </p>
+          <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+            <template v-for="[keys, description] in SHORTCUTS_3D" :key="keys">
+              <dt><kbd class="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">{{ keys }}</kbd></dt>
+              <dd class="text-muted-foreground">{{ description }}</dd>
+            </template>
+          </dl>
         </section>
 
         <section class="space-y-2">

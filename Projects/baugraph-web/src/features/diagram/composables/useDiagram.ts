@@ -11,6 +11,8 @@ import type {
   DiagramEdge,
   DiagramMeta,
   DiagramNode,
+  DiagramPlane,
+  Extrusion,
   FlowEdgeStyle,
   LineStyle,
   LineWidth,
@@ -30,11 +32,14 @@ import {
   DEFAULT_ZONE_SIZE,
   FLOW_DEFAULTS,
   FORMAT_VERSION,
+  MAX_PLANES,
   MAX_PORTS,
+  nodePlane,
   nodePorts,
   edgeId as makeEdgeId,
   flowId as makeFlowId,
   nodeId as makeNodeId,
+  planeId as makePlaneId,
 } from '@/model'
 import type { PaletteItem } from '@/features/diagram/data/palette'
 import { paletteItemSize } from '@/features/diagram/data/palette'
@@ -69,6 +74,10 @@ export interface NodeData {
    * every side whatever it says.
    */
   ports: NodePorts
+  /** See `DiagramNode.plane`. `null` follows the zone, or stands on the ground. */
+  plane: string | null
+  /** How tall the node stands in the 3D view. */
+  extrusion: Extrusion
   /** Mirrors `DiagramNode.locked`; the Vue Flow interaction flags follow it. */
   locked: boolean
   meta?: Metadata
@@ -162,6 +171,11 @@ function createDiagramStore(documentId: string) {
    * their own, only references to connections that do.
    */
   const flows = ref<MessageFlow[]>([])
+  /**
+   * The 3D view's planes, ground first. Held as the file states them, like the
+   * flows: nothing about them is drawn on the 2D canvas.
+   */
+  const planes = ref<DiagramPlane[]>([])
   const meta = reactive<DiagramMeta>({ title: 'Untitled diagram' })
   const canvas = reactive<CanvasSettings>({ ...DEFAULT_CANVAS })
 
@@ -374,6 +388,8 @@ function createDiagramStore(documentId: string) {
         border: node.border ?? 'regular',
         icon: node.icon ?? '',
         ports: nodePorts(node.ports),
+        plane: node.plane ?? null,
+        extrusion: node.extrusion ?? 'regular',
         locked,
         meta: node.data,
       },
@@ -443,6 +459,8 @@ function createDiagramStore(documentId: string) {
       size: sizeOf(node),
       ports: nodePorts(node.data?.ports),
       parent: node.parentNode ?? null,
+      plane: node.data?.plane ?? null,
+      extrusion: node.data?.extrusion ?? 'regular',
       locked: node.data?.locked ?? false,
       data: node.data?.meta,
     }
@@ -499,6 +517,9 @@ function createDiagramStore(documentId: string) {
       baugraph: FORMAT_VERSION,
       meta: { ...meta, ...(meta.authors ? { authors: meta.authors.map((a) => ({ ...a })) } : {}) },
       canvas: { ...canvas },
+      // Left off rather than written as `[]`, so a diagram that has never been
+      // given planes snapshots exactly as it did before they existed.
+      ...(planes.value.length ? { planes: planes.value.map((plane) => ({ ...plane })) } : {}),
       nodes: sorted.map(toModelNode),
       edges: edges.value.map(toModelEdge),
       flows: flows.value.map((flow) => ({ ...flow, edges: [...flow.edges] })),
@@ -516,6 +537,7 @@ function createDiagramStore(documentId: string) {
     nodes.value = doc.nodes.map(toVueFlowNode)
     edges.value = doc.edges.map(toVueFlowEdge)
     flows.value = (doc.flows ?? []).map((flow) => ({ ...flow, edges: [...flow.edges] }))
+    planes.value = (doc.planes ?? []).map((plane) => ({ ...plane }))
   }
 
   /* ---------------------------------------------------------------- history */
@@ -947,6 +969,137 @@ function createDiagramStore(documentId: string) {
     flows.value = flows.value.filter((flow) => flow.id !== id)
   }
 
+  /* ----------------------------------------------------------------- planes */
+
+  /** Each new plane takes the next of these, so a fresh stack reads as distinct levels. */
+  const PLANE_COLOURS: ColorKey[] = ['blue', 'teal', 'amber', 'purple', 'green', 'pink', 'red']
+
+  const takenPlaneIds = () => new Set(planes.value.map((p) => p.id))
+
+  /** The plane `id` stands on, resolved through its zones. `null` while there are no planes. */
+  function planeOfNode(id: string): string | null {
+    const byId = new Map(nodes.value.map((n) => [n.id, n]))
+    return nodePlane(
+      id,
+      (nodeId) => {
+        const node = byId.get(nodeId)
+        return node && { plane: (node.data as NodeData | undefined)?.plane, parent: node.parentNode }
+      },
+      planes.value,
+    )
+  }
+
+  /**
+   * Adds a plane on top of the stack. The id comes from the label and is never
+   * regenerated, the same as a node's, so renaming a plane touches one line.
+   */
+  function addPlane(label: string, patch: Partial<DiagramPlane> = {}): DiagramPlane | null {
+    // The schema refuses a longer stack, and a file it refuses cannot be reopened.
+    if (planes.value.length >= MAX_PLANES) return null
+    const plane: DiagramPlane = {
+      id: makePlaneId(label, takenPlaneIds()),
+      label,
+      color: PLANE_COLOURS[planes.value.length % PLANE_COLOURS.length]!,
+      ...patch,
+    }
+    planes.value = [...planes.value, plane]
+    return plane
+  }
+
+  /** Renames or recolours a plane. Its id stays, so nothing that names it changes. */
+  function updatePlane(id: string, patch: Partial<Omit<DiagramPlane, 'id'>>) {
+    planes.value = planes.value.map((plane) => (plane.id === id ? { ...plane, ...patch } : plane))
+  }
+
+  /**
+   * Deletes a plane. Whatever stood on it falls back to where it would be had it
+   * never named one — its zone's plane, or the ground — rather than being left
+   * pointing at something the schema would refuse on the way back in.
+   */
+  function removePlane(id: string) {
+    planes.value = planes.value.filter((plane) => plane.id !== id)
+    patchNodes((n) => (n.data?.plane === id ? { plane: null } : null))
+  }
+
+  /** Moves a plane one place up (`1`) or down (`-1`) the stack. */
+  function movePlane(id: string, by: -1 | 1) {
+    const index = planes.value.findIndex((plane) => plane.id === id)
+    const to = index + by
+    if (index < 0 || to < 0 || to >= planes.value.length) return
+    const next = [...planes.value]
+    ;[next[index], next[to]] = [next[to]!, next[index]!]
+    planes.value = next
+  }
+
+  /** Applies a data patch to every node `patch` returns one for; `null` leaves it be. */
+  function patchNodes(patch: (node: BgNode) => Partial<NodeData> | null) {
+    let changed = false
+    const next = nodes.value.map((n) => {
+      const delta = patch(n)
+      if (!delta) return n
+      changed = true
+      return { ...n, data: { ...(n.data as NodeData), ...delta } }
+    })
+    if (changed) nodes.value = next
+  }
+
+  /** Puts nodes on a plane — `null` hands them back to their zone, or the ground. */
+  function setNodesPlane(ids: Iterable<string>, plane: string | null) {
+    const wanted = new Set(ids)
+    patchNodes((n) => (wanted.has(n.id) ? { plane } : null))
+  }
+
+  function setNodesExtrusion(ids: Iterable<string>, extrusion: Extrusion) {
+    const wanted = new Set(ids)
+    patchNodes((n) => (wanted.has(n.id) ? { extrusion } : null))
+  }
+
+  /**
+   * Moves nodes one plane up or down the stack, each from wherever it stands
+   * now. Where the move lands a node on the plane it would inherit anyway, the
+   * node goes back to naming none — so a file only says `plane` where a node
+   * really does stand apart from its zone. Returns whether anything moved.
+   */
+  function shiftNodesPlane(ids: Iterable<string>, by: -1 | 1): boolean {
+    if (!planes.value.length) return false
+    const order = planes.value.map((p) => p.id)
+    const moving = new Set(ids)
+    const byId = new Map(nodes.value.map((n) => [n.id, n]))
+
+    // A node that names no plane of its own rides along with its zone, so when
+    // that zone is moving too it needs nothing written — it arrives regardless.
+    const ridesAlong = (node: BgNode) => {
+      if ((node.data as NodeData | undefined)?.plane) return false
+      const seen = new Set([node.id])
+      let parent = node.parentNode ? byId.get(node.parentNode) : undefined
+      while (parent && !seen.has(parent.id)) {
+        if (moving.has(parent.id)) return true
+        if ((parent.data as NodeData | undefined)?.plane) return false
+        seen.add(parent.id)
+        parent = parent.parentNode ? byId.get(parent.parentNode) : undefined
+      }
+      return false
+    }
+
+    const targets = new Map<string, string>()
+    for (const id of moving) {
+      const node = byId.get(id)
+      if (!node || ridesAlong(node)) continue
+      const at = order.indexOf(planeOfNode(id) ?? '')
+      const to = Math.min(order.length - 1, Math.max(0, at + by))
+      if (at >= 0 && to !== at) targets.set(id, order[to]!)
+    }
+    if (!targets.size) return false
+
+    patchNodes((n) => {
+      const target = targets.get(n.id)
+      if (!target) return null
+      const inherited = n.parentNode && byId.has(n.parentNode) ? planeOfNode(n.parentNode) : order[0]
+      return { plane: inherited === target ? null : target }
+    })
+    return true
+  }
+
   /* ---------------------------------------------------------------- authors */
 
   /**
@@ -1200,6 +1353,11 @@ function createDiagramStore(documentId: string) {
     const taken = takenNodeIds()
     const idMap = new Map<string, string>()
 
+    // The clipboard crosses documents, and this one may not have the planes the
+    // copy stood on. A node left naming one would make the file unreadable, so
+    // it lands on whatever this document puts it on instead.
+    const ownPlanes = new Set(planes.value.map((p) => p.id))
+
     const copies = copy.nodes.map((node) => {
       const id = makeNodeId(node.label || 'node', taken)
       taken.add(id)
@@ -1208,6 +1366,7 @@ function createDiagramStore(documentId: string) {
         ...structuredClone(node),
         id,
         position: { x: node.position.x + offset, y: node.position.y + offset },
+        plane: node.plane && ownPlanes.has(node.plane) ? node.plane : null,
       }
     })
 
@@ -1842,11 +2001,11 @@ function createDiagramStore(documentId: string) {
   }
 
   scope.run(() => {
-    watch([nodes, edges, flows, meta, canvas], persist, { deep: true })
-    // The canvas settings and the flows are ours alone — nothing but an edit
-    // moves them — so they can be watched directly for what `commit` misses:
-    // the toolbar's grid/snap toggles.
-    watch([flows, meta, canvas], () => (dirty.value = true), { deep: true })
+    watch([nodes, edges, flows, planes, meta, canvas], persist, { deep: true })
+    // The canvas settings, the flows and the planes are ours alone — nothing but
+    // an edit moves them — so they can be watched directly for what `commit`
+    // misses: the toolbar's grid/snap toggles.
+    watch([flows, planes, meta, canvas], () => (dirty.value = true), { deep: true })
     // A bend point's selection outlives the edge it came from only by accident
     // — deleting a connection, undoing its creation, or clearing its last
     // waypoint should not leave a phantom entry the alignment buttons still
@@ -1867,12 +2026,14 @@ function createDiagramStore(documentId: string) {
     nodes,
     edges,
     flows,
+    planes,
     meta,
     canvas,
     selectedNodes,
     selectedEdges,
     canUndo: computed(() => past.value.length > 0),
     canRedo: computed(() => future.value.length > 0),
+    canAddPlane: computed(() => planes.value.length < MAX_PLANES),
     lockedCount,
     fitRequest,
     dirty,
@@ -1928,6 +2089,14 @@ function createDiagramStore(documentId: string) {
     moveAuthor,
     toggleFlowEdge,
     setFlowEdgeStyle,
+    planeOfNode,
+    addPlane,
+    updatePlane,
+    removePlane,
+    movePlane,
+    setNodesPlane,
+    setNodesExtrusion,
+    shiftNodesPlane,
     flowsOnEdge,
     edgesWithin,
     edgesDownstream,

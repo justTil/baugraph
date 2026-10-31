@@ -42,3 +42,8 @@ export function edgeId(source: string, target: string, taken: Iterable<string>):
 export function flowId(label: string, taken: Iterable<string>): string {
   return uniqueId(`flow-${slugify(label, 'message')}`, taken)
 }
+
+/** `dmz`, `data-tier`… — a node names its plane by this, so it survives a rename too. */
+export function planeId(label: string, taken: Iterable<string>): string {
+  return uniqueId(slugify(label, 'plane'), taken)
+}

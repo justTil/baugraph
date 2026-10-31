@@ -20,12 +20,14 @@ import {
   ARROW_MODES,
   BORDER_WIDTHS,
   COLOR_KEYS,
+  EXTRUSIONS,
   FLOW_MODES,
   FLOW_MOTIONS,
   FLOW_TOKENS,
   FORMAT_VERSION,
   LINE_STYLES,
   LINE_WIDTHS,
+  MAX_PLANES,
   MAX_PORTS,
   ROUTES,
   SHAPE_KEYS,
@@ -216,6 +218,13 @@ writing it in another order is still valid and will simply be re-sorted.
   more than the one every node starts with: \`{ "right": 4 }\`. Up to ${MAX_PORTS} a
   side. Omit entirely unless a fan-out actually needs more than one point on a
   side.
+- \`plane\` — 3D only, optional: the id of the plane this node stands on in the
+  3D view (see "Planes" below). Omit it and the node follows its zone's plane,
+  or stands on the ground plane if it has no zone — so set it on a zone and
+  leave its children alone. The 2D canvas and every export ignore it.
+- \`extrusion\` — 3D only, optional: how tall the node stands, one of
+  ${enumList(EXTRUSIONS)}. Omit for \`regular\`. Use \`tall\`/\`tower\` for what
+  carries the most traffic or matters the most, sparingly.
 - \`locked\` — editor-only convenience; omit.
 - \`data\` — free-form object for anything else.
 
@@ -299,6 +308,34 @@ connections, nothing more.
   object of any of \`color\`/\`token\`/\`speed\` — for the one connection that should
   not read the same as the rest, like a failure path drawn red and slow:
   \`{ "order-created--dead-letter-queue": { "color": "red", "token": "packet", "speed": 110 } }\`.
+
+## Planes (3D view) — optional
+
+The editor can show a diagram in 3D, stacked in layers. \`planes\` says what
+the layers are; leave it out entirely for a plain 2D diagram (the default, and
+the right choice unless the user asks for layers or the architecture has an
+obvious height axis).
+
+\`\`\`json
+"planes": [
+  { "id": "data", "label": "Data tier", "color": "green" },
+  { "id": "application", "label": "Application tier", "color": "blue" },
+  { "id": "dmz", "label": "DMZ", "color": "amber" }
+]
+\`\`\`
+
+- Listed **ground first**: the first plane is the bottom of the stack, and a
+  node with no \`plane\` (and no zone that has one) stands on it. The order is
+  the stacking, so it is never sorted. Up to ${MAX_PLANES}.
+- \`id\` — referenced by a node's \`plane\`; every reference must resolve.
+  \`label\` names what the level means; \`color\` (default \`slate\`) tints its plate.
+- Give height a real meaning: trust zones (external → DMZ → application →
+  data), tiers, environments (dev → test → prod), OSI-style layers. A
+  connection between two planes is drawn as a vertical cable, so a flow that
+  crosses a boundary stands out.
+- Nothing moves in 3D: nodes keep their 2D \`position\` and only gain a height,
+  so lay the diagram out for 2D as usual. Prefer putting a whole zone on a
+  plane over setting \`plane\` on each node inside it.
 
 ## Layout and placement
 

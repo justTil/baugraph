@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.34.0]
+
+### Added
+
+- **A 3D view, stacked by plane.** Press `3`, or **3D** in the toolbar or in
+  the view switch at the top right of the canvas, and the diagram stands up in
+  layers. Nothing is laid out again: every node keeps the place it has on the
+  canvas and only gains a height, the level of the *plane* it belongs to. Planes
+  give that height a meaning. They can be trust zones (external, DMZ,
+  application, data), tiers, environments or network layers. A connection
+  between two nodes on the same plane follows the route the canvas draws. One
+  that crosses between planes becomes a vertical cable, so a flow that leaves
+  its trust zone stands out from any angle. Node faces are drawn by the same
+  code as the SVG export, so a node reads the same in 3D as everywhere else.
+  - **Planes** are added, renamed, recoloured, reordered and deleted under
+    **3D planes** in the inspector when nothing is selected. The 3D view shows
+    them as a legend: click a plane to fly to it, hide it from the view, or
+    put the selection on it.
+  - **A node's 3D section** picks its plane and its height (*Flat*, *Low*,
+    *Regular*, *Tall*, *Tower*), for one node or a whole selection. *Auto*
+    follows the node's zone, so putting a zone on a plane takes everything
+    inside it along. In the 3D view, `↑`/`↓` move the selection one plane up
+    or down.
+  - **Message flows run through the stack** on the same timing as on the
+    canvas. `←`/`→` step a spotlight through them: the lit flow is drawn in its
+    own colour and everything it does not touch fades back. Messages stay
+    large enough to follow from across the whole stack.
+  - **Getting around:** drag to orbit, right-drag to pan, scroll to zoom.
+    Click selects (the same selection as the canvas) and double-click flies to
+    a node. There are angled, top and side views, a spread slider that pulls
+    the planes apart or lays them flat, a turntable (`R`), and a button that
+    saves the current view as a PNG. The toolbar's zoom and fit buttons drive
+    the 3D camera while it is up.
+  - **Presentation mode** keeps the 3D view. It gains a **3D** switch and a
+    turntable, the legend stays up as a key, the spotlight still steps through
+    the flows, and clicking a node flies to it.
+  - The **Web application — three-tier** example now has its tiers as planes,
+    so the first visit has something to look at in 3D.
+  - three.js is only downloaded the first time the 3D view is opened, so
+    nobody who stays in 2D pays for it.
+- **Optional 3D keys in the file format.** A document may carry `planes`,
+  listed ground first, and a node may carry `plane` and `extrusion`. All three
+  are optional, and the 2D canvas and every export ignore them. A node without
+  `plane` follows its zone, or stands on the ground plane. A diagram without
+  planes is written byte for byte as before, so no existing file changes. The
+  JSON Schema and the AI skills are regenerated to match. Planes are written
+  one per line and never sorted, because their order is the stacking. A
+  `plane` that names a plane the file does not define is rejected on open,
+  the same as a dangling `parent`. Opening a file that uses these keys in an
+  older Baugraph drops them on the next save, as with any newer field.
+
 ## [1.33.0]
 
 ### Added

@@ -160,9 +160,10 @@ export function exportSvg(
  * Loads an SVG string as an image the canvas can draw.
  *
  * Through a data URI rather than a blob URL: a blob URL would have to be revoked
- * at exactly the right moment, and a GIF makes hundreds of these.
+ * at exactly the right moment, and a GIF makes hundreds of these. The 3D view
+ * draws every node face through here too.
  */
-function svgImage(svg: string): Promise<HTMLImageElement> {
+export function svgImage(svg: string): Promise<HTMLImageElement> {
   // btoa() only handles latin-1, so encode UTF-8 bytes first.
   const bytes = new TextEncoder().encode(svg)
   const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join('')

@@ -1,0 +1,9 @@
+{
+  "baugraph": "1.0",
+  "meta": { "title": "A node names a plane the file never defines" },
+  "planes": [{ "id": "data", "label": "Data tier" }],
+  "nodes": [
+    { "id": "gateway", "label": "Gateway", "position": { "x": 0, "y": 0 }, "size": { "width": 190, "height": 62 }, "plane": "dmz" }
+  ],
+  "edges": []
+}

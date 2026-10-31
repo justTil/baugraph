@@ -36,6 +36,9 @@ import CataloguePicker from '@/features/diagram/components/CataloguePicker.vue'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 import EdgeFlowSection from '@/features/diagram/components/EdgeFlowSection.vue'
 import AuthorsSection from '@/features/diagram/components/AuthorsSection.vue'
+import NodeSpatialSection from '@/features/diagram/components/NodeSpatialSection.vue'
+import PlanesSection from '@/features/diagram/components/PlanesSection.vue'
+import { useView3D } from '@/features/diagram/composables/useView3D'
 import type { PortSide, Side, Vec2 } from '@/model'
 import { MAX_PORTS, PORT_SIDES, SHAPE_KEYS, nodePorts } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
@@ -86,6 +89,7 @@ const {
 } = useDiagram()
 
 const { collapsed } = useInspectorPanel()
+const { active: view3d } = useView3D()
 
 const node = computed(() =>
   selectedNodes.value.length === 1 && selectedEdges.value.length === 0
@@ -385,6 +389,12 @@ function setRouting(
     <div v-show="!collapsed" class="min-h-0 flex-1 overflow-y-auto">
       <!-- ------------------------------------------------------------ node -->
       <template v-if="node">
+        <!--
+          Where the node stands in 3D. Optional on top of everything below, so it
+          comes last — except in the 3D view, where it is what a click is for.
+        -->
+        <NodeSpatialSection v-if="view3d" :ids="[node.id]" />
+
         <section class="space-y-3 border-b p-3">
           <div class="space-y-1.5">
             <Label class="text-xs">Label</Label>
@@ -657,6 +667,8 @@ function setRouting(
             Lock {{ node.type === 'zone' ? 'zone' : 'node' }} (⇧⌘L)
           </Button>
         </section>
+
+        <NodeSpatialSection v-if="!view3d" :ids="[node.id]" />
       </template>
 
       <!-- ------------------------------------------------------------ edge -->
@@ -917,6 +929,8 @@ function setRouting(
           </div>
         </section>
 
+        <NodeSpatialSection v-if="selectedNodes.length" :ids="selectedNodes.map((n) => n.id)" />
+
         <section v-if="selectedNodes.length" class="space-y-2 border-b p-3">
           <Label class="text-xs">Technology</Label>
           <CataloguePicker
@@ -969,6 +983,8 @@ function setRouting(
 
         <AuthorsSection />
 
+        <PlanesSection />
+
         <section v-if="lockedCount" class="space-y-2 border-b p-3">
           <Label class="text-xs">Locked</Label>
           <Button variant="outline" size="sm" class="w-full" @click="withCommit(unlockAll)">
@@ -1008,6 +1024,8 @@ function setRouting(
             <dd>laser pointer for presenting</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">P</kbd></dt>
             <dd>presentation mode</dd>
+            <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">3</kbd></dt>
+            <dd>3D view</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⇧⌘F</kbd></dt>
             <dd>size nodes to their text</dd>
             <dt><kbd class="bg-muted rounded px-1 py-0.5 font-mono">⌘G</kbd></dt>

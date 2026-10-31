@@ -6,6 +6,7 @@ export {
   nodeSchema,
   edgeSchema,
   flowSchema,
+  planeSchema,
   canvasSchema,
   metaSchema,
   authorSchema,

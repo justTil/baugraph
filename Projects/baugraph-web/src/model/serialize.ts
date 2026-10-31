@@ -4,10 +4,17 @@ import type {
   DiagramEdge,
   DiagramMeta,
   DiagramNode,
+  DiagramPlane,
   MessageFlow,
 } from '@/model/types'
 import { FORMAT_VERSION, PORT_SIDES } from '@/model/types'
-import { EDGE_DEFAULTS, FLOW_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
+import {
+  EDGE_DEFAULTS,
+  FLOW_DEFAULTS,
+  NODE_DEFAULTS,
+  PLANE_DEFAULTS,
+  blankDocument,
+} from '@/model/defaults'
 import { documentSchema } from '@/model/schema'
 import { migrate } from '@/model/migrate'
 import { sortDocument } from '@/model/sort'
@@ -98,9 +105,13 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'size',
   'ports',
   'parent',
+  'plane',
+  'extrusion',
   'locked',
   'data',
 ]
+
+const PLANE_KEY_ORDER: (keyof DiagramPlane)[] = ['id', 'label', 'color']
 
 const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'id',
@@ -213,6 +224,10 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
     return ordered(trimmed as MessageFlow, FLOW_KEY_ORDER)
   })
 
+  const planes = (doc.planes ?? []).map((plane) =>
+    ordered(omitDefaults({ ...plane }, PLANE_DEFAULTS) as DiagramPlane, PLANE_KEY_ORDER),
+  )
+
   return {
     $schema: SCHEMA_URL,
     baugraph: doc.baugraph || FORMAT_VERSION,
@@ -224,6 +239,10 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
       'updatedAt',
     ]),
     canvas: ordered({ ...doc.canvas }, ['theme', 'grid', 'snap', 'snapSize']),
+    // Ahead of the nodes that name them, the way nodes come ahead of the edges
+    // that name those — and, like `flows`, not written at all until there is one,
+    // so every 2D diagram stays byte-for-byte the file it was.
+    ...(planes.length ? { planes } : {}),
     nodes,
     edges,
     // A diagram with no flows says nothing about them: an empty array would show
@@ -245,9 +264,9 @@ const INLINE_KEYS = new Set(['position', 'size', 'ports'])
  * one small idea ("this one is red") and reads as one line. An edge's manual
  * bend points are a list rather than a map, but the same idea applies: moving
  * one point should touch one line, not four. An author is one person, so adding
- * or removing a credit is one line as well.
+ * or removing a credit is one line as well, and so is a plane of the 3D view.
  */
-const INLINE_CHILD_KEYS = new Set(['style', 'waypoints', 'authors'])
+const INLINE_CHILD_KEYS = new Set(['style', 'waypoints', 'authors', 'planes'])
 
 function format(value: unknown, indent: string, key?: string, inline = false): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)

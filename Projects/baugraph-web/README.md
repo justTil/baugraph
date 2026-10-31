@@ -208,6 +208,33 @@ connections they travel instead.
 | `⌘S` | download the `.baugraph.json` |
 | `⌫` | delete selection |
 | arrows | nudge (`⇧` = ×5) |
+| `3` | the 3D view |
+
+### The 3D view
+
+Press `3` and the diagram stands up in layers — the same diagram, with a height
+axis added. Nodes keep exactly the place they have on the canvas and are only
+lifted onto the *plane* they belong to, so nothing is laid out twice and nothing
+can drift. The height means whatever the planes say it means: trust zones (DMZ,
+application, data), tiers, environments. A connection that crosses from one plane
+to another becomes a vertical cable, which is what makes a boundary crossing
+stand out from any angle.
+
+Planes are added under **3D planes** in the inspector when nothing is selected. A
+node's **3D** section picks its plane — *Auto* follows its zone, so putting a zone
+on a plane takes everything in it along — and its height, *Flat* to *Tower*, for
+what carries the most or matters the most. In the 3D view, `↑`/`↓` move the
+selection a plane up or down.
+
+Message flows run through the stack on the same timing as on the canvas, and
+`←`/`→` step a spotlight through them: one flow at full strength, everything it
+does not touch faded back. That works in presentation mode too, along with a
+turntable (`R`), for walking a room through where the messages go.
+
+All of it is optional and on top. A diagram without planes is a 2D diagram and its
+file does not change; the 2D canvas and every export ignore the 3D settings; and
+the view itself is never saved, so a diagram always opens flat. three.js is only
+downloaded the first time the 3D view is opened.
 
 The current diagram autosaves to `localStorage`, so a reload never loses work. That
 copy is a convenience, not the source of truth — export the JSON and commit it.
@@ -412,7 +439,8 @@ src/
     composables/           editor state, undo/redo, autosave, placement,
                            the GSAP message-flow runtime
     lib/                   shape geometry, edge routing, flow traversal,
-                           theme, SVG export
+                           theme, SVG export, the 3D layout (scene3d) and
+                           its three.js renderer (stage3d)
     data/                  node-type and technology catalogues, the palette
                            built from both, curated Lucide icons, sample
   components/

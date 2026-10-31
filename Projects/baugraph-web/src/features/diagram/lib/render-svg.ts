@@ -8,6 +8,7 @@ import { EDGE_LABEL_FONT, EDGE_LABEL_INFO_ICON, edgeLabelBox } from '@/features/
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, fadeOf, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
+import type { DiagramTheme } from '@/features/diagram/lib/theme'
 import {
   COLOR_HEX,
   diagramTheme,
@@ -365,6 +366,23 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
   }
 
   return parts.join('')
+}
+
+/**
+ * One node on its own, as a standalone SVG of exactly its box — what the 3D view
+ * lays on top of each block, so a node there reads exactly as it does on the
+ * canvas and in an export: the same outline, icon and caption, from the same
+ * code.
+ */
+export function nodeFaceSvg(node: DiagramNode, theme: DiagramTheme): string {
+  const { width, height } = node.size
+  const box: Box = { x: 0, y: 0, width, height }
+  const paint = nodePaint(node, theme)
+  const body = node.kind === 'zone' ? renderZone(node, box, paint) : renderShape(node, box, paint)
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
+    `viewBox="0 0 ${width} ${height}"><style>text{font-family:${SANS}}</style>${body}</svg>`
+  )
 }
 
 /* ------------------------------------------------------------------ flows */
