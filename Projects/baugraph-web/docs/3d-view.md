@@ -25,20 +25,38 @@ never saved, so a diagram always opens flat.
 
 ## Planes
 
-Planes are the 3D view's layers. (The **Layers** tab on the 2D canvas is
-something else: the list of every node, nested by zone.)
+Planes are the 3D view's layers, and they are built on the 2D canvas. Open the
+panel on the canvas's left edge and switch it from **Layers** (every node,
+nested by zone) to **Planes**. It lists the stack top to bottom, each plane
+with the nodes standing on it:
 
-With nothing selected, the inspector's **3D planes** section lists the stack
-top to bottom. **Add plane** names a new one and puts it on top; each plane can
-be renamed, recoloured, raised, lowered or deleted there. The first plane is
-the ground: anything that does not say otherwise stands on it.
+- **+** names a new plane and puts it on top. The first plane is the ground:
+  anything that does not say otherwise stands on it.
+- **Point at a plane** and the canvas fades everything that is not on it, so
+  you can see what a plane holds without leaving 2D.
+- **Double-click** a plane's name to rename it, and click its swatch to
+  recolour it. Its **⋯** menu raises or lowers it, selects everything on it,
+  or deletes it — what stood on a deleted plane goes back to its zone's
+  plane, or the ground.
 
-The 3D view has the same list as a legend in its top-left corner. Click a
+The inspector's **3D planes** section, shown when nothing is selected, edits
+the same list. The 3D view has it as a legend in its top-left corner: click a
 plane's name to fly to it, hide it from the view with the eye (the diagram is
 not changed), or — with nodes selected — put the whole selection on it with
 the arrow.
 
 ## Putting nodes on planes
+
+On the canvas:
+
+- **Drag** rows in the Planes tab onto a plane. A zone takes everything
+  inside it along.
+- **Right-click** a node, or a selection, and pick a plane under **Plane** —
+  or **New plane…** to name one and put them on it in one go.
+- **Select** nodes and click the arrow on a plane's row to put them on it.
+
+A node put on the plane its zone already stands on goes back to following the
+zone, so the file only names a plane where a node really stands apart.
 
 A node's inspector has a **3D** section — at the top while the 3D view is on,
 at the bottom otherwise:

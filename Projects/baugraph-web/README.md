@@ -220,7 +220,10 @@ application, data), tiers, environments. A connection that crosses from one plan
 to another becomes a vertical cable, which is what makes a boundary crossing
 stand out from any angle.
 
-Planes are added under **3D planes** in the inspector when nothing is selected. A
+Planes are built on the 2D canvas: the layers panel's **Planes** tab lists the stack
+with the nodes on each plane, takes nodes dragged onto a plane, and fades the canvas
+down to one plane when you point at it. Right-click a node or a selection to pick a
+plane, or **New plane…** to name one and put them on it. A
 node's **3D** section picks its plane — *Auto* follows its zone, so putting a zone
 on a plane takes everything in it along — and its height, *Flat* to *Tower*, for
 what carries the most or matters the most. In the 3D view, `↑`/`↓` move the

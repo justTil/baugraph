@@ -63,7 +63,7 @@ const {
   endCoalesce,
   addPlane,
   canAddPlane,
-  setNodesPlane,
+  moveNodesToPlane,
   planeOfNode,
 } = useDiagram()
 const { findNode, addSelectedNodes, removeSelectedNodes, removeSelectedElements } = useCanvas()
@@ -240,7 +240,7 @@ function moveSelectionTo(planeId: string) {
   if (!selectedNodes.value.length) return
   commit()
   endCoalesce()
-  setNodesPlane(
+  moveNodesToPlane(
     selectedNodes.value.map((n) => n.id),
     planeId,
   )

@@ -1055,49 +1055,73 @@ function createDiagramStore(documentId: string) {
   }
 
   /**
-   * Moves nodes one plane up or down the stack, each from wherever it stands
-   * now. Where the move lands a node on the plane it would inherit anyway, the
-   * node goes back to naming none — so a file only says `plane` where a node
-   * really does stand apart from its zone. Returns whether anything moved.
+   * Stands each node on its target plane the way a gesture means it. Where a
+   * node would stand there anyway — its zone does, or the target is the
+   * ground — it goes back to naming none, so a file only says `plane` where a
+   * node really does stand apart from its zone. Zones are settled before what
+   * is inside them, so a zone moved together with its contents takes them
+   * along without a word written for them. Returns whether anything changed.
    */
+  function placeOnPlanes(targets: ReadonlyMap<string, string>): boolean {
+    const byId = new Map(nodes.value.map((n) => [n.id, n]))
+    const written = new Map<string, string | null>()
+    const lookup = (id: string) => {
+      const node = byId.get(id)
+      if (!node) return undefined
+      const plane = written.has(id) ? written.get(id) : (node.data as NodeData | undefined)?.plane
+      return { plane, parent: node.parentNode }
+    }
+    const depth = (id: string) => {
+      const seen = new Set([id])
+      let up = byId.get(id)?.parentNode
+      while (up && !seen.has(up)) {
+        seen.add(up)
+        up = byId.get(up)?.parentNode
+      }
+      return seen.size
+    }
+
+    const order = [...targets.keys()].filter((id) => byId.has(id)).sort((a, b) => depth(a) - depth(b))
+    for (const id of order) {
+      const parent = byId.get(id)!.parentNode
+      const inherited =
+        parent && byId.has(parent) ? nodePlane(parent, lookup, planes.value) : (planes.value[0]?.id ?? null)
+      const target = targets.get(id)!
+      written.set(id, inherited === target ? null : target)
+    }
+
+    let changed = false
+    patchNodes((n) => {
+      if (!written.has(n.id)) return null
+      const plane = written.get(n.id) ?? null
+      if (((n.data as NodeData | undefined)?.plane ?? null) === plane) return null
+      changed = true
+      return { plane }
+    })
+    return changed
+  }
+
+  /**
+   * Puts nodes on one plane — what the canvas's menu, the planes tab and the 3D
+   * legend do. The inspector's picker is the one place that writes a plane
+   * as chosen, since it also offers "Auto" and has to show which it is.
+   */
+  function moveNodesToPlane(ids: Iterable<string>, plane: string): boolean {
+    if (!planes.value.some((p) => p.id === plane)) return false
+    return placeOnPlanes(new Map([...ids].map((id) => [id, plane])))
+  }
+
+  /** Moves nodes one plane up or down the stack, each from wherever it stands now. */
   function shiftNodesPlane(ids: Iterable<string>, by: -1 | 1): boolean {
     if (!planes.value.length) return false
     const order = planes.value.map((p) => p.id)
-    const moving = new Set(ids)
-    const byId = new Map(nodes.value.map((n) => [n.id, n]))
-
-    // A node that names no plane of its own rides along with its zone, so when
-    // that zone is moving too it needs nothing written — it arrives regardless.
-    const ridesAlong = (node: BgNode) => {
-      if ((node.data as NodeData | undefined)?.plane) return false
-      const seen = new Set([node.id])
-      let parent = node.parentNode ? byId.get(node.parentNode) : undefined
-      while (parent && !seen.has(parent.id)) {
-        if (moving.has(parent.id)) return true
-        if ((parent.data as NodeData | undefined)?.plane) return false
-        seen.add(parent.id)
-        parent = parent.parentNode ? byId.get(parent.parentNode) : undefined
-      }
-      return false
-    }
-
     const targets = new Map<string, string>()
-    for (const id of moving) {
-      const node = byId.get(id)
-      if (!node || ridesAlong(node)) continue
+    for (const id of ids) {
       const at = order.indexOf(planeOfNode(id) ?? '')
       const to = Math.min(order.length - 1, Math.max(0, at + by))
       if (at >= 0 && to !== at) targets.set(id, order[to]!)
     }
-    if (!targets.size) return false
-
-    patchNodes((n) => {
-      const target = targets.get(n.id)
-      if (!target) return null
-      const inherited = n.parentNode && byId.has(n.parentNode) ? planeOfNode(n.parentNode) : order[0]
-      return { plane: inherited === target ? null : target }
-    })
-    return true
+    return targets.size > 0 && placeOnPlanes(targets)
   }
 
   /* ---------------------------------------------------------------- authors */
@@ -2095,6 +2119,7 @@ function createDiagramStore(documentId: string) {
     removePlane,
     movePlane,
     setNodesPlane,
+    moveNodesToPlane,
     setNodesExtrusion,
     shiftNodesPlane,
     flowsOnEdge,

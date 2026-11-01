@@ -16,10 +16,16 @@ All notable changes to this project will be documented in this file.
   that crosses between planes becomes a vertical cable, so a flow that leaves
   its trust zone stands out from any angle. Node faces are drawn by the same
   code as the SVG export, so a node reads the same in 3D as everywhere else.
-  - **Planes** are added, renamed, recoloured, reordered and deleted under
-    **3D planes** in the inspector when nothing is selected. The 3D view shows
-    them as a legend: click a plane to fly to it, hide it from the view, or
-    put the selection on it.
+  - **Planes are built on the 2D canvas.** The layers panel on the canvas's
+    left edge has a **Planes** tab that lists the stack top to bottom, each
+    plane with the nodes standing on it. Planes are added, renamed,
+    recoloured, reordered and deleted there. Nodes are dragged onto a plane,
+    or the selection is put on one with a click, and pointing at a plane fades
+    everything else on the canvas. Right-clicking a node or a selection gives
+    a **Plane** menu, with **New plane…** to name a plane and put them on it in
+    one go. The inspector's **3D planes** section (nothing selected) edits the
+    same list, and the 3D view shows it as a legend: click a plane to fly to
+    it, hide it from the view, or put the selection on it.
   - **A node's 3D section** picks its plane and its height (*Flat*, *Low*,
     *Regular*, *Tall*, *Tower*), for one node or a whole selection. *Auto*
     follows the node's zone, so putting a zone on a plane takes everything

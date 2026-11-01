@@ -118,6 +118,11 @@ diagram too big to read at a glance:
   the list.
 - **Search** by name, type, technology or id.
 
+Its **Planes** tab lists the same nodes by the planes of the
+[3D view](/3d-view) instead, and is where a stack is built: add and name
+planes, drag nodes onto them, and point at a plane to see on the canvas what
+stands on it.
+
 ## Everyday editing
 
 Copy/paste, undo/redo, multi-select, alignment and snapping while dragging

@@ -3,7 +3,18 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
-import { computed, defineAsyncComponent, h, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  h,
+  markRaw,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  useId,
+  watch,
+} from 'vue'
 import type {
   Connection,
   EdgeMouseEvent,
@@ -496,6 +507,38 @@ function onMenuAdd({ item, at }: { item: PaletteItem; at: { x: number; y: number
   lastItem.value = item
   place(item, at)
 }
+
+/* ----------------------------------------------------------------- planes */
+
+const layersPanel = ref<InstanceType<typeof LayersPanel> | null>(null)
+
+/** "New plane…" from the menu: the planes tab names it, then puts the nodes on it. */
+async function onMenuNewPlane(ids: string[]) {
+  layersOpen.value = true
+  await nextTick()
+  layersPanel.value?.startNewPlane(ids)
+}
+
+/** The nodes of the plane pointed at in the planes tab. Everything else fades back. */
+const planePeek = ref<string[] | null>(null)
+/** Scopes the rule below to this canvas: other documents' canvases stay mounted, hidden. */
+const peekScope = useId()
+
+/**
+ * A stylesheet rather than a prop on every node and edge: it lasts only while
+ * the pointer is on a plane, and Vue Flow's own wrappers already carry the ids.
+ */
+const peekCss = computed(() => {
+  const ids = planePeek.value
+  if (!ids) return ''
+  const on = new Set(ids)
+  const match = (list: string[]) => list.map((id) => `[data-id="${CSS.escape(id)}"]`).join(',')
+  const within = edges.value.filter((e) => on.has(e.source) && on.has(e.target)).map((e) => e.id)
+  const scope = `[data-peek="${peekScope}"]`
+  const nodes = ids.length ? `:not(${match(ids)})` : ''
+  const lines = within.length ? `:not(${match(within)})` : ''
+  return `${scope} .vue-flow__node${nodes}, ${scope} .vue-flow__edge${lines} { opacity: 0.16; }`
+})
 
 function selectAll() {
   addSelectedNodes(getNodes.value.filter((n) => n.selectable !== false))
@@ -1031,8 +1074,10 @@ watch(view3d, (on) => {
       <div
         v-show="viewMode === 'diagram' && !view3d"
         class="absolute inset-0"
+        :data-peek="peekScope"
         @contextmenu.capture="onContextMenuCapture"
       >
+        <component :is="'style'" v-if="peekCss">{{ peekCss }}</component>
         <!--
           `elevate-nodes-on-select` is off on purpose: Vue Flow would otherwise lift
           a selected node 1000 layers up, so selecting a zone made it jump in front
@@ -1280,8 +1325,12 @@ watch(view3d, (on) => {
     <!-- The diagram stood up by plane. Outside the context-menu trigger: right-drag pans the camera. -->
     <DiagramView3D v-if="viewMode === 'diagram' && view3d" :visible="isVisible" />
 
-    <!-- Every node in the diagram, nested by zone; folds away to a tab on the left edge. -->
-    <LayersPanel v-if="!presenting && viewMode === 'diagram' && !view3d" />
+    <!-- Every node in the diagram, by zone or by plane; folds away to a tab on the left edge. -->
+    <LayersPanel
+      v-if="!presenting && viewMode === 'diagram' && !view3d"
+      ref="layersPanel"
+      @peek="planePeek = $event"
+    />
 
     <!-- The diagram's document as editable text — the way in for JSON pasted from an AI assistant. -->
     <div
@@ -1468,6 +1517,7 @@ watch(view3d, (on) => {
       :target="menuTarget"
       @rename="openEditorFor"
       @add="onMenuAdd"
+      @new-plane="onMenuNewPlane"
       @export="emit('export')"
     />
   </ContextMenu>

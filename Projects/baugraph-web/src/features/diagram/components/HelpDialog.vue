@@ -188,12 +188,14 @@ const SHORTCUTS_3D: [string, string][] = [
             cable and stands out from any angle.
           </p>
           <p>
-            Planes are added and named under <em>3D planes</em> in the inspector when nothing is
-            selected, or from the stack legend in the 3D view. A node's <em>3D</em> section picks
-            its plane and its height — <em>Tall</em> or <em>Tower</em> for what carries the most
-            or matters the most. A node that names no plane follows its zone, so putting a zone on
-            a plane takes everything in it along. All of it is optional: the 2D canvas and every
-            export ignore it, and a diagram without planes opens exactly as before.
+            Planes are built on the canvas: the <em>Planes</em> tab of the layers panel on its left
+            edge adds and names them, takes nodes dragged onto them, and fades the canvas down to
+            one plane when you point at it. Right-click a node for its <em>Plane</em>, or open its
+            <em>3D</em> section in the inspector, which also picks its height — <em>Tall</em> or
+            <em>Tower</em> for what carries the most or matters the most. A node that names no plane
+            follows its zone, so putting a zone on a plane takes everything in it along. All of it
+            is optional: the 2D canvas and every export ignore it, and a diagram without planes
+            opens exactly as before.
           </p>
           <p>
             Message flows run through the stack too. Step through them with
