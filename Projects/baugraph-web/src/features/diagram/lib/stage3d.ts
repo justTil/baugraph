@@ -3,8 +3,10 @@ import {
   BoxGeometry,
   BufferGeometry,
   CanvasTexture,
+  CircleGeometry,
   Color,
   ConeGeometry,
+  CylinderGeometry,
   DoubleSide,
   EdgesGeometry,
   ExtrudeGeometry,
@@ -12,6 +14,7 @@ import {
   Group,
   LineBasicMaterial,
   LineSegments,
+  MOUSE,
   Mesh,
   MeshBasicMaterial,
   NormalBlending,
@@ -20,6 +23,7 @@ import {
   PlaneGeometry,
   Quaternion,
   Raycaster,
+  RingGeometry,
   Scene,
   Shape,
   ShapeGeometry,
@@ -40,7 +44,8 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
 import gsap from 'gsap'
-import type { DiagramDocument, DiagramNode, MessageFlow } from '@/model'
+import type { DiagramDocument, DiagramNode, MessageFlow, Position3D } from '@/model'
+import { moveInSpace } from '@/model'
 import type { CameraPreset } from '@/features/diagram/composables/useView3D'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
@@ -55,11 +60,28 @@ import type { StackEdge, StackLayout, StackNode, Track, Vec3 } from '@/features/
 import {
   ZONE_FLOOR,
   cablePoints,
+  isSolid,
   onPlane,
   pointOnTrack,
+  stackEdge,
   stackLayout,
+  stackNodes,
   track,
 } from '@/features/diagram/lib/scene3d'
+import type { Axis, Constraint, TransformStatus } from '@/features/diagram/lib/transform3d'
+import {
+  AXES,
+  AXIS_COLOR,
+  AXIS_DIRECTION,
+  ZERO,
+  axisKey,
+  constrain,
+  constraintPoint,
+  fromWorld,
+  numericDelta,
+  snapDelta,
+  typeNumber,
+} from '@/features/diagram/lib/transform3d'
 
 /**
  * The 3D view's renderer.
@@ -75,7 +97,13 @@ import {
  * Everything drawn comes from code the rest of the editor already trusts: node
  * faces are the SVG exporter's own rendering of the node, connections follow the
  * canvas's own routes, and messages run on the same timing the 2D canvas and the
- * animated SVG export use. The 3D view adds height and nothing else.
+ * animated SVG export use.
+ *
+ * Nodes are moved here the way a 3D editor moves objects — `G` to grab, an
+ * axis key to constrain, a typed distance, a gizmo to drag by — but the stage
+ * never writes the document itself. It previews the move on the scene it
+ * already has, and only on confirming hands the move to Vue, which writes it
+ * as an undo step; the rebuild that follows lands on exactly what was shown.
  */
 
 export interface StageEvents {
@@ -83,6 +111,19 @@ export interface StageEvents {
   select(id: string | null, additive: boolean): void
   /** The pointer moved onto a node, or off every node. */
   hover(id: string | null, at: { x: number; y: number } | null): void
+  /** A move was confirmed: `ids` by `delta`, in the file's axes (see `transform3d.ts`). */
+  move(ids: string[], delta: Position3D): void
+  /** A move started, changed, or ended (`null`) — what the header shows. */
+  transform(status: TransformStatus | null): void
+  /** The camera turned: where each axis points on screen, for the axis navigator. */
+  orient(axes: Record<Axis, AxisOnScreen>): void
+}
+
+/** An axis as seen from the camera: `x` right and `y` down on screen, `z` towards the viewer. */
+export interface AxisOnScreen {
+  x: number
+  y: number
+  z: number
 }
 
 export interface StageMotion {
@@ -122,6 +163,47 @@ const PRESETS: Record<CameraPreset, { polar: number; azimuth: number }> = {
   side: { polar: (84 * Math.PI) / 180, azimuth: 0 },
 }
 
+/** Never below the ground plane: the stack is read from above or from the side. */
+const MAX_POLAR = Math.PI * 0.495
+
+/** How long the gizmo's arrows are on screen, in pixels, however far away it is. */
+const GIZMO_PX = 92
+/** How far the pointer travels before a press on a selected node becomes a move. */
+const DRAG_SLOP = 5
+/** Pointer travel counts this much while `⇧` is held: the fine adjustment. */
+const PRECISION = 0.1
+
+/** One handle of the move gizmo: an arrow, a plane square, or the ring in the middle. */
+interface Handle {
+  constraint: Axis[]
+  hit: Mesh
+  parts: MeshBasicMaterial[]
+  color: Color
+}
+
+/** A move in progress. */
+interface Transform {
+  kind: TransformStatus['kind']
+  /** The nodes being moved; what sits inside them comes along. */
+  ids: string[]
+  /** Where the move is measured from, in world space. */
+  pivot: Vector3
+  /** The constraint plane for an unconstrained move faces the camera as it was when the move began. */
+  facing: Vector3
+  /** Client coordinates the move started at… */
+  start: Vector2
+  /** …and where the pointer counts as being now, slowed down while `⇧` is held. */
+  at: Vector2
+  /** The pointer's last real position, which `at` is advanced from. */
+  last: Vector2
+  constraint: Axis[]
+  /** A distance being typed; empty while the pointer decides. */
+  numeric: string
+  delta: Position3D
+  precise: boolean
+  /** `Ctrl` is held, which turns the canvas's snapping the other way for this move. */
+  invertSnap: boolean
+}
 interface NodeEntry {
   stack: StackNode
   group: Group
@@ -132,8 +214,10 @@ interface NodeEntry {
   outlineColor: Color
   /** The node's footprint outline, for the selection ring. */
   ring: Vector2[]
-  /** Height of its top surface above its plane. */
-  top: number
+  /** Height of its base above its plane: the zone floors under it, and its own elevation. */
+  base: number
+  /** Height of its top surface above its base. */
+  rise: number
   selection: Line2 | null
 }
 
@@ -424,6 +508,8 @@ export class Stage3D {
   private planes: Group[] = []
 
   private layout: StackLayout | null = null
+  /** The document the scene was built from — what a move is previewed against. */
+  private doc: DiagramDocument | null = null
   private theme: DiagramTheme | null = null
   private flows: MessageFlow[] = []
   private nodes = new Map<string, NodeEntry>()
@@ -457,6 +543,27 @@ export class Stage3D {
   private down: { x: number; y: number; button: number } | null = null
   private pendingHover: PointerEvent | null = null
 
+  /** Off while presenting: nothing can be moved, and there is no gizmo. */
+  private editable = true
+  private gizmoOn = true
+  /** The canvas's own grid, which moves here snap to as well. */
+  private snapping = { on: true, size: 10 }
+  private transform: Transform | null = null
+  /** A press on a selected node that may yet turn into a move, or stay a click. */
+  private press: { x: number; y: number; id: string; additive: boolean; point: Vector3 } | null = null
+  /** Where the pointer last was, anywhere in the window — where `G` starts a move from. */
+  private pointer = new Vector2(-1, -1)
+
+  private gizmo = new Group()
+  private handles: Handle[] = []
+  private hoveredHandle: Handle | null = null
+  private activeHandle: Handle | null = null
+  /** The constraint's axis lines, drawn while a move is constrained. */
+  private guides = new Group()
+  private guideLines: Line2[] = []
+  /** The camera's last orientation the axis navigator was told about. */
+  private oriented = ''
+
   constructor(
     private host: HTMLElement,
     private events: StageEvents,
@@ -472,26 +579,33 @@ export class Stage3D {
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.09
     this.controls.screenSpacePanning = true
-    // Never below the ground plane: the stack is read from above or from the side.
-    this.controls.maxPolarAngle = Math.PI * 0.495
+    // The middle button orbits and ⇧ + middle pans, as in a 3D editor; the left
+    // button keeps orbiting and the right keeps panning, for a trackpad.
+    this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.ROTATE, RIGHT: MOUSE.PAN }
+    this.controls.maxPolarAngle = MAX_POLAR
     this.controls.minDistance = 40
     this.controls.maxDistance = 60000
     this.controls.autoRotateSpeed = 0.7
     this.controls.addEventListener('change', this.invalidate)
 
-    this.scene.add(this.root)
+    this.scene.add(this.root, this.gizmo, this.guides)
     this.root.add(this.cables, this.tokens)
+    this.buildGizmo()
 
     this.observer = new ResizeObserver(() => this.resize())
     this.observer.observe(host)
     this.resize()
 
     const el = this.renderer.domElement
+    // Ahead of the camera controls, which listen on the canvas itself: a press
+    // on the gizmo or on a selected node is a move, and must never also orbit.
+    host.addEventListener('pointerdown', this.onPress, true)
     el.addEventListener('pointerdown', this.onPointerDown)
     el.addEventListener('pointerup', this.onPointerUp)
     el.addEventListener('pointermove', this.onPointerMove)
     el.addEventListener('pointerleave', this.onPointerLeave)
     el.addEventListener('dblclick', this.onDoubleClick)
+    window.addEventListener('pointermove', this.trackPointer, { passive: true })
 
     this.last = performance.now()
     this.frame = requestAnimationFrame(this.tick)
@@ -501,7 +615,10 @@ export class Stage3D {
 
   /** Rebuilds the scene from `doc`. Camera, selection and view state are kept. */
   setScene(doc: DiagramDocument, theme: DiagramTheme, flows: MessageFlow[]) {
+    // Whatever was being moved has been overtaken by the document itself.
+    this.abortTransform()
     this.clear()
+    this.doc = doc
     this.theme = theme
     this.flows = flows
     this.layout = stackLayout(doc)
@@ -518,6 +635,8 @@ export class Stage3D {
     this.applyVisibility()
     this.applySelection()
     this.applyEmphasis()
+    this.paintHandles()
+    this.placeGizmo()
 
     if (!this.framed) {
       this.framed = true
@@ -542,7 +661,11 @@ export class Stage3D {
     cancelAnimationFrame(this.frame)
     this.flight?.kill()
     this.observer.disconnect()
+    this.abortTransform()
+    this.endPress()
     const el = this.renderer.domElement
+    this.host.removeEventListener('pointerdown', this.onPress, true)
+    window.removeEventListener('pointermove', this.trackPointer)
     el.removeEventListener('pointerdown', this.onPointerDown)
     el.removeEventListener('pointerup', this.onPointerUp)
     el.removeEventListener('pointermove', this.onPointerMove)
@@ -550,6 +673,13 @@ export class Stage3D {
     el.removeEventListener('dblclick', this.onDoubleClick)
     this.controls.dispose()
     this.clear()
+    this.clearGuides()
+    this.gizmo.traverse((object) => {
+      if (object instanceof Mesh) {
+        object.geometry.dispose()
+        ;(object.material as Material).dispose()
+      }
+    })
     this.textures.dispose()
     this.glows.forEach((t) => t.dispose())
     this.renderer.dispose()
@@ -569,6 +699,28 @@ export class Stage3D {
   setSelection(ids: Iterable<string>) {
     this.selection = new Set(ids)
     this.applySelection()
+    this.placeGizmo()
+  }
+
+  /** Whether nodes can be moved here at all; off while presenting. */
+  setEditable(editable: boolean) {
+    this.editable = editable
+    if (!editable) {
+      this.abortTransform(true)
+      this.endPress()
+    }
+    this.placeGizmo()
+  }
+
+  /** Shows or hides the move gizmo on the selection. */
+  setGizmo(on: boolean) {
+    this.gizmoOn = on
+    this.placeGizmo()
+  }
+
+  /** The canvas's grid: a move snaps to it while it is on, unless `Ctrl` is held. */
+  setSnap(on: boolean, size: number) {
+    this.snapping = { on, size }
   }
 
   setSpotlight(flow: string | null) {
@@ -630,9 +782,48 @@ export class Stage3D {
     const entry = this.nodes.get(id)
     if (!entry) return
     const { box } = entry.stack
-    const y = this.planeY(entry.stack.level) + entry.top / 2
+    const y = this.planeY(entry.stack.level) + entry.base + entry.rise / 2
     const center = new Vector3(box.x + box.width / 2, y, box.y + box.height / 2)
     this.aim(center, Math.max(box.width, box.height) * 1.6, this.currentAngles(), true)
+  }
+
+  /** Frames the selection — or everything, with nothing selected. */
+  frameSelection() {
+    const ids = [...this.selection].filter((id) => this.nodes.has(id))
+    if (!ids.length) {
+      this.frameAll()
+      return
+    }
+    const { center, radius } = this.bounds(ids)
+    // With room around it: what a node is joined to is half of why it is being looked at.
+    this.aim(center, Math.max(radius * 1.8, 180), this.currentAngles(), true)
+  }
+
+  /**
+   * Looks straight along an axis, from its `sign` end: from the front, the
+   * side, or above. A view from below would look up through the ground plane,
+   * which the stack is never read from, so `-z` comes out as the view from above.
+   */
+  viewAxis(axis: Axis, sign: 1 | -1) {
+    const angles =
+      axis === 'z'
+        ? PRESETS.top
+        : {
+            polar: MAX_POLAR,
+            // The world's z is the canvas's y: looking from +y is looking from the canvas's bottom edge.
+            azimuth: axis === 'y' ? (sign > 0 ? 0 : Math.PI) : sign > 0 ? Math.PI / 2 : -Math.PI / 2,
+          }
+    this.fly(this.controls.target.clone(), this.camera.position.distanceTo(this.controls.target), angles, true, 0.45)
+  }
+
+  /** Turns the camera around what it is looking at, by radians — the numpad's steps. */
+  orbitBy(azimuth: number, polar: number) {
+    const now = this.currentAngles()
+    const angles = {
+      azimuth: now.azimuth + azimuth,
+      polar: Math.min(MAX_POLAR, Math.max(0.0001, now.polar + polar)),
+    }
+    this.fly(this.controls.target.clone(), this.camera.position.distanceTo(this.controls.target), angles, true, 0.25)
   }
 
   /** Flies to one plane, looking down on it at an angle. */
@@ -675,10 +866,17 @@ export class Stage3D {
     })
   }
 
-  /** The current frame, as a PNG. */
+  /** The current frame, as a PNG — without the gizmo, which is a tool and not part of the picture. */
   snapshot(): Promise<Blob | null> {
+    const gizmo = this.gizmo.visible
+    const guides = this.guides.visible
+    this.gizmo.visible = this.guides.visible = false
     this.render()
-    return new Promise((resolve) => this.renderer.domElement.toBlob(resolve, 'image/png'))
+    const blob = new Promise<Blob | null>((resolve) => this.renderer.domElement.toBlob(resolve, 'image/png'))
+    this.gizmo.visible = gizmo
+    this.guides.visible = guides
+    this.invalidate()
+    return blob
   }
 
   /* ------------------------------------------------------------- the scene */
@@ -769,7 +967,7 @@ export class Stage3D {
     const { node, box, depth } = stack
     const paint = nodePaint(node, theme)
     const group = new Group()
-    const base = depth * ZONE_FLOOR
+    const base = depth * ZONE_FLOOR + stack.elevation
     group.position.set(box.x, base, box.y)
 
     const entry: NodeEntry = {
@@ -780,7 +978,8 @@ export class Stage3D {
       outline: null,
       outlineColor: new Color(mix(paint.stroke, theme.ink, theme.dark ? 0.1 : 0.2)),
       ring: [],
-      top: base,
+      base,
+      rise: 0,
       selection: null,
     }
     const keep = (material: Material, opacity = 1) => {
@@ -851,7 +1050,7 @@ export class Stage3D {
 
     // The face: the node exactly as the exporter draws it, laid on top.
     const top = isZone ? ZONE_FLOOR : isText ? 2 : stack.height
-    entry.top = base + top
+    entry.rise = top
     const faceGeometry = new PlaneGeometry(node.size.width, node.size.height)
     faceGeometry.rotateX(-Math.PI / 2)
     faceGeometry.translate(node.size.width / 2, top + 0.25, node.size.height / 2)
@@ -958,25 +1157,62 @@ export class Stage3D {
     this.placeEdgeDecorations(entry)
   }
 
-  /** An in-plane route, at the height it runs, in its plane's own space. */
+  /** A route along a floor, at the height it runs, in its plane's own space. */
   private routePoints(stack: StackEdge): Vec3[] {
-    const s = this.nodes.get(stack.edge.source)!.stack
-    const t = this.nodes.get(stack.edge.target)!.stack
-    const floor = Math.max(s.depth, t.depth) * ZONE_FLOOR
+    const s = this.nodes.get(stack.edge.source)!
+    const t = this.nodes.get(stack.edge.target)!
+    const floor = Math.max(s.base, t.base)
     return stack.route!.map((p) => onPlane(p, floor + stack.lift))
   }
 
-  /** A cable between planes, in world space, at the planes' current heights. */
+  /** A cable between floors, in world space, at the planes' current heights. */
   private cable(stack: StackEdge): Vec3[] {
     const s = this.nodes.get(stack.edge.source)!
     const t = this.nodes.get(stack.edge.target)!
-    const up = stack.to > stack.from
+    const sy = this.planeY(s.stack.level) + s.base
+    const ty = this.planeY(t.stack.level) + t.base
+    // Out of the top of the lower end and into the bottom of the higher one.
+    const up = ty > sy || (ty === sy && stack.to > stack.from)
     const centre = (e: NodeEntry, top: boolean): Vec3 => ({
       x: e.stack.box.x + e.stack.box.width / 2,
-      y: this.planeY(e.stack.level) + (top ? e.top : e.stack.depth * ZONE_FLOOR),
+      y: this.planeY(e.stack.level) + e.base + (top ? e.rise : 0),
       z: e.stack.box.y + e.stack.box.height / 2,
     })
     return cablePoints(centre(s, up), centre(t, !up))
+  }
+
+  /** Lays a connection along `points`: its line, halo and flow dashes, and what rides on it. */
+  private setEdgePoints(entry: EdgeEntry, points: Vec3[]) {
+    const positions = flatten(points.length > 1 ? points : [...points, ...points])
+    ;(entry.line.geometry as LineGeometry).setPositions(positions)
+    entry.line.computeLineDistances()
+    if (entry.halo) (entry.halo.geometry as LineGeometry).setPositions(positions)
+    for (const dash of entry.dashes) {
+      ;(dash.line.geometry as LineGeometry).setPositions(positions)
+      dash.line.computeLineDistances()
+    }
+    entry.track = track(points)
+    this.placeEdgeDecorations(entry)
+  }
+
+  /**
+   * Re-lays a connection whose ends have moved. One that leaves its floor
+   * becomes a cable, and one that lands on a shared floor becomes a route
+   * along it, so it is handed over to the group that kind of line lives in.
+   */
+  private restackEdge(entry: EdgeEntry, stack: StackEdge) {
+    entry.stack = stack
+    const parent = stack.route ? this.planes[stack.from]! : this.cables
+    if (parent !== entry.parent) {
+      const parts: Object3D[] = [entry.line, ...entry.arrows, ...entry.dashes.map((d) => d.line)]
+      if (entry.halo) parts.push(entry.halo)
+      if (entry.label) parts.push(entry.label)
+      entry.parent.remove(...parts)
+      parent.add(...parts)
+      entry.parent = parent
+    }
+    if (entry.halo) entry.halo.visible = entry.line.visible && !stack.route
+    this.setEdgePoints(entry, stack.route ? this.routePoints(stack) : this.cable(stack))
   }
 
   /** Arrowheads and the label, wherever the line now runs. */
@@ -1005,21 +1241,11 @@ export class Stage3D {
   private placePlanes() {
     this.planes.forEach((group, level) => (group.position.y = this.planeY(level)))
     for (const entry of this.edges.values()) {
-      if (entry.stack.route) continue
-      const points = this.cable(entry.stack)
-      const positions = flatten(points)
-      ;(entry.line.geometry as LineGeometry).setPositions(positions)
-      entry.line.computeLineDistances()
-      if (entry.halo) (entry.halo.geometry as LineGeometry).setPositions(positions)
-      for (const dash of entry.dashes) {
-        ;(dash.line.geometry as LineGeometry).setPositions(positions)
-        dash.line.computeLineDistances()
-      }
-      entry.track = track(points)
-      this.placeEdgeDecorations(entry)
+      if (!entry.stack.route) this.setEdgePoints(entry, this.cable(entry.stack))
     }
     // A cable's length is part of a message's timing, so the plans follow it.
     if (this.runs.length) this.replan()
+    this.placeGizmo()
     this.invalidate()
   }
 
@@ -1215,7 +1441,7 @@ export class Stage3D {
       const selected = this.selection.has(id)
       if (selected && !entry.selection && entry.ring.length) {
         const ring = this.line(
-          [...entry.ring, entry.ring[0]!].map((p) => ({ x: p.x, y: entry.top - entry.stack.depth * ZONE_FLOOR + 0.6, z: p.y })),
+          [...entry.ring, entry.ring[0]!].map((p) => ({ x: p.x, y: entry.rise + 0.6, z: p.y })),
           theme.selection,
           3,
         )
@@ -1302,7 +1528,7 @@ export class Stage3D {
     for (const entry of this.edges.values()) {
       const shown = !hiddenLevels.has(entry.stack.from) && !hiddenLevels.has(entry.stack.to)
       entry.line.visible = shown
-      if (entry.halo) entry.halo.visible = shown
+      if (entry.halo) entry.halo.visible = shown && !entry.stack.route
       entry.arrows.forEach((a) => (a.visible = shown))
       if (entry.label) entry.label.visible = shown && this.labels && (!lit || lit.has(entry.stack.edge.id))
       for (const dash of entry.dashes) {
@@ -1344,7 +1570,24 @@ export class Stage3D {
 
   private render() {
     this.dirty = false
+    this.sizeGizmo()
     this.renderer.render(this.scene, this.camera)
+    this.reportOrientation()
+  }
+
+  /** Tells the axis navigator where the axes point now, when that has changed. */
+  private reportOrientation() {
+    const q = this.camera.quaternion
+    const key = [q.x, q.y, q.z, q.w].map((v) => v.toFixed(3)).join()
+    if (key === this.oriented) return
+    this.oriented = key
+    const inverse = q.clone().invert()
+    const out = {} as Record<Axis, AxisOnScreen>
+    for (const axis of AXES) {
+      const v = AXIS_DIRECTION[axis].clone().applyQuaternion(inverse)
+      out[axis] = { x: v.x, y: -v.y, z: v.z }
+    }
+    this.events.orient(out)
   }
 
   private invalidate = () => {
@@ -1374,13 +1617,93 @@ export class Stage3D {
 
   /** The node under the pointer, skipping planes that are hidden. */
   pick(event: PointerEvent | MouseEvent): string | null {
+    return this.pickHit(event)?.id ?? null
+  }
+
+  /** The node under the pointer, and the point on it the pointer is over. */
+  private pickHit(event: PointerEvent | MouseEvent): { id: string; point: Vector3 } | null {
     this.raycaster.setFromCamera(this.ndc(event), this.camera)
     const targets: Object3D[] = []
     for (const entry of this.nodes.values()) {
       if (this.planes[entry.stack.level]?.visible) targets.push(...entry.pick)
     }
     const hit = this.raycaster.intersectObjects(targets, false)[0]
-    return (hit?.object.userData.node as string | undefined) ?? null
+    const id = hit?.object.userData.node as string | undefined
+    return id && hit ? { id, point: hit.point.clone() } : null
+  }
+
+  /** The gizmo handle under the pointer, if the gizmo is up. */
+  private pickHandle(event: PointerEvent | MouseEvent): Handle | null {
+    if (!this.gizmo.visible) return null
+    this.raycaster.setFromCamera(this.ndc(event), this.camera)
+    const hit = this.raycaster.intersectObjects(
+      this.handles.map((h) => h.hit),
+      false,
+    )[0]
+    return this.handles.find((h) => h.hit === hit?.object) ?? null
+  }
+
+  private trackPointer = (event: PointerEvent) => {
+    this.pointer.set(event.clientX, event.clientY)
+  }
+
+  /**
+   * A press, seen before the camera controls see it. On a gizmo handle it
+   * starts a move along that handle at once; on a node that is already
+   * selected it may become a move across the node's floor, or stay a click —
+   * which only the pointer's next moves can tell. Anywhere else it is left to
+   * orbit the camera, as before.
+   */
+  private onPress = (event: PointerEvent) => {
+    if (this.transform || event.target !== this.renderer.domElement) return
+    if (!this.editable || event.button !== 0) return
+    this.pointer.set(event.clientX, event.clientY)
+
+    const handle = this.pickHandle(event)
+    if (handle) {
+      event.stopPropagation()
+      event.preventDefault()
+      this.activeHandle = handle
+      this.paintHandles()
+      this.begin('gizmo', [...handle.constraint], this.pointer)
+      return
+    }
+
+    const hit = this.pickHit(event)
+    if (!hit || !this.movable().includes(hit.id)) return
+    event.stopPropagation()
+    this.press = {
+      x: event.clientX,
+      y: event.clientY,
+      id: hit.id,
+      additive: event.shiftKey || event.metaKey || event.ctrlKey,
+      point: hit.point,
+    }
+    window.addEventListener('pointermove', this.onPressMove, true)
+    window.addEventListener('pointerup', this.onPressUp, true)
+  }
+
+  private onPressMove = (event: PointerEvent) => {
+    const press = this.press
+    if (!press || Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_SLOP) return
+    this.endPress()
+    // Across the floor, measured on the point that was grabbed, so the node
+    // stays under the pointer the way it does when dragged on the canvas.
+    this.begin('drag', ['x', 'y'], new Vector2(press.x, press.y), press.point)
+    this.onModalMove(event)
+  }
+
+  /** A press that never moved far enough to be a move: a click, which selects. */
+  private onPressUp = () => {
+    const press = this.press
+    this.endPress()
+    if (press) this.events.select(press.id, press.additive)
+  }
+
+  private endPress() {
+    this.press = null
+    window.removeEventListener('pointermove', this.onPressMove, true)
+    window.removeEventListener('pointerup', this.onPressUp, true)
   }
 
   private onPointerDown = (event: PointerEvent) => {
@@ -1398,7 +1721,7 @@ export class Stage3D {
   }
 
   private onPointerMove = (event: PointerEvent) => {
-    if (event.buttons) return
+    if (event.buttons || this.transform) return
     // Picked once per frame at most, however fast the pointer moves.
     const first = !this.pendingHover
     this.pendingHover = event
@@ -1406,10 +1729,17 @@ export class Stage3D {
     requestAnimationFrame(() => {
       const latest = this.pendingHover
       this.pendingHover = null
-      if (!latest) return
-      const id = this.pick(latest)
+      if (!latest || this.transform) return
+      const handle = this.pickHandle(latest)
+      if (handle !== this.hoveredHandle) {
+        this.hoveredHandle = handle
+        this.paintHandles()
+      }
+      const id = handle ? null : this.pick(latest)
       const rect = this.host.getBoundingClientRect()
-      this.renderer.domElement.style.cursor = id ? 'pointer' : ''
+      // A selected node can be dragged; say so before it is pressed.
+      const cursor = handle || (id && this.editable && this.movable().includes(id)) ? 'move' : id ? 'pointer' : ''
+      this.renderer.domElement.style.cursor = cursor
       if (id !== this.hovered) {
         this.hovered = id
         this.applyHover()
@@ -1420,6 +1750,10 @@ export class Stage3D {
 
   private onPointerLeave = () => {
     this.pendingHover = null
+    if (this.hoveredHandle) {
+      this.hoveredHandle = null
+      this.paintHandles()
+    }
     if (this.hovered) {
       this.hovered = null
       this.applyHover()
@@ -1431,6 +1765,432 @@ export class Stage3D {
     const id = this.pick(event)
     if (id) this.focusNode(id)
     else this.frameAll()
+  }
+
+  /* ---------------------------------------------------------------- moving */
+
+  /** Selected nodes that may be moved. A locked one is carried by its zone, never moved itself. */
+  private movable(): string[] {
+    return [...this.selection].filter((id) => {
+      const node = this.nodes.get(id)?.stack.node
+      return !!node && !node.locked
+    })
+  }
+
+  /** The median of `ids`' top faces, in world space: where the gizmo stands. */
+  private pivotOf(ids: string[]): Vector3 | null {
+    const sum = new Vector3()
+    let count = 0
+    for (const id of ids) {
+      const entry = this.nodes.get(id)
+      if (!entry) continue
+      const { box, level } = entry.stack
+      sum.x += box.x + box.width / 2
+      sum.y += this.planeY(level) + entry.base + entry.rise
+      sum.z += box.y + box.height / 2
+      count++
+    }
+    return count ? sum.divideScalar(count) : null
+  }
+
+  /**
+   * `G`: the selection follows the pointer until a click or `Enter` puts it
+   * down, or `Esc` or a right-click puts it back. Returns whether there was
+   * anything to grab.
+   */
+  grab(): boolean {
+    if (!this.editable || this.transform) return false
+    return this.begin('grab', [], this.pointer)
+  }
+
+  private begin(kind: Transform['kind'], constraint: Axis[], at: Vector2, pivot?: Vector3): boolean {
+    const ids = this.movable()
+    const origin = pivot ?? this.pivotOf(ids)
+    if (!ids.length || !origin) return false
+    // Nothing to start from yet — the pointer has not been over the window —
+    // so the move is measured from the pivot's own place on screen.
+    const start = at.x < 0 ? this.toClient(origin) : at.clone()
+    this.transform = {
+      kind,
+      ids,
+      pivot: origin.clone(),
+      facing: this.camera.getWorldDirection(new Vector3()).negate(),
+      start,
+      at: start.clone(),
+      last: start.clone(),
+      constraint,
+      numeric: '',
+      delta: { ...ZERO },
+      precise: false,
+      invertSnap: false,
+    }
+    window.addEventListener('pointermove', this.onModalMove, true)
+    window.addEventListener('pointerdown', this.onModalDown, true)
+    window.addEventListener('pointerup', this.onModalUp, true)
+    window.addEventListener('keydown', this.onModalKey, true)
+    window.addEventListener('keyup', this.onModalKeyUp, true)
+    window.addEventListener('blur', this.onModalBlur)
+    this.hovered = null
+    this.applyHover()
+    this.events.hover(null, null)
+    this.renderer.domElement.style.cursor = 'move'
+    this.drawGuides()
+    this.report()
+    return true
+  }
+
+  /** Where `point` is on screen, in client coordinates. */
+  private toClient(point: Vector3): Vector2 {
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    const p = point.clone().project(this.camera)
+    return new Vector2(rect.left + ((p.x + 1) / 2) * rect.width, rect.top + ((1 - p.y) / 2) * rect.height)
+  }
+
+  /** Where a pointer at `client` meets the move's constraint, in world space. */
+  private constraintHit(client: Vector2, t: Transform): Vector3 | null {
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    const ndc = new Vector2(
+      ((client.x - rect.left) / rect.width) * 2 - 1,
+      -((client.y - rect.top) / rect.height) * 2 + 1,
+    )
+    this.raycaster.setFromCamera(ndc, this.camera)
+    return constraintPoint(this.raycaster.ray, t.pivot, t.constraint, t.facing)
+  }
+
+  /** Works the move out again from the pointer, or the typed distance, and shows it. */
+  private update() {
+    const t = this.transform
+    if (!t) return
+    if (t.numeric) {
+      t.delta = numericDelta(t.numeric, t.constraint)
+    } else {
+      const from = this.constraintHit(t.start, t)
+      const to = this.constraintHit(t.at, t)
+      // Parallel to the constraint: keep the last good answer rather than fling it away.
+      if (from && to) {
+        const moved = fromWorld(to.sub(from))
+        for (const axis of AXES) if (t.constraint.length && !t.constraint.includes(axis)) moved[axis] = 0
+        t.delta = this.snapping.on !== t.invertSnap ? snapDelta(moved, this.snapping.size) : moved
+      }
+    }
+    this.preview(t.ids, t.delta)
+    this.report()
+  }
+
+  private report() {
+    const t = this.transform
+    this.events.transform(
+      t && {
+        kind: t.kind,
+        delta: { ...t.delta },
+        constraint: [...t.constraint],
+        numeric: t.numeric || null,
+        snapping: !t.numeric && this.snapping.on !== t.invertSnap,
+        precise: t.precise,
+        count: t.ids.length,
+      },
+    )
+  }
+
+  /** Puts the move down (`confirm`) and hands it over to be written, or puts everything back. */
+  private end(confirm: boolean) {
+    const t = this.transform
+    if (!t) return
+    this.stopModal()
+    const moved = !!(t.delta.x || t.delta.y || t.delta.z)
+    if (confirm && moved) this.events.move(t.ids, { ...t.delta })
+    // Put back. A confirmed move stays as previewed until the document comes
+    // back with it written, and the rebuild then draws exactly this.
+    else this.preview(t.ids, ZERO)
+    this.events.transform(null)
+  }
+
+  /** Drops a move without a word — the scene is about to be rebuilt anyway, or is going away. */
+  private abortTransform(restore = false) {
+    const t = this.transform
+    if (!t) return
+    this.stopModal()
+    if (restore) this.preview(t.ids, ZERO)
+    this.events.transform(null)
+  }
+
+  private stopModal() {
+    this.transform = null
+    this.activeHandle = null
+    window.removeEventListener('pointermove', this.onModalMove, true)
+    window.removeEventListener('pointerdown', this.onModalDown, true)
+    window.removeEventListener('pointerup', this.onModalUp, true)
+    window.removeEventListener('keydown', this.onModalKey, true)
+    window.removeEventListener('keyup', this.onModalKeyUp, true)
+    window.removeEventListener('blur', this.onModalBlur)
+    this.renderer.domElement.style.cursor = ''
+    this.clearGuides()
+    this.paintHandles()
+    this.placeGizmo()
+  }
+
+  private onModalMove = (event: PointerEvent) => {
+    const t = this.transform
+    if (!t) return
+    // Advanced by how far the pointer went, a tenth as far while ⇧ is down —
+    // so pressing or letting go of ⇧ never makes the selection jump.
+    const scale = event.shiftKey ? PRECISION : 1
+    t.at.x += (event.clientX - t.last.x) * scale
+    t.at.y += (event.clientY - t.last.y) * scale
+    t.last.set(event.clientX, event.clientY)
+    t.precise = event.shiftKey
+    t.invertSnap = event.ctrlKey || event.metaKey
+    if (!t.numeric) this.update()
+  }
+
+  private onModalDown = (event: PointerEvent) => {
+    const t = this.transform
+    if (!t) return
+    // Nothing else may see this press: not the camera, not the selection.
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.button === 2) this.end(false)
+    else if (event.button === 0 && t.kind === 'grab') this.end(true)
+  }
+
+  private onModalUp = (event: PointerEvent) => {
+    const t = this.transform
+    if (!t || t.kind === 'grab' || event.button !== 0) return
+    this.end(true)
+  }
+
+  private onModalBlur = () => this.end(false)
+
+  /**
+   * The keys of a move. Every key is taken while one is in progress, so none
+   * of the editor's shortcuts fire underneath it — `Backspace` corrects a
+   * typed distance here, it does not delete the selection.
+   */
+  private onModalKey = (event: KeyboardEvent) => {
+    const t = this.transform
+    if (!t) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.key === 'Escape') return this.end(false)
+    if (event.key === 'Enter') return this.end(true)
+    if (event.key === 'Shift' || event.key === 'Control' || event.key === 'Meta') {
+      t.precise = event.shiftKey
+      t.invertSnap = event.ctrlKey || event.metaKey
+      this.update()
+      return
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+
+    const axis = axisKey(event.key)
+    if (axis) {
+      t.constraint = constrain(t.constraint, axis, event.shiftKey)
+      // An unconstrained move faces the camera as it is now, not as it was.
+      t.facing = this.camera.getWorldDirection(new Vector3()).negate()
+      this.drawGuides()
+      this.update()
+      return
+    }
+    const typed = typeNumber(t.numeric, event.key)
+    if (typed !== null) {
+      t.numeric = typed
+      this.update()
+    }
+  }
+
+  private onModalKeyUp = (event: KeyboardEvent) => {
+    const t = this.transform
+    if (!t) return
+    event.stopPropagation()
+    t.precise = event.shiftKey
+    t.invertSnap = event.ctrlKey || event.metaKey
+    this.update()
+  }
+
+  /**
+   * Shows a move without writing it: the nodes it would place are put there,
+   * and the connections at either end are laid again. Messages keep running on
+   * the new lines. Nothing here touches the document.
+   */
+  private preview(ids: string[], delta: Position3D) {
+    const doc = this.doc
+    if (!doc) return
+    const writes = moveInSpace(doc.nodes, ids, delta)
+    const moved = writes.size
+      ? { ...doc, nodes: doc.nodes.map((n) => (writes.has(n.id) ? { ...n, position3d: writes.get(n.id)! } : n)) }
+      : doc
+    this.applyPlacement(stackNodes(moved).nodes)
+  }
+
+  /** Moves every node whose place differs from what is drawn, and re-lays its connections. */
+  private applyPlacement(placed: StackNode[]) {
+    const changed = new Set<string>()
+    for (const stack of placed) {
+      const entry = this.nodes.get(stack.node.id)
+      if (!entry) continue
+      const was = entry.stack
+      if (was.box.x === stack.box.x && was.box.y === stack.box.y && was.elevation === stack.elevation) continue
+      entry.stack = { ...was, box: stack.box, elevation: stack.elevation }
+      entry.base = was.depth * ZONE_FLOOR + stack.elevation
+      entry.group.position.set(stack.box.x, entry.base, stack.box.y)
+      changed.add(stack.node.id)
+    }
+    if (!changed.size) return
+
+    const solids = [...this.nodes.values()].map((e) => e.stack).filter(isSolid)
+    for (const entry of this.edges.values()) {
+      const { edge } = entry.stack
+      if (!changed.has(edge.source) && !changed.has(edge.target)) continue
+      const source = this.nodes.get(edge.source)?.stack
+      const target = this.nodes.get(edge.target)?.stack
+      if (source && target) this.restackEdge(entry, stackEdge(edge, source, target, solids))
+    }
+    if (this.runs.length) this.replan()
+    this.placeGizmo()
+    this.invalidate()
+  }
+
+  /* ---------------------------------------------------------------- gizmo */
+
+  /**
+   * The move gizmo: an arrow per axis, a square per plane, and a ring in the
+   * middle that moves along the screen. Drawn over everything and kept the same
+   * size on screen however far away it is, so it is always there to grab.
+   */
+  private buildGizmo() {
+    const material = (color: string) =>
+      new MeshBasicMaterial({
+        color,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+        side: DoubleSide,
+      })
+    // Picked, never seen: a generous target around a thin shape.
+    const target = () =>
+      new MeshBasicMaterial({ transparent: true, opacity: 0, depthTest: false, depthWrite: false, colorWrite: false, side: DoubleSide })
+    const up = new Vector3(0, 1, 0)
+    const add = (mesh: Mesh) => {
+      mesh.renderOrder = 1000
+      this.gizmo.add(mesh)
+      return mesh
+    }
+
+    for (const axis of AXES) {
+      const dir = AXIS_DIRECTION[axis]
+      const turn = new Quaternion().setFromUnitVectors(up, dir)
+      const paint = material(AXIS_COLOR[axis])
+
+      const shaft = new CylinderGeometry(0.016, 0.016, 0.64, 8)
+      shaft.translate(0, 0.18 + 0.32, 0)
+      const head = new ConeGeometry(0.06, 0.2, 16)
+      head.translate(0, 0.9, 0)
+      const reach = new CylinderGeometry(0.08, 0.08, 0.86, 8)
+      reach.translate(0, 0.18 + 0.43, 0)
+      for (const geometry of [shaft, head]) add(new Mesh(geometry, paint)).quaternion.copy(turn)
+      const hit = add(new Mesh(reach, target()))
+      hit.quaternion.copy(turn)
+      this.handles.push({ constraint: [axis], hit, parts: [paint], color: new Color(AXIS_COLOR[axis]) })
+    }
+
+    // A plane is coloured as the axis it is square to, the way 3D editors do.
+    for (const normal of AXES) {
+      const [a, b] = AXES.filter((x) => x !== normal) as [Axis, Axis]
+      const at = AXIS_DIRECTION[a].clone().add(AXIS_DIRECTION[b]).multiplyScalar(0.36)
+      const turn = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), AXIS_DIRECTION[normal])
+      const paint = material(AXIS_COLOR[normal])
+      paint.opacity = 0.75
+      const square = add(new Mesh(new PlaneGeometry(0.15, 0.15), paint))
+      square.position.copy(at)
+      square.quaternion.copy(turn)
+      const hit = add(new Mesh(new PlaneGeometry(0.24, 0.24), target()))
+      hit.position.copy(at)
+      hit.quaternion.copy(turn)
+      this.handles.push({ constraint: [a, b], hit, parts: [paint], color: new Color(AXIS_COLOR[normal]) })
+    }
+
+    // The middle: free, along the screen. Turned to face the camera every frame.
+    const middle = material('#ffffff')
+    const ring = add(new Mesh(new RingGeometry(0.085, 0.115, 32), middle))
+    const hit = add(new Mesh(new CircleGeometry(0.15, 24), target()))
+    ring.userData.billboard = hit.userData.billboard = true
+    this.handles.push({ constraint: [], hit, parts: [middle], color: middle.color.clone() })
+    this.gizmo.visible = false
+  }
+
+  /** Puts the gizmo on the selection, or away when there is nothing it could move. */
+  private placeGizmo() {
+    const ids = this.editable && this.gizmoOn ? this.movable() : []
+    // A grab follows the pointer, not a handle; the gizmo would only be in the way.
+    const pivot = this.transform?.kind === 'grab' ? null : this.pivotOf(ids)
+    this.gizmo.visible = !!pivot
+    if (pivot) this.gizmo.position.copy(pivot)
+    this.invalidate()
+  }
+
+  /** The same size on screen at any distance, and its ring square to the camera. */
+  private sizeGizmo() {
+    if (!this.gizmo.visible) return
+    const distance = this.camera.position.distanceTo(this.gizmo.position)
+    const pixelsPerUnit = this.size.height / (2 * distance * Math.tan((FOV * Math.PI) / 360))
+    this.gizmo.scale.setScalar(GIZMO_PX / Math.max(1e-6, pixelsPerUnit))
+    for (const child of this.gizmo.children) {
+      if (child.userData.billboard) child.quaternion.copy(this.camera.quaternion)
+    }
+  }
+
+  /** Lights up the handle under the pointer, and the one being dragged. */
+  private paintHandles() {
+    const theme = this.theme
+    for (const handle of this.handles) {
+      const lit = handle === this.hoveredHandle || handle === this.activeHandle
+      const base = handle.constraint.length === 0 && theme ? new Color(theme.ink) : handle.color
+      for (const part of handle.parts) {
+        part.color.copy(base)
+        if (lit) part.color.lerp(new Color('#ffffff'), 0.55)
+      }
+    }
+    this.invalidate()
+  }
+
+  /** The constraint's axes, drawn through where the move started — what it is locked to. */
+  private drawGuides() {
+    this.clearGuides()
+    const t = this.transform
+    if (!t || !t.constraint.length || t.constraint.length === 3) return
+    const reach = 1e5
+    for (const axis of t.constraint as Constraint) {
+      const d = AXIS_DIRECTION[axis]
+      const a = t.pivot.clone().addScaledVector(d, -reach)
+      const b = t.pivot.clone().addScaledVector(d, reach)
+      const geometry = new LineGeometry()
+      geometry.setPositions([a.x, a.y, a.z, b.x, b.y, b.z])
+      const material = new LineMaterial({
+        color: new Color(AXIS_COLOR[axis]).getHex(),
+        linewidth: 1.5,
+        transparent: true,
+        opacity: 0.85,
+        depthTest: false,
+        depthWrite: false,
+      })
+      material.resolution.set(this.size.width, this.size.height)
+      this.lineMaterials.add(material)
+      const line = new Line2(geometry, material)
+      line.renderOrder = 999
+      this.guides.add(line)
+      this.guideLines.push(line)
+    }
+    this.invalidate()
+  }
+
+  private clearGuides() {
+    for (const line of this.guideLines) {
+      this.guides.remove(line)
+      line.geometry.dispose()
+      this.lineMaterials.delete(line.material as LineMaterial)
+      ;(line.material as LineMaterial).dispose()
+    }
+    this.guideLines = []
+    this.invalidate()
   }
 
   /* -------------------------------------------------------------- helpers */
@@ -1482,14 +2242,42 @@ export class Stage3D {
     this.runs = []
   }
 
-  /** The stack's centre and the radius of a sphere around all of it. */
-  private bounds(): { center: Vector3; radius: number } {
+  /**
+   * The centre of the stack — or of just `ids` — and the radius of a sphere
+   * around it.
+   */
+  private bounds(ids?: string[]): { center: Vector3; radius: number } {
     const layout = this.layout
     if (!layout) return { center: new Vector3(), radius: 500 }
-    const { footprint } = layout
-    const top = this.planeY(layout.planes.length - 1) + layout.nodes.reduce((m, n) => Math.max(m, n.height), 0)
-    const center = new Vector3(footprint.x + footprint.width / 2, top / 2, footprint.y + footprint.height / 2)
-    const radius = Math.hypot(footprint.width, footprint.height, top) / 2
+    const entries = ids ? ids.map((id) => this.nodes.get(id)!).filter(Boolean) : [...this.nodes.values()]
+
+    let x1 = Infinity
+    let x2 = -Infinity
+    let z1 = Infinity
+    let z2 = -Infinity
+    // The whole stack takes in every plate, however empty; a selection only itself.
+    let y1 = ids ? Infinity : 0
+    let y2 = ids ? -Infinity : this.planeY(layout.planes.length - 1)
+    if (!ids) {
+      const { footprint } = layout
+      x1 = footprint.x
+      x2 = footprint.x + footprint.width
+      z1 = footprint.y
+      z2 = footprint.y + footprint.height
+    }
+    for (const entry of entries) {
+      const { box, level, height } = entry.stack
+      const floor = this.planeY(level) + entry.base
+      x1 = Math.min(x1, box.x)
+      x2 = Math.max(x2, box.x + box.width)
+      z1 = Math.min(z1, box.y)
+      z2 = Math.max(z2, box.y + box.height)
+      y1 = Math.min(y1, floor)
+      y2 = Math.max(y2, floor + Math.max(entry.rise, height))
+    }
+    if (!Number.isFinite(x1) || !Number.isFinite(y1)) return { center: new Vector3(), radius: 500 }
+    const center = new Vector3((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2)
+    const radius = Math.hypot(x2 - x1, z2 - z1, y2 - y1) / 2
     return { center, radius }
   }
 

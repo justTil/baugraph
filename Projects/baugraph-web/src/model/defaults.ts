@@ -42,6 +42,7 @@ export const NODE_DEFAULTS = {
   icon: '',
   parent: null,
   plane: null,
+  position3d: null,
   extrusion: 'regular',
   locked: false,
 } as const satisfies Partial<DiagramNode>

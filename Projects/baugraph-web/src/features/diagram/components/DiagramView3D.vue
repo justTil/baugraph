@@ -11,14 +11,16 @@ import {
   Eye,
   EyeOff,
   Layers3,
+  Move3d,
   PanelTop,
   Plus,
   Rotate3d,
   Scan,
   Tag,
+  Undo2,
   View,
 } from '@lucide/vue'
-import type { DiagramDocument, MessageFlow } from '@/model'
+import type { DiagramDocument, MessageFlow, Position3D } from '@/model'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Toggle } from '@/components/ui/toggle'
@@ -33,7 +35,10 @@ import { nextSpotlight, useView3D } from '@/features/diagram/composables/useView
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
 import { describeFlow } from '@/features/diagram/lib/flow-graph'
 import { captionText, nodeCaption } from '@/features/diagram/lib/node-caption'
+import type { AxisOnScreen } from '@/features/diagram/lib/stage3d'
 import { Stage3D } from '@/features/diagram/lib/stage3d'
+import type { Axis, TransformStatus } from '@/features/diagram/lib/transform3d'
+import { AXES, AXIS_COLOR, numericAxis } from '@/features/diagram/lib/transform3d'
 import { COLOR_HEX, diagramTheme } from '@/features/diagram/lib/theme'
 
 /**
@@ -45,6 +50,11 @@ import { COLOR_HEX, diagramTheme } from '@/features/diagram/lib/theme'
  * store the 2D canvas edits, so it is never a second copy of the diagram: a
  * rename in the inspector shows up here at once, and a node clicked here is
  * selected there.
+ *
+ * Nodes can be moved here, the way a 3D editor moves objects. A move writes
+ * the node's 3D place only — `position3d` — never its place on the canvas, so
+ * the 3D layout can drift as far from the 2D one as wanted and the 2D one
+ * never notices.
  */
 
 const props = defineProps<{
@@ -56,6 +66,7 @@ const {
   nodes,
   flows,
   planes,
+  canvas,
   selectedNodes,
   toDocument,
   fitRequest,
@@ -65,10 +76,13 @@ const {
   canAddPlane,
   moveNodesToPlane,
   planeOfNode,
+  moveNodes3D,
+  resetLayout3D,
+  placedCount,
 } = useDiagram()
 const { findNode, addSelectedNodes, removeSelectedNodes, removeSelectedElements } = useCanvas()
 const { paused, reduced, highlighted, planOf } = useFlows()
-const { spread, autoRotate, labels, spotlight, hiddenPlanes, commands } = useView3D()
+const { spread, autoRotate, labels, spotlight, hiddenPlanes, gizmo, commands } = useView3D()
 const { presenting } = usePresentation()
 
 const { mode: appThemeMode } = useAppTheme()
@@ -96,7 +110,13 @@ function rebuild() {
 onMounted(() => {
   if (!host.value) return
   try {
-    stage.value = new Stage3D(host.value, { select: onSelect, hover: onHover })
+    stage.value = new Stage3D(host.value, {
+      select: onSelect,
+      hover: onHover,
+      move: onMove,
+      transform: (status) => (moving.value = status),
+      orient: (axes) => (orientation.value = axes),
+    })
   } catch {
     failed.value = true
     return
@@ -107,6 +127,9 @@ onMounted(() => {
   s.setLabels(labels.value)
   s.setHiddenPlanes(hiddenPlanes.value)
   s.setAutoRotate(autoRotate.value)
+  s.setEditable(!presenting.value)
+  s.setGizmo(gizmo.value)
+  s.setSnap(canvas.snap, canvas.snapSize)
   rebuild()
   s.setSelection(selectedNodes.value.map((n) => n.id))
   s.setSpotlight(spotlight.value)
@@ -119,6 +142,10 @@ onMounted(() => {
     zoom: (factor: number) => s.zoomBy(factor),
     focusPlane: (id: string) => s.focusPlane(id),
     snapshot: () => s.snapshot(),
+    grab: () => s.grab(),
+    frameSelection: () => s.frameSelection(),
+    viewAxis: (axis: Axis, sign: 1 | -1) => s.viewAxis(axis, sign),
+    orbit: (azimuth: number, polar: number) => s.orbitBy(azimuth, polar),
   }
 })
 
@@ -141,6 +168,13 @@ watch(
 )
 watch([paused, reduced], () =>
   stage.value?.setMotion({ paused: paused.value, reduced: reduced.value }),
+)
+// Presenting is looking, not editing: nothing moves, and the gizmo goes.
+watch(presenting, (value) => stage.value?.setEditable(!value))
+watch(gizmo, (value) => stage.value?.setGizmo(value))
+watch(
+  () => [canvas.snap, canvas.snapSize] as const,
+  ([on, size]) => stage.value?.setSnap(on, size),
 )
 watch(
   () => selectedNodes.value.map((n) => n.id).join('\n'),
@@ -182,6 +216,91 @@ function onSelect(id: string | null, additive: boolean) {
     .map((n) => findNode(n.id))
     .filter((n): n is GraphNode => !!n)
   addSelectedNodes([...others, node])
+}
+
+/* ----------------------------------------------------------------- moving */
+
+/** The move in progress, as the stage reports it; `null` while nothing is moving. */
+const moving = ref<TransformStatus | null>(null)
+
+/** A confirmed move: one undo step, written to the nodes' 3D places and nowhere else. */
+function onMove(ids: string[], delta: Position3D) {
+  commit()
+  endCoalesce()
+  moveNodes3D(ids, delta)
+}
+
+/** What the header says about the move: how far, along what, and how to finish it. */
+const movingLine = computed(() => {
+  const status = moving.value
+  if (!status) return null
+  const round = (v: number) => {
+    const r = Math.round(v * 10) / 10
+    return Object.is(r, -0) ? 0 : r
+  }
+  const typedAxis = status.numeric !== null ? numericAxis(status.constraint) : null
+  const shown = status.constraint.length ? status.constraint : AXES
+  return {
+    title: status.count === 1 ? 'Move' : `Move ${status.count}`,
+    values: shown.map((axis) => ({
+      axis,
+      color: AXIS_COLOR[axis],
+      text: axis === typedAxis ? `${status.numeric || '0'}▏` : String(round(status.delta[axis])),
+      typing: axis === typedAxis,
+    })),
+    along:
+      status.constraint.length === 1
+        ? `along ${status.constraint[0]!.toUpperCase()}`
+        : status.constraint.length === 2
+          ? `on the ${status.constraint.map((a) => a.toUpperCase()).join('–')} plane`
+          : 'along the screen',
+    snapping: status.snapping ? `snap ${canvas.snapSize}` : null,
+    precise: status.precise,
+    finish: status.kind === 'grab' ? 'click or ↵ to place' : 'let go to place',
+  }
+})
+
+/** Takes every node in the 3D view back to its place on the canvas. */
+function resetLayout() {
+  if (!placedCount.value) return
+  commit()
+  endCoalesce()
+  resetLayout3D()
+}
+
+/* -------------------------------------------------------------- navigator */
+
+/** Where the three axes point from the camera, for the navigator in the corner. */
+const orientation = ref<Record<Axis, AxisOnScreen> | null>(null)
+
+/** Navigator radius, in pixels, to the centre of each axis's ball. */
+const NAV_REACH = 30
+
+/** Both ends of every axis, the farthest drawn first so the nearer ones sit on top. */
+const navigatorBalls = computed(() => {
+  const axes = orientation.value
+  if (!axes) return []
+  return AXES.flatMap((axis) =>
+    ([1, -1] as const).map((sign) => ({
+      key: `${sign > 0 ? '+' : '-'}${axis}`,
+      axis,
+      sign,
+      x: 40 + axes[axis].x * NAV_REACH * sign,
+      y: 40 + axes[axis].y * NAV_REACH * sign,
+      depth: axes[axis].z * sign,
+      color: AXIS_COLOR[axis],
+      label: sign > 0 ? axis.toUpperCase() : '',
+    })),
+  ).sort((a, b) => a.depth - b.depth)
+})
+
+const NAV_TITLES: Record<string, string> = {
+  '+x': 'Look from the right (numpad 3)',
+  '-x': 'Look from the left (Ctrl + numpad 3)',
+  '+y': 'Look from the front (numpad 1)',
+  '-y': 'Look from the back (Ctrl + numpad 1)',
+  '+z': 'Look from above (numpad 7)',
+  '-z': 'Look from above (numpad 7)',
 }
 
 /* ------------------------------------------------------------------ hover */
@@ -495,6 +614,27 @@ let hintShown = false
 
       <div class="mx-1 h-4 w-px" :style="{ background: theme.line }" />
 
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Toggle size="sm" class="h-7" :model-value="gizmo" aria-label="Move gizmo" @update:model-value="gizmo = Boolean($event)">
+            <Move3d :size="15" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent>Move gizmo on the selection — or press G to grab</TooltipContent>
+      </Tooltip>
+      <Tooltip v-if="placedCount">
+        <TooltipTrigger as-child>
+          <Button variant="ghost" size="icon" class="size-7" aria-label="Back to the canvas layout" @click="resetLayout">
+            <Undo2 :size="15" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          Put every node back where the canvas has it ({{ placedCount }} moved in 3D) — Alt+G does the selection
+        </TooltipContent>
+      </Tooltip>
+
+      <div class="mx-1 h-4 w-px" :style="{ background: theme.line }" />
+
       <label class="flex items-center gap-2 px-1.5 text-xs" :title="'How far apart the planes stand'">
         <span :style="{ color: theme.muted }">Spread</span>
         <input
@@ -571,6 +711,95 @@ let hintShown = false
       </Button>
     </div>
 
+    <!--
+      What a move is doing while it is in progress — the header a 3D editor
+      shows: how far, along which axis, and how to put it down or back.
+    -->
+    <div
+      v-if="movingLine"
+      class="pointer-events-none absolute top-4 left-1/2 z-30 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col items-center gap-1"
+    >
+      <div
+        class="flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-xs font-medium whitespace-nowrap shadow-lg"
+        :style="{ background: theme.surface, borderColor: theme.selection, color: theme.ink }"
+      >
+        <Move3d :size="14" :style="{ color: theme.selection }" />
+        <span class="font-semibold">{{ movingLine.title }}</span>
+        <span v-for="value in movingLine.values" :key="value.axis" class="flex items-center gap-1 tabular-nums">
+          <span class="font-bold" :style="{ color: value.color }">{{ value.axis.toUpperCase() }}</span>
+          <span :class="value.typing && 'rounded px-1 ring-1'" :style="value.typing ? { '--tw-ring-color': value.color } : undefined">
+            {{ value.text }}
+          </span>
+        </span>
+        <span :style="{ color: theme.muted }">{{ movingLine.along }}</span>
+        <span v-if="movingLine.snapping" class="rounded border px-1.5 text-[10px]" :style="{ borderColor: theme.line, color: theme.muted }">
+          {{ movingLine.snapping }}
+        </span>
+        <span v-if="movingLine.precise" class="rounded border px-1.5 text-[10px]" :style="{ borderColor: theme.line, color: theme.muted }">
+          fine
+        </span>
+      </div>
+      <p
+        class="max-w-[24rem] rounded-lg px-2.5 py-0.5 text-center text-[11px] leading-snug"
+        :style="{ background: theme.bg, color: theme.muted }"
+      >
+        <b>X Y Z</b> axis · <b>⇧</b>+axis plane · type a distance · <b>⇧</b> fine ·
+        <b>Ctrl</b> {{ canvas.snap ? 'no snap' : 'snap' }} · {{ movingLine.finish }} · <b>Esc</b> cancel
+      </p>
+    </div>
+
+    <!--
+      Which way the axes point, in the corner the way 3D editors keep it. A
+      ball looks straight down that axis — the numpad's views, for a mouse.
+    -->
+    <svg
+      v-if="navigatorBalls.length"
+      class="absolute top-16 right-4 z-30 overflow-visible"
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      role="group"
+      aria-label="View axes"
+    >
+      <circle cx="40" cy="40" r="39" :fill="theme.surface" fill-opacity="0.55" :stroke="theme.line" />
+      <template v-for="ball in navigatorBalls" :key="ball.key">
+        <line
+          v-if="ball.sign > 0"
+          x1="40"
+          y1="40"
+          :x2="ball.x"
+          :y2="ball.y"
+          :stroke="ball.color"
+          stroke-width="2"
+          stroke-linecap="round"
+        />
+        <g class="cursor-pointer" @click="stage?.viewAxis(ball.axis, ball.sign)">
+          <title>{{ NAV_TITLES[ball.key] }}</title>
+          <circle
+            :cx="ball.x"
+            :cy="ball.y"
+            :r="ball.sign > 0 ? 8.5 : 6.5"
+            :fill="ball.sign > 0 ? ball.color : theme.surface"
+            :stroke="ball.color"
+            :stroke-width="ball.sign > 0 ? 0 : 1.5"
+            class="transition-opacity hover:opacity-75"
+          />
+          <text
+            v-if="ball.label"
+            :x="ball.x"
+            :y="ball.y + 3.5"
+            text-anchor="middle"
+            font-size="10"
+            font-weight="700"
+            fill="#fff"
+            class="pointer-events-none select-none"
+          >
+            {{ ball.label }}
+          </text>
+        </g>
+      </template>
+    </svg>
+
     <Transition
       enter-active-class="transition duration-150 ease-out"
       enter-from-class="-translate-y-1 opacity-0"
@@ -578,7 +807,7 @@ let hintShown = false
       leave-to-class="-translate-y-1 opacity-0"
     >
       <div
-        v-if="hint && !presenting"
+        v-if="hint && !presenting && !moving"
         class="pointer-events-none absolute top-4 left-1/2 z-30 -translate-x-1/2"
       >
         <div
@@ -587,9 +816,11 @@ let hintShown = false
         >
           <View :size="14" :style="{ color: theme.selection }" />
           Drag to orbit · right-drag to pan · scroll to zoom ·
+          <kbd class="rounded border px-1 font-sans text-[11px]">G</kbd>
+          moves the selection,
           <kbd class="rounded border px-1 font-sans text-[11px]">↑</kbd>
           <kbd class="rounded border px-1 font-sans text-[11px]">↓</kbd>
-          moves the selection between planes
+          its plane
         </div>
       </div>
     </Transition>

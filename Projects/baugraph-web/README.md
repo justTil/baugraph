@@ -213,12 +213,18 @@ connections they travel instead.
 ### The 3D view
 
 Press `3` and the diagram stands up in layers — the same diagram, with a height
-axis added. Nodes keep exactly the place they have on the canvas and are only
-lifted onto the *plane* they belong to, so nothing is laid out twice and nothing
-can drift. The height means whatever the planes say it means: trust zones (DMZ,
-application, data), tiers, environments. A connection that crosses from one plane
-to another becomes a vertical cable, which is what makes a boundary crossing
-stand out from any angle.
+axis added. Nodes start exactly where they are on the canvas, lifted onto the
+*plane* they belong to. The height means whatever the planes say it means: trust
+zones (DMZ, application, data), tiers, environments. A connection that crosses
+from one plane to another becomes a vertical cable, which is what makes a
+boundary crossing stand out from any angle.
+
+From there the stack can be arranged in 3D the way Blender moves objects: `G`
+grabs the selection, `X`/`Y`/`Z` lock it to an axis, a typed number moves it
+exactly, a selected node drags across its floor, and the selection carries a move
+gizmo. `Alt G` puts it back. Those moves only ever touch the 3D view — the 2D
+canvas keeps every node where it was — and a zone takes what it holds along. The
+numpad drives the camera as in Blender, and middle-drag orbits.
 
 Planes are built on the 2D canvas: the layers panel's **Planes** tab lists the stack
 with the nodes on each plane, takes nodes dragged onto a plane, and fades the canvas
@@ -235,7 +241,8 @@ does not touch faded back. That works in presentation mode too, along with a
 turntable (`R`), for walking a room through where the messages go.
 
 All of it is optional and on top. A diagram without planes is a 2D diagram and its
-file does not change; the 2D canvas and every export ignore the 3D settings; and
+file does not change; the 2D canvas and every export ignore the 3D settings — a
+node moved in 3D only gains a `position3d`, which the canvas never reads; and
 the view itself is never saved, so a diagram always opens flat. three.js is only
 downloaded the first time the 3D view is opened.
 

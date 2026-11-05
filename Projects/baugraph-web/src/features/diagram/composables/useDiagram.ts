@@ -20,6 +20,7 @@ import type {
   Metadata,
   NodePorts,
   PortSide,
+  Position3D,
   Route,
   ShapeKey,
   Side,
@@ -34,8 +35,12 @@ import {
   FORMAT_VERSION,
   MAX_PLANES,
   MAX_PORTS,
+  moveInSpace,
   nodePlane,
   nodePorts,
+  pinInSpace,
+  resetInSpace,
+  spacePositions,
   edgeId as makeEdgeId,
   flowId as makeFlowId,
   nodeId as makeNodeId,
@@ -76,6 +81,11 @@ export interface NodeData {
   ports: NodePorts
   /** See `DiagramNode.plane`. `null` follows the zone, or stands on the ground. */
   plane: string | null
+  /**
+   * See `DiagramNode.position3d`. `null` until the node is moved in the 3D view;
+   * nothing on the 2D canvas reads or writes it.
+   */
+  position3d: Position3D | null
   /** How tall the node stands in the 3D view. */
   extrusion: Extrusion
   /** Mirrors `DiagramNode.locked`; the Vue Flow interaction flags follow it. */
@@ -389,6 +399,7 @@ function createDiagramStore(documentId: string) {
         icon: node.icon ?? '',
         ports: nodePorts(node.ports),
         plane: node.plane ?? null,
+        position3d: node.position3d ? { ...node.position3d } : null,
         extrusion: node.extrusion ?? 'regular',
         locked,
         meta: node.data,
@@ -460,6 +471,7 @@ function createDiagramStore(documentId: string) {
       ports: nodePorts(node.data?.ports),
       parent: node.parentNode ?? null,
       plane: node.data?.plane ?? null,
+      position3d: node.data?.position3d ? { ...node.data.position3d } : null,
       extrusion: node.data?.extrusion ?? 'regular',
       locked: node.data?.locked ?? false,
       data: node.data?.meta,
@@ -1124,6 +1136,93 @@ function createDiagramStore(documentId: string) {
     return targets.size > 0 && placeOnPlanes(targets)
   }
 
+  /* ------------------------------------------------------------- 3D places */
+
+  /** The store's nodes as `model/space.ts` reads them. */
+  const spaceNodes = () =>
+    nodes.value.map((n) => ({
+      id: n.id,
+      position: n.position,
+      parent: n.parentNode ?? null,
+      position3d: (n.data as NodeData | undefined)?.position3d ?? null,
+    }))
+
+  /** Where every node stands in the 3D view: absolute x/y, and z above its plane. */
+  function positions3D(): Map<string, Position3D> {
+    return spacePositions(spaceNodes())
+  }
+
+  /** Writes `position3d` values; `null` hands a node back to the canvas's layout. */
+  function writePositions3D(writes: ReadonlyMap<string, Position3D | null>): boolean {
+    if (!writes.size) return false
+    patchNodes((n) => (writes.has(n.id) ? { position3d: writes.get(n.id) ?? null } : null))
+    return true
+  }
+
+  /**
+   * Moves nodes in the 3D view, and everything inside them along — the 3D
+   * view's own drag. The 2D canvas is not touched: only `position3d` is
+   * written, and only where a node would not follow its zone by itself.
+   * Locked nodes stay put unless their zone carries them. Returns whether
+   * anything moved.
+   */
+  function moveNodes3D(ids: Iterable<string>, delta: Position3D): boolean {
+    const free = [...ids].filter((id) => {
+      const node = nodes.value.find((n) => n.id === id)
+      return node && !(node.data as NodeData | undefined)?.locked
+    })
+    return writePositions3D(moveInSpace(spaceNodes(), free, delta))
+  }
+
+  /** Puts one node at `to` in the 3D view — the inspector's fields — taking what it holds along. */
+  function setNodePosition3D(id: string, to: Position3D): boolean {
+    const from = positions3D().get(id)
+    if (!from) return false
+    return moveNodes3D([id], { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z })
+  }
+
+  /** Sends nodes back to where the canvas has them in the 3D view (what they hold comes too). */
+  function resetNodes3D(ids: Iterable<string>): boolean {
+    return writePositions3D(resetInSpace(spaceNodes(), ids))
+  }
+
+  /** The whole 3D layout back to the canvas's. */
+  function resetLayout3D(): boolean {
+    return writePositions3D(
+      new Map(
+        nodes.value
+          .filter((n) => (n.data as NodeData | undefined)?.position3d)
+          .map((n) => [n.id, null] as const),
+      ),
+    )
+  }
+
+  /** How many nodes have a 3D place of their own. */
+  const placedCount = computed(
+    () => nodes.value.filter((n) => (n.data as NodeData | undefined)?.position3d).length,
+  )
+
+  /**
+   * Pins the nodes directly inside `zones` to where they stand in 3D, before
+   * the zones go away or let go of them — so deleting or ungrouping a zone that
+   * was moved in 3D does not send what it held back to the canvas's layout.
+   */
+  function pinChildren3D(zones: ReadonlySet<string>) {
+    const children = nodes.value.filter((n) => n.parentNode && zones.has(n.parentNode)).map((n) => n.id)
+    writePositions3D(pinInSpace(spaceNodes(), children))
+  }
+
+  /**
+   * A zone's frame moved on the canvas while what it holds stayed put — it
+   * grew up or to the left. Its 3D place moves the same way, so what it holds,
+   * placed relative to it, stays put in 3D too.
+   */
+  function shiftZone3D(node: BgNode, dx: number, dy: number): BgNode {
+    const at = (node.data as NodeData | undefined)?.position3d
+    if (!at || (!dx && !dy)) return node
+    return { ...node, data: { ...(node.data as NodeData), position3d: { x: at.x + dx, y: at.y + dy, z: at.z } } }
+  }
+
   /* ---------------------------------------------------------------- authors */
 
   /**
@@ -1254,6 +1353,10 @@ function createDiagramStore(documentId: string) {
       return null
     }
 
+    // A deleted zone may have been moved in 3D, with its contents following it
+    // there; they keep that place rather than falling back to the canvas's.
+    pinChildren3D(nodeIds)
+
     const orphans = new Map<string | null, Set<string>>()
     nodes.value.forEach((node) => {
       if (nodeIds.has(node.id)) return
@@ -1316,10 +1419,15 @@ function createDiagramStore(documentId: string) {
       const id = makeNodeId(node.data?.label || 'node', taken)
       taken.add(id)
       idMap.set(node.id, id)
+      const model = structuredClone(toModelNode(node))
       return {
-        ...structuredClone(toModelNode(node)),
+        ...model,
         id,
         position: { x: node.position.x + 24, y: node.position.y + 24 },
+        // A copy of a node placed in 3D lands beside it there too.
+        position3d: model.position3d
+          ? { ...model.position3d, x: model.position3d.x + 24, y: model.position3d.y + 24 }
+          : null,
       }
     })
 
@@ -1390,6 +1498,9 @@ function createDiagramStore(documentId: string) {
         ...structuredClone(node),
         id,
         position: { x: node.position.x + offset, y: node.position.y + offset },
+        position3d: node.position3d
+          ? { ...node.position3d, x: node.position3d.x + offset, y: node.position3d.y + offset }
+          : null,
         plane: node.plane && ownPlanes.has(node.plane) ? node.plane : null,
       }
     })
@@ -1523,11 +1634,15 @@ function createDiagramStore(documentId: string) {
           const childIds = new Set(children.map((child) => child.id))
           nodes.value = nodes.value.map((n) => {
             if (n.id === zoneId) {
-              return {
-                ...n,
-                position: { x: n.position.x + x1, y: n.position.y + y1 },
-                style: { ...(n.style as object), width: `${next.width}px`, height: `${next.height}px` },
-              }
+              return shiftZone3D(
+                {
+                  ...n,
+                  position: { x: n.position.x + x1, y: n.position.y + y1 },
+                  style: { ...(n.style as object), width: `${next.width}px`, height: `${next.height}px` },
+                },
+                x1,
+                y1,
+              )
             }
             if (!childIds.has(n.id)) return n
             return { ...n, position: { x: n.position.x - x1, y: n.position.y - y1 } }
@@ -1653,6 +1768,7 @@ function createDiagramStore(documentId: string) {
   function ungroupSelection() {
     const zones = selectedNodes.value.filter((n) => n.type === 'zone')
     if (!zones.length) return
+    pinChildren3D(new Set(zones.map((z) => z.id)))
     for (const zone of zones) {
       const children = new Set(
         nodes.value.filter((n) => n.parentNode === zone.id).map((n) => n.id),
@@ -1823,11 +1939,15 @@ function createDiagramStore(documentId: string) {
 
     nodes.value = nodes.value.map((n) => {
       if (n.id === zone.id) {
-        return {
-          ...n,
-          position: { x: n.position.x + x1, y: n.position.y + y1 },
-          style: { ...(n.style as object), width: `${width}px`, height: `${height}px` },
-        }
+        return shiftZone3D(
+          {
+            ...n,
+            position: { x: n.position.x + x1, y: n.position.y + y1 },
+            style: { ...(n.style as object), width: `${width}px`, height: `${height}px` },
+          },
+          x1,
+          y1,
+        )
       }
       if (!childIds.has(n.id)) return n
       return { ...n, position: { x: n.position.x - x1, y: n.position.y - y1 } }
@@ -2122,6 +2242,12 @@ function createDiagramStore(documentId: string) {
     moveNodesToPlane,
     setNodesExtrusion,
     shiftNodesPlane,
+    positions3D,
+    moveNodes3D,
+    setNodePosition3D,
+    resetNodes3D,
+    resetLayout3D,
+    placedCount,
     flowsOnEdge,
     edgesWithin,
     edgesDownstream,

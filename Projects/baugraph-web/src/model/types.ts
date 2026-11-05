@@ -106,6 +106,17 @@ export interface Vec2 {
   y: number
 }
 
+/**
+ * A point in the 3D view. `x` and `y` are the canvas's own axes — the same
+ * numbers a node's `position` uses, so a node's 3D place starts out as its 2D
+ * one — and `z` is height, up off the plane the node stands on.
+ */
+export interface Position3D {
+  x: number
+  y: number
+  z: number
+}
+
 export interface Size {
   width: number
   height: number
@@ -187,6 +198,19 @@ export interface DiagramNode {
    * export ignore it.
    */
   plane?: string | null
+  /**
+   * Where the node stands in the 3D view, once it has been moved there. Omitted
+   * means "where the canvas has it": the node stands at its 2D place, lifted
+   * onto its plane — or, inside a zone that has been moved in 3D, at its place
+   * within that zone, so moving a zone takes everything inside it along.
+   *
+   * Unlike `position`, this is never relative to the zone: `x` and `y` are
+   * absolute canvas units and `z` is the height above the node's plane. That
+   * is what keeps a node put where it was placed whatever happens on the 2D
+   * canvas — regrouping, resizing a zone, moving it. 3D only: the 2D canvas
+   * and every export ignore it, and nothing in 3D ever touches `position`.
+   */
+  position3d?: Position3D | null
   /** How tall the node stands in the 3D view. Omitted means `regular`. 3D only. */
   extrusion?: Extrusion
   /**

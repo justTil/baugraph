@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import { Box } from '@lucide/vue'
-import type { Extrusion } from '@/model'
+import { Box, Undo2 } from '@lucide/vue'
+import type { Extrusion, Position3D } from '@/model'
 import { EXTRUSIONS } from '@/model'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,16 +18,18 @@ import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useView3D } from '@/features/diagram/composables/useView3D'
 import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
+import { AXES, AXIS_COLOR } from '@/features/diagram/lib/axes3d'
 import { COLOR_HEX } from '@/features/diagram/lib/theme'
 
 /**
- * Where a node stands in the 3D view: which plane, and how tall.
+ * Where a node stands in the 3D view: which plane, how tall, and — once it has
+ * been moved there — where on it.
  *
  * Optional on top of everything else in the inspector — a node left alone here
  * follows its zone onto its plane, or stands on the ground, at the regular
- * height — and nothing set here changes the node on the 2D canvas. Edits one
- * node or a whole selection; a field the selection disagrees on shows nothing
- * picked rather than one node's answer.
+ * height, exactly where the canvas has it — and nothing set here changes the
+ * node on the 2D canvas. Edits one node or a whole selection; a field the
+ * selection disagrees on shows nothing picked rather than one node's answer.
  */
 
 const props = defineProps<{ ids: string[] }>()
@@ -42,6 +44,9 @@ const {
   setNodesPlane,
   setNodesExtrusion,
   planeOfNode,
+  positions3D,
+  setNodePosition3D,
+  resetNodes3D,
 } = useDiagram()
 const { active: view3d } = useView3D()
 
@@ -95,6 +100,33 @@ function act(fn: () => void) {
   commit()
   endCoalesce()
   fn()
+}
+
+/* --------------------------------------------------------------- location */
+
+/** How many of the selection have a 3D place of their own. */
+const placed = computed(() => selected.value.filter((n) => (n.data as NodeData).position3d).length)
+
+/** One node's place in 3D — moved there, or where the canvas puts it. */
+const location = computed<Position3D | null>(() => {
+  if (selected.value.length !== 1) return null
+  return positions3D().get(selected.value[0]!.id) ?? null
+})
+
+/**
+ * Typing a coordinate moves the node there in 3D, and what it holds with it,
+ * the same as dragging it. One undo step per field, however many edits.
+ */
+function setLocation(axis: keyof Position3D, raw: string) {
+  const at = location.value
+  const value = Number(raw)
+  if (!at || raw.trim() === '' || !Number.isFinite(value) || value === at[axis]) return
+  commit(`position3d:${props.ids[0]}:${axis}`)
+  setNodePosition3D(props.ids[0]!, { ...at, [axis]: value })
+}
+
+function resetLocation() {
+  act(() => resetNodes3D(props.ids))
 }
 
 function onPlane(value: unknown) {
@@ -186,6 +218,48 @@ function finishAdding(save: boolean) {
         :options="EXTRUSION_OPTIONS"
         @update:model-value="act(() => setNodesExtrusion(ids, $event as Extrusion))"
       />
+    </div>
+
+    <!--
+      Where it stands in 3D. X and Y start as the canvas's own numbers and Z is
+      height off the plane; changing them only ever moves the 3D view's copy.
+    -->
+    <div v-if="location || placed" class="space-y-1.5">
+      <div class="flex items-center justify-between">
+        <Label class="text-muted-foreground text-[11px] font-normal">Location</Label>
+        <Button
+          v-if="placed"
+          variant="ghost"
+          size="sm"
+          class="text-muted-foreground -my-1 h-6 px-1.5 text-xs"
+          title="Back to where the canvas has it (Alt+G in the 3D view)"
+          @click="resetLocation"
+        >
+          <Undo2 />
+          {{ selected.length > 1 ? `Reset ${placed}` : 'Reset' }}
+        </Button>
+      </div>
+      <div v-if="location" class="flex gap-1.5">
+        <div v-for="axis in AXES" :key="axis" class="relative min-w-0 flex-1">
+          <span
+            class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[10px] font-bold"
+            :style="{ color: AXIS_COLOR[axis] }"
+          >{{ axis.toUpperCase() }}</span>
+          <Input
+            type="number"
+            step="10"
+            class="h-8 pr-1 pl-6 text-sm tabular-nums"
+            :model-value="Math.round(location[axis] * 100) / 100"
+            :aria-label="`3D ${axis}`"
+            @change="setLocation(axis, ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+      </div>
+      <p class="text-muted-foreground text-[11px] leading-snug">
+        <template v-if="selected.length > 1">{{ placed }} of {{ selected.length }} moved in 3D.</template>
+        <template v-else-if="placed">Moved in 3D — its place on the canvas is untouched.</template>
+        <template v-else>Where the canvas has it. Move it in 3D with G, a drag or the gizmo.</template>
+      </p>
     </div>
 
     <p class="text-muted-foreground text-[11px] leading-snug">

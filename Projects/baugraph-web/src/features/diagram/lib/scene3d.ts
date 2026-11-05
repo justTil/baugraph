@@ -1,5 +1,5 @@
 import type { ColorKey, DiagramDocument, DiagramEdge, DiagramNode, Extrusion } from '@/model'
-import { nodePlane } from '@/model'
+import { nodePlane, spacePositions } from '@/model'
 import type { Box, Vec } from '@/features/diagram/lib/edge-path'
 import { edgeGeometry } from '@/features/diagram/lib/edge-path'
 import { absoluteBoxes } from '@/features/diagram/lib/render-svg'
@@ -7,18 +7,20 @@ import { absoluteBoxes } from '@/features/diagram/lib/render-svg'
 /**
  * The 3D view's layout: the 2D diagram, stood up in layers.
  *
- * Nothing is laid out anew here. Every node keeps the position it has on the 2D
- * canvas and only gains a height — the level of the plane it stands on — so the
- * 3D view is the same diagram looked at from a different angle, never a second
- * arrangement of it that could drift. A connection between two nodes on one
- * plane keeps the very route the canvas draws; one between two planes becomes a
- * cable from one level to the other, which is what makes a boundary crossing
- * stand out.
+ * Nothing is laid out anew here. A node stands where it was placed in 3D, or —
+ * until it is moved there — exactly where the 2D canvas has it, lifted onto the
+ * plane it belongs to (see `model/space.ts`). So the 3D view opens as the same
+ * diagram looked at from a different angle, and only parts ways with the canvas
+ * where someone has moved something in 3D. A connection between two nodes on
+ * one floor runs along that floor, on the very route the canvas draws for as
+ * long as neither end has been moved; one between two floors becomes a cable
+ * from one to the other, which is what makes a boundary crossing stand out.
  *
  * Pure and free of three.js on purpose: it is what the tests pin down, and it
  * keeps the 3D renderer's weight out of everything that only needs the numbers.
  *
- * Coordinates: canvas `x` stays `x`, canvas `y` becomes `z`, and `y` is up.
+ * Coordinates: canvas `x` stays `x`, canvas `y` becomes `z`, and `y` is up — so
+ * a node's `position3d.z`, its height, is the world's `y`.
  */
 
 export interface Vec3 {
@@ -65,11 +67,15 @@ export interface StackPlane {
 
 export interface StackNode {
   node: DiagramNode
-  /** Absolute footprint on the canvas. */
+  /** Absolute footprint on its plane — where it stands in 3D. */
   box: Box
+  /** Absolute footprint on the 2D canvas, which `box` equals until the node is moved in 3D. */
+  canvas: Box
   level: number
   /** How many zones on the same plane it stands inside — each one's floor raises it. */
   depth: number
+  /** How far its base is lifted off its plane: `position3d.z`, or its zone's. */
+  elevation: number
   /** Height above its own floor. */
   height: number
 }
@@ -80,8 +86,9 @@ export interface StackEdge {
   from: number
   to: number
   /**
-   * The route the 2D canvas draws, sampled into points, for a connection whose
-   * two ends share a plane; `null` for one that crosses between planes.
+   * The route along the floor, sampled into points, for a connection whose two
+   * ends stand on the same floor — one plane, one height; `null` for a cable
+   * between floors.
    */
   route: Vec[] | null
   /** Unit vectors out of each end along the route, for arrowheads. */
@@ -98,7 +105,10 @@ export interface StackLayout {
   edges: StackEdge[]
   /** Every node's footprint, padded — the size every plate is drawn at, so the stack lines up. */
   footprint: Box
-  /** Distance between neighbouring planes at the default spread. */
+  /**
+   * Distance between neighbouring planes at the default spread. Taken from the
+   * 2D layout, so moving nodes about in 3D never moves the planes under them.
+   */
   gap: number
 }
 
@@ -122,7 +132,11 @@ export function edgeLift(sourceHeight: number, targetHeight: number): number {
   return Math.min(14, Math.max(2, Math.min(sourceHeight, targetHeight) / 2))
 }
 
-export function stackLayout(doc: DiagramDocument): StackLayout {
+/** Two floors closer than this are one: a connection between them runs along it. */
+const SAME_FLOOR = 0.5
+
+/** The stack's planes, ground first, and every node stood on one of them. */
+export function stackNodes(doc: DiagramDocument): { planes: StackPlane[]; nodes: StackNode[] } {
   const declared = doc.planes ?? []
   const planes: StackPlane[] = declared.length
     ? declared.map((plane, level) => ({
@@ -135,7 +149,8 @@ export function stackLayout(doc: DiagramDocument): StackLayout {
     : [{ id: null, label: '', color: 'slate', level: 0, count: 0 }]
 
   const byId = new Map(doc.nodes.map((n) => [n.id, n]))
-  const boxes = absoluteBoxes(doc)
+  const canvas = absoluteBoxes(doc)
+  const space = spacePositions(doc.nodes)
   const levelOf = new Map<string, number>()
   for (const node of doc.nodes) {
     const plane = nodePlane(node.id, (id) => byId.get(id), declared)
@@ -157,80 +172,120 @@ export function stackLayout(doc: DiagramDocument): StackLayout {
     return depth
   }
 
-  const nodes: StackNode[] = doc.nodes.map((node) => ({
-    node,
-    box: boxes.get(node.id)!,
-    level: levelOf.get(node.id) ?? 0,
-    depth: depthOf(node),
-    height: nodeHeight(node),
-  }))
-  const stacked = new Map(nodes.map((n) => [n.node.id, n]))
+  const nodes: StackNode[] = doc.nodes.map((node) => {
+    const at = space.get(node.id)!
+    return {
+      node,
+      box: { x: at.x, y: at.y, width: node.size.width, height: node.size.height },
+      canvas: canvas.get(node.id)!,
+      level: levelOf.get(node.id) ?? 0,
+      depth: depthOf(node),
+      elevation: at.z,
+      height: nodeHeight(node),
+    }
+  })
+  return { planes, nodes }
+}
 
-  // The same obstacles the canvas routes around, narrowed to one plane: a node
-  // standing on another level is not in the way of anything down here.
-  const solids = nodes.filter((n) => n.node.kind !== 'zone' && n.node.kind !== 'annotation')
+/** What a connection on a floor routes around: blocks, not zones or labels. */
+export const isSolid = (n: StackNode) => n.node.kind !== 'zone' && n.node.kind !== 'annotation'
+
+/** Whether two nodes stand on the same floor: one plane, one height. */
+export const sameFloor = (a: StackNode, b: StackNode) =>
+  a.level === b.level && Math.abs(a.elevation - b.elevation) < SAME_FLOOR
+
+/** How far a node has been moved in 3D from its place on the canvas. */
+const offset = (n: StackNode): Vec => ({ x: n.box.x - n.canvas.x, y: n.box.y - n.canvas.y })
+
+/**
+ * One connection, from where its two ends stand. `solids` are the blocks it
+ * may have to route around; only the ones on its own floor are in the way.
+ */
+export function stackEdge(edge: DiagramEdge, source: StackNode, target: StackNode, solids: StackNode[]): StackEdge {
+  const lift = edgeLift(source.height || 24, target.height || 24)
+  if (!sameFloor(source, target)) {
+    return {
+      edge,
+      from: source.level,
+      to: target.level,
+      route: null,
+      startDir: { x: 0, y: 0 },
+      endDir: { x: 0, y: 0 },
+      lift,
+    }
+  }
+
+  // Hand-placed bend points are canvas coordinates. They still hold while both
+  // ends have moved together — a zone carried somewhere else in 3D — and are
+  // shifted along with them; once the ends have parted ways in 3D they describe
+  // a route between places neither node is at any more, and auto-routing wins.
+  const a = offset(source)
+  const b = offset(target)
+  const together = Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6
+  const waypoints = together ? edge.waypoints?.map((p) => ({ x: p.x + a.x, y: p.y + a.y })) : undefined
+
+  const geometry = edgeGeometry(source.box, target.box, {
+    sourceSide: edge.sourceSide,
+    targetSide: edge.targetSide,
+    sourcePorts: source.node.ports,
+    targetPorts: target.node.ports,
+    sourcePort: edge.sourcePort,
+    targetPort: edge.targetPort,
+    route: edge.route,
+    obstacles: solids
+      .filter((n) => n !== source && n !== target && sameFloor(n, source))
+      .map((n) => n.box),
+    waypoints,
+  })
+  return {
+    edge,
+    from: source.level,
+    to: target.level,
+    route: samplePath(geometry.path),
+    startDir: geometry.startDir,
+    endDir: geometry.endDir,
+    lift,
+  }
+}
+
+/** A box around every box, padded by `pad` on each side. */
+function around(boxes: Box[], pad: number): Box {
+  const x1 = boxes.length ? Math.min(...boxes.map((b) => b.x)) : -200
+  const y1 = boxes.length ? Math.min(...boxes.map((b) => b.y)) : -150
+  const x2 = boxes.length ? Math.max(...boxes.map((b) => b.x + b.width)) : 200
+  const y2 = boxes.length ? Math.max(...boxes.map((b) => b.y + b.height)) : 150
+  return { x: x1 - pad, y: y1 - pad, width: x2 - x1 + pad * 2, height: y2 - y1 + pad * 2 }
+}
+
+export function stackLayout(doc: DiagramDocument): StackLayout {
+  const { planes, nodes } = stackNodes(doc)
+  const stacked = new Map(nodes.map((n) => [n.node.id, n]))
+  const solids = nodes.filter(isSolid)
 
   const edges: StackEdge[] = []
   for (const edge of doc.edges) {
     const source = stacked.get(edge.source)
     const target = stacked.get(edge.target)
     if (!source || !target) continue
-
-    const lift = edgeLift(source.height || 24, target.height || 24)
-    if (source.level !== target.level) {
-      edges.push({
-        edge,
-        from: source.level,
-        to: target.level,
-        route: null,
-        startDir: { x: 0, y: 0 },
-        endDir: { x: 0, y: 0 },
-        lift,
-      })
-      continue
-    }
-
-    const geometry = edgeGeometry(source.box, target.box, {
-      sourceSide: edge.sourceSide,
-      targetSide: edge.targetSide,
-      sourcePorts: source.node.ports,
-      targetPorts: target.node.ports,
-      sourcePort: edge.sourcePort,
-      targetPort: edge.targetPort,
-      route: edge.route,
-      obstacles: solids
-        .filter((n) => n.level === source.level && n !== source && n !== target)
-        .map((n) => n.box),
-      waypoints: edge.waypoints,
-    })
-    edges.push({
-      edge,
-      from: source.level,
-      to: target.level,
-      route: samplePath(geometry.path),
-      startDir: geometry.startDir,
-      endDir: geometry.endDir,
-      lift,
-    })
+    edges.push(stackEdge(edge, source, target, solids))
   }
 
-  const all = nodes.map((n) => n.box)
-  const x1 = all.length ? Math.min(...all.map((b) => b.x)) : -200
-  const y1 = all.length ? Math.min(...all.map((b) => b.y)) : -150
-  const x2 = all.length ? Math.max(...all.map((b) => b.x + b.width)) : 200
-  const y2 = all.length ? Math.max(...all.map((b) => b.y + b.height)) : 150
-  const footprint = {
-    x: x1 - PLATE_PADDING,
-    y: y1 - PLATE_PADDING,
-    width: x2 - x1 + PLATE_PADDING * 2,
-    height: y2 - y1 + PLATE_PADDING * 2,
-  }
+  const footprint = around(
+    nodes.map((n) => n.box),
+    PLATE_PADDING,
+  )
 
   // Far enough apart that a plane's tallest block never reaches the next one,
   // and in proportion to the diagram, so a wide landscape does not read as a
-  // stack of pancakes and a small one does not tower.
+  // stack of pancakes and a small one does not tower. Measured on the canvas's
+  // layout rather than the 3D one: dragging a node off to one side in 3D must
+  // not lift or drop every plane in the stack when it is let go.
+  const flat = around(
+    nodes.map((n) => n.canvas),
+    PLATE_PADDING,
+  )
   const tallest = nodes.reduce((max, n) => Math.max(max, n.height), 0)
-  const span = Math.max(footprint.width, footprint.height)
+  const span = Math.max(flat.width, flat.height)
   const gap = Math.min(520, Math.max(150, span * 0.2)) + tallest
 
   return { planes, nodes, edges, footprint, gap }

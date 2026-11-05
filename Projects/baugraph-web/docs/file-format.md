@@ -158,6 +158,16 @@ All in service of readable diffs:
   array besides `meta.authors` that is never sorted, because its order is the
   stacking; each plane stays on one line, and a `plane` naming one the file
   does not define is rejected on open, the same as a dangling `parent`.
+- **A node moved in the 3D view gets a `position3d`.** `{ "x", "y", "z" }`,
+  on one line: `x` and `y` in canvas units and `z` the height above the
+  node's plane. It is written only once a node has been
+  [moved in 3D](./3d-view#moving-nodes-in-3d), and the 2D canvas never reads
+  it — `position` stays what the canvas says. Unlike `position` it is
+  absolute rather than relative to the zone, so regrouping or resizing on the
+  canvas never moves a node that was placed in 3D. A node without it stands
+  in 3D where the canvas has it — within its zone, wherever that zone stands
+  in 3D, so a zone moved in 3D is one line in the diff and what it holds
+  follows.
 - **An edge routes itself unless `waypoints` says otherwise.** Every
   connection is auto-routed around obstacles by default, the only behavior
   this format had before manual routing existed. Giving an edge one or more

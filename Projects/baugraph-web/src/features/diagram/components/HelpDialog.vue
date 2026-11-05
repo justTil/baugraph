@@ -36,10 +36,19 @@ const SHORTCUTS: [string, string][] = [
 
 /** Keys that mean something else while the 3D view is up. */
 const SHORTCUTS_3D: [string, string][] = [
-  ['drag / right-drag', 'orbit / pan the camera'],
+  ['drag or middle-drag', 'orbit the camera'],
+  ['right-drag or ⇧ middle-drag', 'pan the camera'],
   ['scroll', 'zoom'],
   ['click / ⇧-click', 'select / add to the selection'],
   ['double-click', 'fly to a node (empty space: fit everything)'],
+  ['G', 'grab the selection — it follows the pointer until a click or ↵ places it'],
+  ['while moving: X Y Z', 'lock to that axis (⇧ + axis: to the plane of the other two)'],
+  ['while moving: digits', 'type an exact distance; ⇧ fine, Ctrl snap, Esc / right-click cancels'],
+  ['drag a selected node', 'move it across its plane (or drag the gizmo’s arrows)'],
+  ['Alt G', 'put the selection back where the canvas has it'],
+  ['numpad 1 / 3 / 7', 'look from the front / the right / above (Ctrl: the other side)'],
+  ['numpad 2 4 6 8', 'turn the view in steps'],
+  ['numpad . / Home', 'frame the selection / everything'],
   ['↑ / ↓', 'move the selection one plane up / down'],
   ['← / →', 'spotlight the previous / next message flow'],
   ['F', 'fit the stack'],
@@ -183,9 +192,20 @@ const SHORTCUTS_3D: [string, string][] = [
             Press <kbd class="bg-muted rounded px-1 font-mono">3</kbd> (or <em>3D</em> in the
             toolbar) and the diagram stands up in layers. Height means what you decide it means:
             add <em>planes</em> — a DMZ, an application tier, a data tier; dev, test and prod —
-            and put nodes on them. Nothing moves: every node keeps its place on the canvas and is
-            only lifted onto its plane, so a connection that crosses a boundary becomes a vertical
-            cable and stands out from any angle.
+            and put nodes on them. Every node starts where it is on the canvas, lifted onto its
+            plane, so a connection that crosses a boundary becomes a vertical cable and stands out
+            from any angle.
+          </p>
+          <p>
+            From there, arrange it in 3D the way a 3D editor does:
+            <kbd class="bg-muted rounded px-1 font-mono">G</kbd> grabs the selection,
+            <kbd class="bg-muted rounded px-1 font-mono">X</kbd>
+            <kbd class="bg-muted rounded px-1 font-mono">Y</kbd>
+            <kbd class="bg-muted rounded px-1 font-mono">Z</kbd> lock it to an axis, and the gizmo's
+            arrows drag it along one. A move in 3D only ever changes the 3D view — the canvas keeps
+            every node where it was — and a zone takes what it holds along.
+            <kbd class="bg-muted rounded px-1 font-mono">Alt G</kbd> puts the selection back where
+            the canvas has it.
           </p>
           <p>
             Planes are built on the canvas: the <em>Planes</em> tab of the layers panel on its left

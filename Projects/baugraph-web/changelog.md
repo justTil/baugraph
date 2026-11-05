@@ -8,9 +8,8 @@ All notable changes to this project will be documented in this file.
 
 - **A 3D view, stacked by plane.** Press `3`, or **3D** in the toolbar or in
   the view switch at the top right of the canvas, and the diagram stands up in
-  layers. Nothing is laid out again: every node keeps the place it has on the
-  canvas and only gains a height, the level of the *plane* it belongs to. Planes
-  give that height a meaning. They can be trust zones (external, DMZ,
+  layers. Every node starts where it is on the canvas and gains a height, the
+  level of the *plane* it belongs to. Planes give that height a meaning. They can be trust zones (external, DMZ,
   application, data), tiers, environments or network layers. A connection
   between two nodes on the same plane follows the route the canvas draws. One
   that crosses between planes becomes a vertical cable, so a flow that leaves
@@ -35,22 +34,50 @@ All notable changes to this project will be documented in this file.
     canvas. `←`/`→` step a spotlight through them: the lit flow is drawn in its
     own colour and everything it does not touch fades back. Messages stay
     large enough to follow from across the whole stack.
-  - **Getting around:** drag to orbit, right-drag to pan, scroll to zoom.
-    Click selects (the same selection as the canvas) and double-click flies to
-    a node. There are angled, top and side views, a spread slider that pulls
+  - **Nodes are moved in 3D the way Blender moves objects**, and the 2D
+    canvas never notices. `G` grabs the selection and it follows the pointer
+    until a click or `Enter` places it; `Esc` or a right-click puts it back.
+    While it moves, `X`/`Y`/`Z` lock it to an axis and `⇧X`/`⇧Y`/`⇧Z` to a
+    plane. Digits type an exact distance, `⇧` slows the pointer for fine work,
+    and `Ctrl` snaps the other way round from the canvas grid. A bar at the
+    top says how far and along what, and the locked axis is drawn through the
+    start. A selected node can also be dragged across its floor. The
+    selection carries a move gizmo: arrows per axis, squares per plane, and a
+    ring that moves along the screen. `Alt G` puts the selection back where
+    the canvas has it. The inspector's 3D section shows a node's **Location**
+    to type into, with **Reset**, and a button in the 3D bar resets every
+    node. Each move is one undo step and writes only the node's `position3d`.
+    A zone takes what it holds along, and a node added to it on the canvas
+    later lands inside it in 3D too. A node keeps its plane wherever it is
+    moved, and a connection between two heights becomes a cable. Deleting or
+    ungrouping a zone that was moved in 3D leaves its contents where they
+    stood. A zone that grows on the canvas keeps them still.
+  - **Getting around:** drag or middle-drag to orbit, right-drag or `⇧`
+    middle-drag to pan, scroll to zoom. The numpad works as in Blender: `1`,
+    `3` and `7` give the front, right and top views (with `Ctrl`, the other
+    side), `2` `4` `6` `8` turn the view in steps, `.` frames the selection,
+    and `Home` frames everything. An axis ball in the corner shows which way
+    `X`, `Y` and `Z` point, and clicking a ball looks along that axis. Click
+    selects (the same selection as the canvas) and double-click flies to a
+    node. There are angled, top and side views, a spread slider that pulls
     the planes apart or lays them flat, a turntable (`R`), and a button that
-    saves the current view as a PNG. The toolbar's zoom and fit buttons drive
-    the 3D camera while it is up.
+    saves the current view as a PNG without the gizmo. The toolbar's zoom and
+    fit buttons drive the 3D camera while it is up.
   - **Presentation mode** keeps the 3D view. It gains a **3D** switch and a
     turntable, the legend stays up as a key, the spotlight still steps through
-    the flows, and clicking a node flies to it.
+    the flows, and clicking a node flies to it. Nothing can be moved, and
+    there is no gizmo.
   - The **Web application — three-tier** example now has its tiers as planes,
     so the first visit has something to look at in 3D.
   - three.js is only downloaded the first time the 3D view is opened, so
     nobody who stays in 2D pays for it.
 - **Optional 3D keys in the file format.** A document may carry `planes`,
-  listed ground first, and a node may carry `plane` and `extrusion`. All three
-  are optional, and the 2D canvas and every export ignore them. A node without
+  listed ground first, and a node may carry `plane`, `extrusion` and
+  `position3d`. All of them are optional, and the 2D canvas and every export
+  ignore them. `position3d` is written only for a node moved in the 3D view,
+  on one line. It holds absolute canvas `x`/`y`, never relative to the zone,
+  and `z` as the height above the plane. A node without it stands in 3D where
+  the canvas has it, within its zone wherever that zone stands. A node without
   `plane` follows its zone, or stands on the ground plane. A diagram without
   planes is written byte for byte as before, so no existing file changes. The
   JSON Schema and the AI skills are regenerated to match. Planes are written

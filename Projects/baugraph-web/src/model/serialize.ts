@@ -106,6 +106,7 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'ports',
   'parent',
   'plane',
+  'position3d',
   'extrusion',
   'locked',
   'data',
@@ -171,6 +172,9 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
         ...node,
         position: { x: round(node.position.x), y: round(node.position.y) },
         size: { width: round(node.size.width), height: round(node.size.height) },
+        position3d: node.position3d
+          ? { x: round(node.position3d.x), y: round(node.position3d.y), z: round(node.position3d.z) }
+          : null,
       },
       NODE_DEFAULTS,
     )
@@ -256,7 +260,7 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
  * `{ "x": 300, "y": 60 }` over four, turning "moved a node" into a four-line
  * diff — the single most common change a diagram ever sees.
  */
-const INLINE_KEYS = new Set(['position', 'size', 'ports'])
+const INLINE_KEYS = new Set(['position', 'position3d', 'size', 'ports'])
 
 /**
  * Keys whose *children* are each one line. A flow's per-connection overrides are

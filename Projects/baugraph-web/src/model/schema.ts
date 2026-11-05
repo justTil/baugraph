@@ -47,6 +47,12 @@ const vec2Schema = z.object({
   y: z.number().finite(),
 })
 
+const position3dSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  z: z.number().finite(),
+})
+
 const sizeSchema = z.object({
   width: z.number().finite().min(16),
   height: z.number().finite().min(16),
@@ -102,6 +108,9 @@ export const nodeSchema = z.object({
   // the 3D view existed parses to a node that stands on the ground plane at the
   // regular height, which is exactly how the 3D view draws one with no planes.
   plane: idSchema.nullable().default(NODE_DEFAULTS.plane),
+  // Absent until a node is moved in the 3D view, and then never relative to its
+  // zone — see `DiagramNode.position3d`.
+  position3d: position3dSchema.nullable().default(NODE_DEFAULTS.position3d),
   extrusion: z.enum(EXTRUSIONS).default(NODE_DEFAULTS.extrusion),
   locked: z.boolean().default(NODE_DEFAULTS.locked),
   data: metadataSchema.optional(),

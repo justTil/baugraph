@@ -225,6 +225,11 @@ writing it in another order is still valid and will simply be re-sorted.
 - \`extrusion\` — 3D only, optional: how tall the node stands, one of
   ${enumList(EXTRUSIONS)}. Omit for \`regular\`. Use \`tall\`/\`tower\` for what
   carries the most traffic or matters the most, sparingly.
+- \`position3d\` — 3D only, optional: \`{ "x": number, "y": number, "z": number }\`,
+  where a person moved the node in the 3D view — absolute canvas units (never
+  relative to the zone) and \`z\` the height above its plane. Never write one
+  yourself: omit it and the node stands in 3D where \`position\` puts it. Keep
+  any that an existing file has, unchanged.
 - \`locked\` — editor-only convenience; omit.
 - \`data\` — free-form object for anything else.
 

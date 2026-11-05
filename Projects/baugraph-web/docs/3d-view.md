@@ -1,11 +1,14 @@
 # The 3D view
 
 Press `3` — or **3D** in the toolbar, or in the switch at the top right of the
-canvas — and the diagram stands up in layers. Every node keeps exactly the
-place it has on the 2D canvas and is only lifted onto the *plane* it belongs
-to. Nothing is laid out again, so the 3D view is never a second arrangement of
-the diagram that could drift from the first: it is the same diagram, looked at
-with a height axis added.
+canvas — and the diagram stands up in layers. Every node starts exactly where
+it is on the 2D canvas, lifted onto the *plane* it belongs to: the same
+diagram, looked at with a height axis added.
+
+From there you can [arrange it in 3D](#moving-nodes-in-3d) — grab nodes, drag
+them along an axis, lift them — the way a 3D editor such as Blender moves
+objects. Those moves belong to the 3D view alone: the 2D canvas never sees
+them, and a diagram nobody arranges in 3D carries nothing of it.
 
 That axis only earns its place if it means something, so you decide what it
 means:
@@ -72,20 +75,77 @@ Select several nodes and the same section sets them all at once. In the 3D
 view, `↑` and `↓` move the selection one plane up or down — the quickest way
 to build a stack is to click through a diagram pressing arrows.
 
+## Moving nodes in 3D
+
+The 3D view opens as the canvas's layout, but it does not have to stay that
+way: move nodes about in 3D until the stack reads the way you want, and the
+2D diagram stays exactly as it was. A node moved in 3D gets a 3D place of its
+own; one never moved there keeps following the canvas.
+
+**Grab with `G`.** Select one or more nodes and press `G`: the selection
+follows the pointer until a click or `Enter` puts it down, and `Esc` or a
+right-click puts it back. While it is moving:
+
+| Key | Does |
+| --- | --- |
+| `X` / `Y` / `Z` | Lock the move to that axis — press it again to let go |
+| `⇧X` / `⇧Y` / `⇧Z` | Lock it to the plane of the other two; `⇧Z` keeps it on its floor |
+| digits, `.`, `-`, `⌫` | Type an exact distance along the locked axis (x when none is) |
+| hold `⇧` | Fine adjustment: the pointer moves it a tenth as far |
+| hold `Ctrl` | Snapping the other way round from the canvas's grid setting |
+
+With nothing locked, a grab moves along the screen, the way it does in a 3D
+editor. The bar at the top says how far it has gone, along what, and how to
+finish; the locked axis is drawn through where the move started. `X` and `Y`
+are the canvas's own axes and `Z` is height, coloured red, green and blue.
+
+**Drag a selected node** to move it across its floor, the way a drag works on
+the canvas. Dragging an unselected node, or empty space, still orbits.
+
+**Drag the gizmo.** The selection carries a move gizmo: an arrow per axis, a
+square per pair of axes, and a ring in the middle that moves along the
+screen. The arrows button in the bar at the bottom hides it.
+
+**Put it back.** `Alt G` returns the selection to where the canvas has it.
+The inspector's **3D** section shows a node's **Location** — `X`, `Y`, and `Z`,
+its height above its plane — to type into, with **Reset** to send it back; the
+bar at the bottom has a button that resets every node at once.
+
+A zone takes what it holds along, as on the canvas. A node inside it that
+was never moved in 3D keeps its place within the zone — add one on the
+canvas later and it lands inside the zone in 3D too — and one placed on its
+own moves along with it.
+
+A node keeps its plane wherever it is moved: lifting it raises it above its
+plane, it does not put it on the next one up — that is still `↑`. A
+connection between two nodes standing at different heights becomes a cable,
+the same as one between planes. A route with hand-placed bend points keeps
+them while both of its ends move together, and routes itself once they part.
+Moves are undone with `⌘Z` like any other edit.
+
 ## Getting around
 
 | Input | Does |
 | --- | --- |
-| Drag | Orbit |
-| Right-drag | Pan |
+| Drag, or middle-drag | Orbit |
+| Right-drag, or `⇧` middle-drag | Pan |
 | Scroll | Zoom |
 | Click / `⇧`-click | Select / add to the selection — the same selection as the canvas |
 | Double-click | Fly to a node; on empty space, fit everything |
+| `G` | Grab the selection — see [moving nodes in 3D](#moving-nodes-in-3d) |
+| `Alt G` | Put the selection back where the canvas has it |
+| Numpad `1` / `3` / `7` | Look from the front / the right / above; with `Ctrl`, from the other side |
+| Numpad `2` `4` `6` `8` | Turn the view in steps |
+| Numpad `.` / `Home` | Frame the selection / everything |
+| Numpad `+` / `-` | Zoom |
 | `F` | Fit the stack |
 | `R` | Turntable — a slow spin, for leaving a diagram on screen |
 | `↑` / `↓` | Move the selection one plane up / down |
 | `←` / `→` | Spotlight the previous / next message flow |
 | `3` | Back to 2D |
+
+The axis ball in the top-right corner shows which way `X`, `Y` and `Z` point;
+click one to look straight along it.
 
 The bar at the bottom left switches between an angled view, the view from
 above (the 2D layout, from the top) and the view from the side (the stack
@@ -111,12 +171,12 @@ message takes; pausing flows in the toolbar pauses them here too.
 
 The 3D view works in presentation mode (`P`): the presentation controls gain a **3D** switch and a turntable, the planes legend
 stays up as a key to the stack, and `←` / `→` still step through the flows.
-Nothing can be edited — a click on a node flies to it instead, which is the
-way to say "this one" to a room.
+Nothing can be edited or moved, and the gizmo is gone — a click on a node
+flies to it instead, which is the way to say "this one" to a room.
 
 ## In the file
 
-Three optional keys, all ignored by the 2D canvas:
+Four optional keys, all ignored by the 2D canvas:
 
 ```json
 {
@@ -126,10 +186,16 @@ Three optional keys, all ignored by the 2D canvas:
     { "id": "dmz", "label": "DMZ", "color": "amber" }
   ],
   "nodes": [
-    { "id": "core", "kind": "zone", "label": "Core", "plane": "application" },
+    { "id": "core", "kind": "zone", "label": "Core", "plane": "application", "position3d": { "x": 900, "y": -40, "z": 60 } },
     { "id": "ledger", "label": "Ledger", "parent": "core", "plane": "data", "extrusion": "tower" }
   ]
 }
 ```
+
+`position3d` is only written once a node has been moved in 3D. Unlike
+`position` it is never relative to the zone: `x` and `y` are absolute canvas
+units and `z` is the height above the node's plane, so nothing done on the
+canvas can move a node that was placed in 3D. Here `core` was moved in 3D and
+`ledger`, which was not, rides along inside it.
 
 See [the file format](./file-format) for the rules.

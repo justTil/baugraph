@@ -303,6 +303,33 @@
               }
             ]
           },
+          "position3d": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "extrusion": {
             "default": "regular",
             "type": "string",

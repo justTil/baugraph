@@ -19,7 +19,12 @@
 
 In the 3D view, a few keys change meaning: `↑` / `↓` move the selection one
 plane up or down, `←` / `→` step the flow spotlight, `F` fits the stack and
-`R` starts the turntable. See [the 3D view](./3d-view#getting-around).
+`R` starts the turntable. Nodes are moved the way a 3D editor moves objects —
+`G` grabs the selection, `X` / `Y` / `Z` lock it to an axis, a typed number
+moves it exactly that far, and `Alt G` puts it back where the canvas has it —
+and the numpad drives the camera: `1` / `3` / `7` front, right and top views,
+`2` `4` `6` `8` to turn, `.` to frame the selection. Middle-drag orbits and
+`⇧` middle-drag pans. See [the 3D view](./3d-view#getting-around).
 
 The current diagram autosaves to `localStorage`, so a reload never loses
 work. That copy is a convenience, not the source of truth — export the JSON

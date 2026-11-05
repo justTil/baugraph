@@ -47,6 +47,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppTheme } from '@/composables/useAppTheme'
+import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { isStartupSample } from '@/features/diagram/composables/useEditorTabs'
 import { useFlows } from '@/features/diagram/composables/useFlows'
@@ -111,6 +112,7 @@ const {
   updateEdgeData,
   nudgeSelection,
   shiftNodesPlane,
+  resetNodes3D,
   planeOfNode,
   planes,
   flows,
@@ -276,13 +278,89 @@ watch(view3d, (on) => {
 /** Flows the 3D spotlight can step through: the ones that move. */
 const playableFlows = computed(() => flows.value.filter((f) => f.enabled).map((f) => f.id))
 
+/** One numpad step of the 3D camera, as a 3D editor turns its view. */
+const ORBIT_STEP = Math.PI / 12
+
 /**
- * Keys that mean something different in 3D. Arrow keys there do not nudge — a
- * node's place on the plane is the 2D canvas's business — they move the
+ * The numpad drives the 3D camera the way a 3D editor's does: 1, 3 and 7 look
+ * from the front, the right and above (with Ctrl, from the opposite side), 2,
+ * 4, 6 and 8 turn the view in steps, `.` frames the selection and `+`/`−`
+ * zoom. Matched on `code`, so the top row's digits — `3` is the 3D switch —
+ * keep their meaning. Camera only, so it works while presenting too.
+ */
+function onNumpad3D(event: KeyboardEvent): boolean {
+  const commands = view3dCommands.value
+  if (!commands || !event.code.startsWith('Numpad')) return false
+  const opposite = event.ctrlKey || event.metaKey ? -1 : 1
+  switch (event.code) {
+    case 'Numpad1':
+      commands.viewAxis('y', opposite)
+      break
+    case 'Numpad3':
+      commands.viewAxis('x', opposite)
+      break
+    case 'Numpad7':
+      commands.viewAxis('z', 1)
+      break
+    case 'Numpad4':
+      commands.orbit(-ORBIT_STEP, 0)
+      break
+    case 'Numpad6':
+      commands.orbit(ORBIT_STEP, 0)
+      break
+    case 'Numpad8':
+      commands.orbit(0, -ORBIT_STEP)
+      break
+    case 'Numpad2':
+      commands.orbit(0, ORBIT_STEP)
+      break
+    case 'NumpadDecimal':
+      commands.frameSelection()
+      break
+    case 'NumpadAdd':
+      commands.zoom(0.8)
+      break
+    case 'NumpadSubtract':
+      commands.zoom(1.25)
+      break
+    default:
+      return false
+  }
+  event.preventDefault()
+  return true
+}
+
+/**
+ * Keys that mean something different in 3D. Arrow keys there do not nudge —
+ * moving in 3D is `G`'s, and never touches the canvas — they move the
  * selection up and down the stack, and step the spotlight through the flows.
  * Returns whether the key was taken.
  */
 function onKey3D(event: KeyboardEvent): boolean {
+  if (onNumpad3D(event)) return true
+  if (event.key === 'Home') {
+    event.preventDefault()
+    view3dCommands.value?.frame()
+    return true
+  }
+  // By physical key: ⌥G types "©" on a Mac keyboard.
+  if (event.code === 'KeyG' && !event.metaKey && !event.ctrlKey) {
+    if (presenting.value || !selectedNodes.value.length) return true
+    event.preventDefault()
+    if (event.altKey) {
+      // Alt+G: back to where the canvas has them — the 3D editor's "clear location".
+      const ids = selectedNodes.value.map((n) => n.id)
+      if (!ids.some((id) => (nodes.value.find((n) => n.id === id)?.data as NodeData | undefined)?.position3d)) {
+        return true
+      }
+      commit()
+      endCoalesce()
+      resetNodes3D(ids)
+    } else {
+      view3dCommands.value?.grab()
+    }
+    return true
+  }
   switch (event.key) {
     case 'ArrowUp':
     case 'ArrowDown': {
@@ -849,7 +927,8 @@ function onKeyDown(event: KeyboardEvent) {
     return
   }
 
-  if (event.key === '3' && !event.altKey) {
+  // The numpad's 3 is a camera view while the 3D view is up; see `onNumpad3D`.
+  if (event.key === '3' && !event.altKey && !(view3d.value && event.code === 'Numpad3')) {
     view3d.value = !view3d.value
     return
   }

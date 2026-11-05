@@ -1,6 +1,7 @@
 import type { Ref, ShallowRef } from 'vue'
 import { ref, shallowRef } from 'vue'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import type { Axis } from '@/features/diagram/lib/axes3d'
 
 /**
  * The 3D view of one open diagram.
@@ -31,6 +32,14 @@ export interface View3DCommands {
   focusPlane(id: string): void
   /** The current frame as a PNG. */
   snapshot(): Promise<Blob | null>
+  /** `G`: the selection follows the pointer until it is put down. Whether there was anything to grab. */
+  grab(): boolean
+  /** Frames the selection, or everything with nothing selected. */
+  frameSelection(): void
+  /** Looks straight along an axis, from its `sign` end. */
+  viewAxis(axis: Axis, sign: 1 | -1): void
+  /** Turns the camera by radians: around the stack, and up or down. */
+  orbit(azimuth: number, polar: number): void
 }
 
 export interface View3DState {
@@ -45,6 +54,8 @@ export interface View3DState {
   spotlight: Ref<string | null>
   /** Planes taken out of the view — not out of the diagram. */
   hiddenPlanes: Ref<string[]>
+  /** Whether the move gizmo stands on the selection. */
+  gizmo: Ref<boolean>
   commands: ShallowRef<View3DCommands | null>
 }
 
@@ -60,6 +71,7 @@ export function view3DOf(documentId: string): View3DState {
       labels: ref(true),
       spotlight: ref(null),
       hiddenPlanes: ref([]),
+      gizmo: ref(true),
       commands: shallowRef(null),
     }
     states.set(documentId, state)
