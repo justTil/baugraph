@@ -90,6 +90,21 @@ All notable changes to this project will be documented in this file.
   written for a label or a point that was never moved, so no existing file
   changes. The JSON Schema and the AI skills are regenerated to match.
 
+### Changed
+
+- **A new logo, as part of the valsom family.** Baugraph's mark is now the
+  letters **BG** in Geist on valsom's orange tile, in the favicon, the home
+  screen icon, the VS Code extension, the docs and the link preview.
+- **The interface keeps its clean, neutral look, with valsom orange as the one
+  accent.** It marks what is current or selected — the focused tab, the latest
+  release, the chosen export backdrop, a drop target — and nothing else, so
+  buttons, switches and focus rings stay as they were.
+- **Fonts are served by Baugraph itself.** Geist and Geist Mono ship with the
+  app, the docs and the VS Code extension instead of being fetched from Google
+  Fonts, so nothing is requested from Google when the page opens, the privacy
+  policy no longer needs to mention it, and the extension shows the right
+  typeface offline. Code and file names are now set in Geist Mono.
+
 ### Fixed
 
 - **Reversing a manually routed connection** now walks its bend points the

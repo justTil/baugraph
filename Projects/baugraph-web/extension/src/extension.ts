@@ -223,17 +223,18 @@ async function page(webview: vscode.Webview, media: vscode.Uri): Promise<string>
    *     importer.
    *   - `worker-src blob:` is Monaco's, which the webview build inlines and
    *     starts from a blob (see `src/vscode/monaco-env.ts`).
-   *   - The font sources are the app's typeface. Without a network it falls back
-   *     to the system sans and nothing else changes.
+   *   - The app's typeface, Geist, is bundled into `media/` with the rest of the
+   *     webview, so fonts come from the resource origin like everything else
+   *     and the editor looks the same offline.
    */
   const csp = [
     `default-src 'none'`,
     `img-src ${webview.cspSource} data: blob:`,
-    `font-src ${webview.cspSource} https://fonts.gstatic.com data:`,
-    `style-src ${webview.cspSource} https://fonts.googleapis.com 'unsafe-inline'`,
+    `font-src ${webview.cspSource} data:`,
+    `style-src ${webview.cspSource} 'unsafe-inline'`,
     `script-src ${webview.cspSource} 'nonce-${nonce}'`,
     `worker-src blob:`,
-    `connect-src ${webview.cspSource} https://fonts.googleapis.com https://fonts.gstatic.com`,
+    `connect-src ${webview.cspSource}`,
   ].join('; ')
 
   return `<!DOCTYPE html>

@@ -33,7 +33,7 @@ const tone = (kind: ChangeKind) =>
     <header class="space-y-1">
       <div class="flex items-center gap-2">
         <Sparkles class="text-muted-foreground size-5" />
-        <h1 class="font-heading text-navy text-2xl font-medium tracking-tight">What's new</h1>
+        <h1 class="text-2xl font-semibold tracking-tight">What's new</h1>
       </div>
       <p class="text-muted-foreground text-sm">
         Every notable change to Baugraph, newest first. You're on
@@ -49,19 +49,19 @@ const tone = (kind: ChangeKind) =>
       >
         <span
           class="bg-background absolute top-6 -left-[1.8125rem] size-3 rounded-full border-2"
-          :class="index === 0 ? 'border-primary' : 'border-muted-foreground/40'"
+          :class="index === 0 ? 'border-brand' : 'border-muted-foreground/40'"
           aria-hidden="true"
         />
 
         <Card>
           <CardHeader>
             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h2 class="font-heading text-lg font-medium">
+              <h2 class="text-lg font-semibold tracking-tight">
                 {{ release.version }}
               </h2>
               <span
                 v-if="index === 0"
-                class="border-primary/30 bg-primary/10 text-primary rounded-full border px-1.5 py-0.5 text-[0.6875rem] font-medium"
+                class="border-brand/30 bg-brand/10 text-brand-strong rounded-full border px-1.5 py-0.5 text-[0.6875rem] font-medium"
               >
                 Latest
               </span>
