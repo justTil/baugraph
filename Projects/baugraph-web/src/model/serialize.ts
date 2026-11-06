@@ -135,6 +135,7 @@ const FLOW_KEY_ORDER: (keyof MessageFlow)[] = [
   'id',
   'label',
   'edges',
+  'steps',
   'from',
   'color',
   'motion',
@@ -245,6 +246,12 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
   const flows = (doc.flows ?? []).map((flow) => {
     const trimmed = omitDefaults({ ...flow }, FLOW_DEFAULTS)
     if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    // No steps is the automatic order, which is what saying nothing already means.
+    if (trimmed.steps) {
+      const steps = trimmed.steps.filter((step) => step.length > 0)
+      if (steps.length) trimmed.steps = steps.map((step) => [...step])
+      else delete trimmed.steps
+    }
     // An override that overrides nothing is noise, and so is an empty map of them.
     if (trimmed.style) {
       const style = Object.fromEntries(

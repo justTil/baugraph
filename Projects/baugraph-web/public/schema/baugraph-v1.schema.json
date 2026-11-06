@@ -539,6 +539,19 @@
               "pattern": "^[A-Za-z0-9._:-]+$"
             }
           },
+          "steps": {
+            "type": "array",
+            "items": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              }
+            }
+          },
           "from": {
             "default": null,
             "anyOf": [

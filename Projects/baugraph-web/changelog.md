@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **A new message flow editor, docked under the canvas.** *Message flows* in
+  the toolbar now opens a panel below the diagram instead of a dialog over
+  it, so the messages keep moving in view while you edit them, hovering a row
+  lights up its connection on the canvas, and connections can be selected on
+  the canvas and added to a flow without closing anything. Drag its top edge
+  to resize it; the height is remembered.
+  - **Flows are shown as sequence diagrams.** Every node a flow touches is a
+    column with a lifeline under it, and every connection is a row with an
+    arrow from sender to receiver, grouped into numbered steps in the order
+    the message travels. The messages travel those arrows on the canvas's
+    own clock, and the step that is moving right now lights up in the flow's
+    colour.
+  - **You can change the order messages travel in.** Drag a row by its grip
+    between two steps to give it a step of its own, or onto a step to send it
+    at the same time; the arrows beside each row move it one place at a time,
+    and a step of several can be split back into one after another. The new
+    **Order** switch offers *Fan out* and *One by one*, which follow the
+    arrows as before, and *Custom*, which any rearranging turns into: each
+    step leaves once the one before it has arrived. A request and its reply
+    read as one message that waits at a node for its turn. *Automatic again*
+    goes back to following the arrows.
+  - **Look & timing sits beside the sequence**, and clicking a row brings up
+    that connection's own colour, message shape and speed at the top. On a
+    narrow screen it slides over the sequence from a *Look* button instead.
+  - The connection inspector now says which step of each flow a connection
+    is in.
+- **The "Flow paused" tag explains itself.** Hovering it says which flow is
+  paused and how to remove the tag — press *Run* on the flow in the message
+  flow editor — and clicking it opens the editor on that flow with the
+  connection picked out.
+- **A flow's hand-set order is saved in a new optional `steps` field**: a
+  list of steps, each a list of the flow's edge ids that travel together.
+  Flows that follow the arrows write nothing new, so no existing file
+  changes. Exported SVGs and the 3D view play a custom order exactly as the
+  canvas does. The JSON Schema and the AI skills are regenerated to match.
+
+### Changed
+
+- The flow editor's *When one node feeds several* setting is now the *Fan
+  out* / *One by one* choice of the **Order** switch.
+
 ## [1.34.0]
 
 ### Added

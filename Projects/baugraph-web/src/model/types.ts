@@ -321,9 +321,20 @@ export interface MessageFlow {
   label: string
   /**
    * Connections the message travels, by edge id. Order is not significant —
-   * the traversal order comes from the graph.
+   * the traversal order comes from the graph, or from `steps` when it is set.
    */
   edges: string[]
+  /**
+   * A hand-set order, for when the one read off the graph is not the story the
+   * diagram tells. Each entry is one step: the connections in it travel at the
+   * same time, and a step leaves once everything in the step before it has
+   * arrived. Every id must be one of `edges`; any of `edges` left out is sent
+   * after the last step.
+   *
+   * Omitted (the default) means "work it out" — `mode` then decides what
+   * happens where the path forks. Set, it replaces `mode` entirely.
+   */
+  steps?: string[][]
   /**
    * Node the message starts at. Omitted means "work it out": the connection set
    * has exactly one end nothing else feeds into, and that is the start.

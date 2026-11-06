@@ -3,7 +3,7 @@ import { computed, effectScope, ref, watch } from 'vue'
 import gsap from 'gsap'
 import type { ColorKey, MessageFlow } from '@/model'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
-import { edgeStyle, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
+import { edgeStyle, flowPlan, flowSteps, tokenAt } from '@/features/diagram/lib/flow-graph'
 import { diagramStore, useDiagram } from '@/features/diagram/composables/useDiagram'
 
 /**
@@ -112,10 +112,11 @@ function createFlowRuntime(documentId: string) {
 
   /**
    * The flow editor: whether it is open, which flow it is showing, and which of
-   * that flow's connections is opened up. Shared state rather than a prop because
-   * the two things that open it — the toolbar and a connection's inspector — sit
-   * on opposite sides of the canvas from it, and arriving from a connection should
-   * land on that connection rather than on a list to hunt through.
+   * that flow's connections is picked out. Shared state rather than a prop
+   * because the things that open it — the toolbar, a connection's inspector, a
+   * paused tag on the canvas — sit all around it, and arriving from a
+   * connection should land on that connection rather than on a list to hunt
+   * through.
    */
   const editorOpen = ref(false)
   const editing = ref<string | null>(null)
@@ -431,6 +432,12 @@ function createFlowRuntime(documentId: string) {
 
   const state = flowState()
 
+  /** The live edges by id, in the shape the planner wants. */
+  const edgeIndex = () =>
+    new Map<string, FlowEdge>(
+      edges.value.map((e) => [e.id, { id: e.id, source: e.source, target: e.target }]),
+    )
+
   return {
     paused,
     running,
@@ -448,9 +455,20 @@ function createFlowRuntime(documentId: string) {
     stopFlowRuntime,
     /** Opens the flow editor, on `id` when one is named and `edge` when one is. */
     openFlowEditor: (id: string | null = null, edge: string | null = null) => {
-      editing.value = id
+      if (id) editing.value = id
       editingEdge.value = edge
       editorOpen.value = true
+    },
+    /**
+     * Where a flow's animation is right now, for anything that wants to play
+     * along with the canvas rather than run a clock of its own: the plan the
+     * runtime is drawing from and how many seconds into it it is. `null` for a
+     * flow that is not animating — switched off, or with nothing to travel.
+     */
+    liveOf: (id: string): { plan: FlowPlan; time: number } | null => {
+      const run = runs.get(id)
+      if (!run?.tween) return null
+      return { plan: run.plan, time: run.clock.t * run.plan.duration }
     },
     /** Token slots a connection has to draw. */
     tokensFor: (edge: string) => state.value.byEdge.get(edge) ?? [],
@@ -465,11 +483,10 @@ function createFlowRuntime(documentId: string) {
      */
     planOf: (flow: MessageFlow): FlowPlan => {
       void geometry.value
-      const byId = new Map<string, FlowEdge>(
-        edges.value.map((e) => [e.id, { id: e.id, source: e.source, target: e.target }]),
-      )
-      return flowPlan(flow, byId, lengthOf)
+      return flowPlan(flow, edgeIndex(), lengthOf)
     },
+    /** The steps a flow runs in — its own order, or the one read off the graph. */
+    stepsOf: (flow: MessageFlow): string[][] => flowSteps(flow, edgeIndex()),
     /** Stops every tween and releases the registries; called when the tab closes. */
     dispose: () => {
       stopFlowRuntime()

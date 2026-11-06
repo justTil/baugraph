@@ -14,9 +14,10 @@ import DiagramToolbar from '@/features/diagram/components/DiagramToolbar.vue'
 import InspectorPanel from '@/features/diagram/components/InspectorPanel.vue'
 import PalettePanel from '@/features/diagram/components/PalettePanel.vue'
 import ExportDialog from '@/features/diagram/components/ExportDialog.vue'
-import FlowsDialog from '@/features/diagram/components/FlowsDialog.vue'
+import FlowEditorPanel from '@/features/diagram/components/FlowEditorPanel.vue'
 import HelpDialog from '@/features/diagram/components/HelpDialog.vue'
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
+import { flowRuntime } from '@/features/diagram/composables/useFlows'
 import { VSCODE_DOCUMENT_ID, post, useVscodeDocument } from '@/vscode/bridge'
 
 /**
@@ -32,6 +33,7 @@ provide(DOCUMENT_ID, VSCODE_DOCUMENT_ID)
 
 const { store, ready, editable, dark, fileName, parseError, save } = useVscodeDocument()
 const { presenting } = usePresentation()
+const { editorOpen: flowEditorOpen } = flowRuntime(VSCODE_DOCUMENT_ID)
 
 const exportOpen = ref(false)
 const helpOpen = ref(false)
@@ -101,7 +103,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         starting viewport.
       -->
       <main v-if="ready && !parseError" class="flex min-h-0 flex-1">
-        <DiagramCanvas @export="exportOpen = true" />
+        <!-- The flow editor docks under the canvas, the same as in the web app. -->
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+          <DiagramCanvas @export="exportOpen = true" />
+          <FlowEditorPanel v-if="flowEditorOpen && !presenting" />
+        </div>
         <InspectorPanel v-if="!presenting" @export="exportOpen = true" />
       </main>
 
@@ -148,8 +154,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     </Teleport>
 
     <template v-if="ready && !parseError">
-      <!-- Opens itself: both the toolbar and a connection's inspector reach for it. -->
-      <FlowsDialog />
       <ExportDialog v-model:open="exportOpen" />
       <HelpDialog v-model:open="helpOpen" />
     </template>

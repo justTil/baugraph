@@ -155,6 +155,17 @@ let pasteOffset = 0
 /** Whether the clipboard holds a copy, so a Paste menu item can grey itself out. */
 const hasClipboard = ref(false)
 
+/** A flow with its lists copied, so a snapshot never shares an array with the live one. */
+const copyFlow = (flow: MessageFlow): MessageFlow => ({
+  ...flow,
+  edges: [...flow.edges],
+  ...(flow.steps ? { steps: flow.steps.map((step) => [...step]) } : {}),
+})
+
+/** A flow's steps without the connections `drop` names, and without the steps that leaves empty. */
+const stepsWithout = (steps: string[][], drop: (edge: string) => boolean): string[][] =>
+  steps.map((step) => step.filter((edge) => !drop(edge))).filter((step) => step.length > 0)
+
 /**
  * Everything one open diagram owns: its contents, its undo history and its
  * autosave. Built per document rather than per module so two editor tabs can
@@ -520,7 +531,7 @@ function createDiagramStore(documentId: string) {
       canvas: { ...canvas },
       nodes: sorted.map(toModelNode),
       edges: edges.value.map(toModelEdge),
-      flows: flows.value.map((flow) => ({ ...flow, edges: [...flow.edges] })),
+      flows: flows.value.map(copyFlow),
     }
   }
 
@@ -534,7 +545,7 @@ function createDiagramStore(documentId: string) {
     Object.assign(canvas, doc.canvas)
     nodes.value = doc.nodes.map(toVueFlowNode)
     edges.value = doc.edges.map(toVueFlowEdge)
-    flows.value = (doc.flows ?? []).map((flow) => ({ ...flow, edges: [...flow.edges] }))
+    flows.value = (doc.flows ?? []).map(copyFlow)
   }
 
   /* ---------------------------------------------------------------- history */
@@ -918,11 +929,26 @@ function createDiagramStore(documentId: string) {
           : undefined
         const styleShrank =
           !!flow.style && Object.keys(style ?? {}).length !== Object.keys(flow.style).length
-        if (kept.length === flow.edges.length && from === (flow.from ?? null) && !styleShrank) {
+        // A step whose last connection went is a step of waiting for nothing.
+        const steps = flow.steps ? stepsWithout(flow.steps, (id) => !live.has(id)) : undefined
+        const stepsShrank =
+          !!flow.steps && JSON.stringify(steps) !== JSON.stringify(flow.steps)
+        if (
+          kept.length === flow.edges.length &&
+          from === (flow.from ?? null) &&
+          !styleShrank &&
+          !stepsShrank
+        ) {
           return flow
         }
         changed = true
-        return { ...flow, edges: kept, from, ...(style ? { style } : {}) }
+        return {
+          ...flow,
+          edges: kept,
+          from,
+          ...(style ? { style } : {}),
+          ...(flow.steps ? { steps: steps?.length ? steps : undefined } : {}),
+        }
       })
       .filter((flow) => flow.edges.length > 0)
 
@@ -964,6 +990,31 @@ function createDiagramStore(documentId: string) {
 
   function removeFlow(id: string) {
     flows.value = flows.value.filter((flow) => flow.id !== id)
+  }
+
+  /**
+   * Sets the order a flow's connections travel in, or — with `undefined` —
+   * hands it back to the graph. The order is tidied on the way in: only the
+   * flow's own connections, each once, no empty steps, and any connection the
+   * order left out sent after the last step, so the flow and its order can
+   * never disagree about what it travels.
+   */
+  function setFlowSteps(id: string, steps: string[][] | undefined) {
+    const flow = flows.value.find((f) => f.id === id)
+    if (!flow) return
+    if (!steps) {
+      updateFlow(id, { steps: undefined })
+      return
+    }
+    const members = new Set(flow.edges)
+    const placed = new Set<string>()
+    const next = stepsWithout(steps, (edge) => {
+      if (!members.has(edge) || placed.has(edge)) return true
+      placed.add(edge)
+      return false
+    })
+    for (const edge of flow.edges) if (!placed.has(edge)) next.push([edge])
+    updateFlow(id, { steps: next.length ? next : undefined })
   }
 
   /* --------------------------------------------------------------- 3D height */
@@ -1023,7 +1074,12 @@ function createDiagramStore(documentId: string) {
     const flow = flows.value.find((f) => f.id === id)
     if (!flow) return
     if (!flow.edges.includes(edgeId)) {
-      updateFlow(id, { edges: [...flow.edges, edgeId] })
+      // A connection joining a hand-ordered flow comes last: the order so far
+      // was chosen, and slotting the newcomer in somewhere would unchoose it.
+      updateFlow(id, {
+        edges: [...flow.edges, edgeId],
+        ...(flow.steps ? { steps: [...flow.steps, [edgeId]] } : {}),
+      })
       return
     }
     const next = flow.edges.filter((e) => e !== edgeId)
@@ -1031,10 +1087,15 @@ function createDiagramStore(documentId: string) {
       removeFlow(id)
       return
     }
-    // The override goes with the connection it described.
+    // The override goes with the connection it described, and so does its step.
     const style = { ...(flow.style ?? {}) }
     delete style[edgeId]
-    updateFlow(id, { edges: next, style: Object.keys(style).length ? style : undefined })
+    const steps = flow.steps ? stepsWithout(flow.steps, (e) => e === edgeId) : undefined
+    updateFlow(id, {
+      edges: next,
+      style: Object.keys(style).length ? style : undefined,
+      steps: steps?.length ? steps : undefined,
+    })
   }
 
   /**
@@ -2018,6 +2079,7 @@ function createDiagramStore(documentId: string) {
     addFlow,
     updateFlow,
     removeFlow,
+    setFlowSteps,
     addAuthor,
     updateAuthor,
     removeAuthor,

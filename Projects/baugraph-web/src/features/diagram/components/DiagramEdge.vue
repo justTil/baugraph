@@ -44,7 +44,8 @@ const {
 } = useDiagram()
 const { getNodes, screenToFlowCoordinate, findEdge, viewport } = useVueFlow()
 const { presenting } = usePresentation()
-const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
+const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath, openFlowEditor } =
+  useFlows()
 const { mode: appThemeMode } = useAppTheme()
 
 const theme = computed(() => diagramTheme(appThemeMode.value))
@@ -640,9 +641,10 @@ const label = computed(() => {
  * it reads as "nothing is happening here on purpose", and dropped below the label
  * — wherever the label was moved to — so the two never overlap.
  */
-const pausedFlowCount = computed(
-  () => flows.value.filter((flow) => !flow.enabled && flow.edges.includes(props.id)).length,
+const pausedFlows = computed(() =>
+  flows.value.filter((flow) => !flow.enabled && flow.edges.includes(props.id)),
 )
+const pausedFlowCount = computed(() => pausedFlows.value.length)
 const pausedTag = computed(() => {
   if (!pausedFlowCount.value) return null
   const text = pausedFlowCount.value === 1 ? 'Flow paused' : `${pausedFlowCount.value} flows paused`
@@ -656,6 +658,21 @@ const pausedTag = computed(() => {
     width,
   }
 })
+
+/** The paused flows by name, for the tag's explanation. */
+const pausedNames = computed(() =>
+  pausedFlows.value.map((flow) => `“${flow.label || flow.id}”`).join(', '),
+)
+
+/**
+ * The tag says what is wrong; clicking it goes to where it is fixed — the flow
+ * editor, on the first paused flow, with this connection picked out.
+ */
+function openPausedFlow() {
+  const flow = pausedFlows.value[0]
+  if (!flow || presenting.value) return
+  openFlowEditor(flow.id, props.id)
+}
 </script>
 
 <template>
@@ -894,28 +911,60 @@ const pausedTag = computed(() => {
       </foreignObject>
     </Tooltip>
 
-    <g v-if="pausedTag" class="pointer-events-none select-none">
-      <rect
-        :x="pausedTag.x"
-        :y="pausedTag.y"
-        :width="pausedTag.width"
-        height="16"
-        rx="8"
-        :fill="theme.bg"
-        :stroke="theme.muted"
-        stroke-width="1"
-        stroke-dasharray="3 2"
-      />
-      <text
-        :x="pausedTag.cx"
-        :y="pausedTag.y + 11"
-        text-anchor="middle"
-        font-size="10"
-        :fill="theme.muted"
-      >
-        {{ pausedTag.text }}
-      </text>
-    </g>
+    <!--
+      Hovering the tag says why it is there and how to make it go away, since
+      the cause — a flow paused in the editor, maybe long ago — is nowhere near
+      it; clicking it goes straight there. Inert while presenting, like the rest
+      of the canvas.
+    -->
+    <Tooltip v-if="pausedTag" :delay-duration="150" :disabled="presenting">
+      <TooltipTrigger as-child>
+        <g
+          class="bg-edge__paused select-none"
+          :class="{ 'bg-edge__paused--live': !presenting }"
+          role="button"
+          :aria-label="`${pausedTag.text}. Open the message flow editor to run it again.`"
+          @pointerdown.stop
+          @click.stop="openPausedFlow"
+          @dblclick.stop
+        >
+          <rect
+            :x="pausedTag.x"
+            :y="pausedTag.y"
+            :width="pausedTag.width"
+            height="16"
+            rx="8"
+            :fill="theme.bg"
+            :stroke="theme.muted"
+            stroke-width="1"
+            stroke-dasharray="3 2"
+          />
+          <text
+            :x="pausedTag.cx"
+            :y="pausedTag.y + 11"
+            text-anchor="middle"
+            font-size="10"
+            :fill="theme.muted"
+            class="pointer-events-none"
+          >
+            {{ pausedTag.text }}
+          </text>
+        </g>
+      </TooltipTrigger>
+      <!-- See the label's tooltip above for why this sits in a foreignObject. -->
+      <foreignObject width="0" height="0">
+        <TooltipContent side="top" :side-offset="6" class="block max-w-64 space-y-1 text-left">
+          <p class="font-semibold">
+            {{ pausedFlowCount === 1 ? 'This message flow is paused' : 'These message flows are paused' }}
+          </p>
+          <p class="opacity-80">{{ pausedNames }} {{ pausedFlowCount === 1 ? 'does' : 'do' }} not move along this connection right now.</p>
+          <p>
+            To remove this tag, open <strong>Message flows</strong> and press
+            <strong>▶ Run</strong> on the flow. Click the tag to go there.
+          </p>
+        </TooltipContent>
+      </foreignObject>
+    </Tooltip>
   </template>
 
   <template v-if="props.selected && !dragging && waypoints.length">
@@ -999,6 +1048,20 @@ const pausedTag = computed(() => {
 
 .bg-edge__label--info {
   cursor: help;
+}
+
+/* Same reason as the label: Vue Flow would otherwise leave the tag's fill dead to hover. */
+.bg-edge__paused {
+  pointer-events: none;
+}
+
+.bg-edge__paused--live {
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.bg-edge__paused--live:hover rect {
+  stroke-dasharray: none;
 }
 
 /* A label can be picked up and moved, wherever it sits — except while presenting. */

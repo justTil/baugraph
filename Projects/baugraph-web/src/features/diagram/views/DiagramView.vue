@@ -22,7 +22,7 @@ import DiagramCanvas from '@/features/diagram/components/DiagramCanvas.vue'
 import DiagramToolbar from '@/features/diagram/components/DiagramToolbar.vue'
 import InspectorPanel from '@/features/diagram/components/InspectorPanel.vue'
 import ExportDialog from '@/features/diagram/components/ExportDialog.vue'
-import FlowsDialog from '@/features/diagram/components/FlowsDialog.vue'
+import FlowEditorPanel from '@/features/diagram/components/FlowEditorPanel.vue'
 import HelpDialog from '@/features/diagram/components/HelpDialog.vue'
 import NewDocumentDialog from '@/features/diagram/components/NewDocumentDialog.vue'
 import OpenDialog from '@/features/diagram/components/OpenDialog.vue'
@@ -34,6 +34,7 @@ import {
   useRenamePrompt,
 } from '@/features/diagram/composables/useDocumentFile'
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
+import { flowRuntime } from '@/features/diagram/composables/useFlows'
 
 // Docked views stay mounted behind their tab, and several can share the screen,
 // so this view has to know which panel it is in before it knows anything else.
@@ -67,6 +68,10 @@ const closing = computed(() => pendingClose.value === documentId)
 // Full screen for a call: the inspector gives up its width entirely rather
 // than folding to its thin rail, which would still take a bite out of it.
 const { presenting } = usePresentation()
+
+// The flow editor docks under the canvas; it opens itself, from the toolbar, a
+// connection's inspector or a paused tag on the canvas.
+const { editorOpen: flowEditorOpen } = flowRuntime(documentId)
 
 /**
  * The app header holds one toolbar and several editors can share the screen, so
@@ -135,12 +140,16 @@ async function saveAndClose() {
   </Teleport>
 
   <div class="flex min-h-0 flex-1">
-    <DiagramCanvas @export="exportOpen = true" />
+    <!--
+      The flow editor sits under the canvas rather than over it, so the messages
+      it edits stay in view while it is open. The inspector keeps its full height.
+    -->
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+      <DiagramCanvas @export="exportOpen = true" />
+      <FlowEditorPanel v-if="flowEditorOpen && !presenting" />
+    </div>
     <InspectorPanel v-if="!presenting" @export="exportOpen = true" />
   </div>
-
-  <!-- Opens itself: both the toolbar and a connection's inspector reach for it. -->
-  <FlowsDialog />
 
   <CloseDocumentDialog
     :open="closing"

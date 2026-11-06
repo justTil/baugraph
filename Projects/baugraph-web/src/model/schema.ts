@@ -170,6 +170,9 @@ export const flowSchema = z.object({
   // A flow with nothing to travel has nothing to say; the editor drops one whose
   // last connection is deleted rather than leaving it behind.
   edges: z.array(idSchema).min(1),
+  // An order set by hand. Each inner list is one step; an empty step would say
+  // "wait for nothing", which is not something a diagram can mean.
+  steps: z.array(z.array(idSchema).min(1)).optional(),
   from: idSchema.nullable().default(FLOW_DEFAULTS.from),
   color: z.enum(COLOR_KEYS).default(FLOW_DEFAULTS.color),
   motion: z.enum(FLOW_MOTIONS).default(FLOW_DEFAULTS.motion),
@@ -340,6 +343,29 @@ export const documentSchema = z
           })
         }
         seenEdges.add(edge)
+      })
+
+      // A step can only order what the flow travels, and a connection is
+      // travelled once — two steps both sending it would contradict each other.
+      const stepped = new Set<string>()
+      flow.steps?.forEach((step, j) => {
+        step.forEach((edge, k) => {
+          if (!seenEdges.has(edge)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['flows', i, 'steps', j, k],
+              message: `"${edge}" is ordered but is not one of this flow's connections`,
+            })
+          }
+          if (stepped.has(edge)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['flows', i, 'steps', j, k],
+              message: `connection "${edge}" is in more than one step`,
+            })
+          }
+          stepped.add(edge)
+        })
       })
 
       if (flow.from != null && !ids.has(flow.from)) {

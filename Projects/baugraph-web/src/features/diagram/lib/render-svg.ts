@@ -645,20 +645,29 @@ function renderFlows(
      * Each element holds still at the start of its hop until the message reaches
      * it, walks the hop, then holds at the end; the opacity animation is what
      * hands the message from one hop's element to the next, at the same instant,
-     * so the swap cannot be seen.
+     * so the swap cannot be seen. In a hand-set order a message can arrive
+     * before its next hop leaves; the next hop's element shows it waiting at
+     * the start from the moment it arrives, exactly as `tokenAt` places it.
      */
     for (const branch of plan.branches) {
-      if (branch.journey <= 0) continue
-      const fade = fadeOf(branch.journey)
+      const span = branch.journey - branch.begin
+      if (span <= 0) continue
+      const fade = fadeOf(span)
       const opacityAt = (t: number) =>
-        fade > 0 ? Math.max(0, Math.min(1, Math.min(t, branch.journey - t) / fade)) : 1
+        fade > 0
+          ? Math.max(0, Math.min(1, Math.min(t - branch.begin, branch.journey - t) / fade))
+          : 1
 
-      for (const hop of branch.hops) {
+      branch.hops.forEach((hop, index) => {
         const geometry = geometries.get(hop.edge)
-        if (!geometry || hop.duration <= 0) continue
+        if (!geometry || hop.duration <= 0) return
         const look = edgeStyle(flow, hop.edge)
         const h0 = hop.start
         const h1 = hop.start + hop.duration
+        // Where this hop takes the message over: the moment the one before it
+        // landed, which is its own start unless the message waited in between.
+        const previous = branch.hops[index - 1]
+        const w0 = previous ? Math.min(h0, previous.start + previous.duration) : h0
 
         for (let token = 0; token < plan.tokens; token++) {
           // Where this message sits on the clock. A burst runs its later
@@ -667,8 +676,9 @@ function renderFlows(
           const at = (t: number) => Math.min(1, Math.max(0, (t - shift) / cycle))
           const u0 = at(h0)
           const u1 = at(h1)
+          const uw = at(w0)
           // This message never reaches this hop inside one cycle.
-          if (u1 <= u0) continue
+          if (u1 <= uw) continue
 
           const time = (u: number) => u * cycle + shift
           const progress = (u: number) =>
@@ -676,8 +686,8 @@ function renderFlows(
           const p0 = progress(u0).toFixed(5)
           const p1 = progress(u1).toFixed(5)
 
-          const ua = Math.min(u1, Math.max(u0, at(fade)))
-          const ub = Math.min(u1, Math.max(u0, at(branch.journey - fade)))
+          const ua = Math.min(u1, Math.max(uw, at(branch.begin + fade)))
+          const ub = Math.min(u1, Math.max(uw, at(branch.journey - fade)))
 
           const motion =
             `<animateMotion dur="${cycle.toFixed(3)}s" repeatCount="${repeat}"${freeze} ` +
@@ -687,7 +697,7 @@ function renderFlows(
           const values = [
             0,
             0,
-            opacityAt(time(u0)),
+            opacityAt(time(uw)),
             opacityAt(time(ua)),
             opacityAt(time(ub)),
             opacityAt(time(u1)),
@@ -698,14 +708,14 @@ function renderFlows(
             `<animate attributeName="opacity" dur="${cycle.toFixed(3)}s" ` +
             `repeatCount="${repeat}"${freeze} calcMode="linear" ` +
             `values="${values.map((v) => v.toFixed(3)).join(';')}" ` +
-            `keyTimes="${keyTimes([0, u0, u0, ua, ub, u1, u1, 1])}"/>`
+            `keyTimes="${keyTimes([0, uw, uw, ua, ub, u1, u1, 1])}"/>`
 
           parts.push(
             `<g opacity="0">${tokenMarkup(look.token, COLOR_HEX[look.color], bg)}` +
               `${motion}${opacity}</g>`,
           )
         }
-      }
+      })
     }
   }
 

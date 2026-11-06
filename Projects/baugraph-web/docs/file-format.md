@@ -99,7 +99,8 @@ All in service of readable diffs:
   inside a `data` block are sorted too. None of this carries meaning: paint
   order comes from a node's `kind`, and a flow's hops are derived from the
   graph — so sorting costs nothing and takes "two people built the same
-  diagram in a different order" out of the diff entirely.
+  diagram in a different order" out of the diff entirely. A flow's `steps`
+  is the one list whose order *is* its meaning, so it is never sorted.
 - **`position` and `size` stay on one line**, keeping "moved a node" to a
   one-line diff.
 - **A child's `position` is relative to its `parent` zone**, so moving a
@@ -129,6 +130,13 @@ All in service of readable diffs:
 - **A flow names connections, not a timeline.** `edges` is a set of edge ids
   and the traversal is derived from them, so a fan-out is four ids rather
   than a hand-written schedule that would go stale the moment a node moved.
+  An order set by hand in the editor is the one exception, and it is kept
+  apart in `steps`: a list of steps, each a list of edge ids that travel at
+  the same time, e.g.
+  `"steps": [["client--api"], ["api--db"], ["db--api"], ["api--client"]]`.
+  Every id in it must be one of the flow's `edges`, and each may appear once;
+  any of `edges` it leaves out run after the last step. A flow following the
+  arrows writes no `steps` key.
   Every id has to resolve: a flow pointing at a connection that is not there
   is rejected on open, and the editor drops a flow whose last connection is
   deleted rather than leaving one behind. A diagram with no flows writes no

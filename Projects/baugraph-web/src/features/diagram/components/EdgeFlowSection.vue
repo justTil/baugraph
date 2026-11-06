@@ -21,7 +21,7 @@ const props = defineProps<{ edgeId: string }>()
 
 const { flows, commit, endCoalesce, addFlow, updateFlow, toggleFlowEdge, flowsOnEdge } = useDiagram()
 
-const { paused, highlighted, planOf, openFlowEditor } = useFlows()
+const { paused, highlighted, planOf, stepsOf, openFlowEditor } = useFlows()
 
 const on = computed(() => flowsOnEdge(props.edgeId))
 const off = computed(() => flows.value.filter((flow) => !flow.edges.includes(props.edgeId)))
@@ -35,6 +35,13 @@ const colourOf = (flow: MessageFlow) =>
 
 /** Whether this connection is drawn its own way rather than like the rest. */
 const tweaked = (flow: MessageFlow) => Object.keys(flow.style?.[props.edgeId] ?? {}).length > 0
+
+/** Where in the flow's order this connection comes — "step 2 of 4". */
+function stepOf(flow: MessageFlow): string {
+  const steps = stepsOf(flow)
+  const at = steps.findIndex((step) => step.includes(props.edgeId))
+  return at < 0 ? '' : `step ${at + 1} of ${steps.length}`
+}
 
 function act(fn: () => void) {
   commit()
@@ -112,13 +119,16 @@ function hover(flow: MessageFlow | null) {
         <span
           class="min-w-0 flex-1 truncate text-xs font-medium"
           :class="{ 'text-muted-foreground': !flow.enabled }"
+          :title="`${flow.label || flow.id} — ${stepOf(flow)}`"
         >
           {{ flow.label || flow.id }}
+          <span class="text-muted-foreground font-normal">· {{ stepOf(flow) }}</span>
           <span v-if="tweaked(flow)" class="text-muted-foreground font-normal">· own look</span>
         </span>
         <span
           v-if="!flow.enabled"
           class="text-muted-foreground bg-muted shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide uppercase"
+          title="Paused — press ▶ to run it again and remove the tag on the canvas"
         >
           Paused
         </span>
@@ -136,7 +146,7 @@ function hover(flow: MessageFlow | null) {
           variant="ghost"
           size="sm"
           class="text-muted-foreground -my-1 h-6 shrink-0 px-2 text-xs"
-          title="Edit this flow, and how it looks on this connection"
+          title="Open this flow in the editor, on this connection — to change its order or its look"
           @click="openFlowEditor(flow.id, props.edgeId)"
         >
           Edit

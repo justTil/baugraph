@@ -147,26 +147,27 @@ const SHORTCUTS_3D: [string, string][] = [
             to a topic with three subscribers is one envelope arriving and three leaving.
           </p>
           <p>
-            None of that is drawn by hand. A flow only records which connections the message
-            travels; the order of the hops, and where it splits, are worked out from how those
-            connections are wired — so adding a fourth subscriber to a fan-out is one click, and
-            rerouting a connection or dragging a node leaves the animation correct.
+            The editor opens under the canvas, so the diagram stays in view. It shows the flow
+            as a sequence diagram: a column for every node it touches and a row for every
+            connection, grouped into numbered steps in the order the message travels. While the
+            flow runs, the messages travel those rows too and the step that is moving lights up.
           </p>
           <p>
-            Pick how it is shown: <em>Messages</em> travelling the line, a moving <em>Line</em>
-            for a link under constant load, or both. Where a node leaves on several connections
-            at once, <em>When one node feeds several</em> decides what that means: <em>All at
-            once</em> copies the message onto every one of them, <em>One at a time</em> sends a
-            single message down them in turn — a routing slip, or a walkthrough of a sequence.
+            By default the order follows the arrows: <em>Fan out</em> copies the message onto
+            every connection where a node feeds several, <em>One by one</em> sends a single
+            message down them in turn. To tell it differently, <em>drag a row by its grip</em> —
+            between two steps for a step of its own, onto a step to send it at the same time —
+            or use the arrows beside it. That switches the order to <em>Custom</em>: each step
+            leaves once the one before it has arrived. <em>Automatic again</em> undoes it.
           </p>
           <p>
-            Two paths out of the same node rarely mean the same thing, so each connection can
-            be drawn its own way — the failure path as a red packet crawling to the dead-letter
-            queue while the rest are blue envelopes at full speed. Open a connection under
-            <em>Connections</em> in the flow editor and set its colour, message shape or speed
-            there; each control reads <em>same as the flow</em> until you touch it. Selecting a
-            <em>connection</em> on the canvas shows which flows it is part of, adds it to another
-            or takes it out, and opens the editor on that connection.
+            Pick how it is shown under <em>Look &amp; timing</em>: <em>Messages</em> travelling
+            the line, a moving <em>Line</em> for a link under constant load, or both. Two paths
+            out of the same node rarely mean the same thing, so click a row to draw that
+            connection its own way — the failure path as a red packet crawling to the
+            dead-letter queue while the rest are blue envelopes at full speed. Selecting a
+            <em>connection</em> on the canvas shows which flows it is part of and which step,
+            adds it to another or takes it out, and opens the editor on that row.
           </p>
           <p>
             <em>Sends</em> decides what kind of thing a flow is. <em>An event</em> goes through
@@ -178,8 +179,10 @@ const SHORTCUTS_3D: [string, string][] = [
           <p>
             Hover a flow in the editor to light up the connections it runs over. The pause
             button in the toolbar freezes every flow where it is, which is what you want while
-            working on a diagram that animates. Exported SVGs keep their animation; PNGs, being
-            one frame, leave it out.
+            working on a diagram that animates. Pausing a single flow marks its connections with
+            a <em>Flow paused</em> tag; hover it to see why, click it to jump to the flow, and
+            press <em>Run</em> there to remove it. Exported SVGs keep their animation; PNGs,
+            being one frame, leave it out.
           </p>
         </section>
 

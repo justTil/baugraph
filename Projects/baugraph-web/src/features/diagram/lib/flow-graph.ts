@@ -10,6 +10,11 @@ import type { DiagramEdge, FlowToken, MessageFlow } from '@/model'
  * branches leave that node and the tokens on them sat on top of each other up to
  * that point. Nobody has to author the split — it *is* the graph.
  *
+ * A flow can also carry an order of its own (`steps`), for when the graph's
+ * order is not the story being told: a request that waits for its reply, a
+ * hub that calls its subscribers one by one. Then the steps run one after
+ * another, and everything inside one step travels together.
+ *
  * Pure on purpose: the canvas animates from this, and the SVG export writes the
  * same numbers into SMIL, so the two cannot disagree.
  */
@@ -56,7 +61,13 @@ export interface FlowHop {
 /** One message's route, from the flow's start node to wherever it ends up. */
 export interface FlowBranch {
   hops: FlowHop[]
-  /** Total time on the road. */
+  /**
+   * Seconds after the flow starts that this message is sent. Zero for a route
+   * read off the graph; a later step of a hand-set order can send a message of
+   * its own part-way through.
+   */
+  begin: number
+  /** When the message arrives, in seconds after the flow starts. */
   journey: number
 }
 
@@ -77,6 +88,8 @@ export interface FlowPlan {
   duration: number
   /** Whether this plan never empties the line. */
   stream: boolean
+  /** Whether the order was set by hand (`steps`) rather than read off the graph. */
+  custom: boolean
   /** The connections actually travelled — a flow may list one twice over. */
   edges: Set<string>
   /** Node the message starts at, once resolved. `null` if it cannot be. */
@@ -186,48 +199,11 @@ function sequenceFrom(root: string, edges: FlowEdge[]): string[] {
 }
 
 /**
- * Times a route. Each hop begins the instant the message lands at its start
- * node, so branches out of the same node leave together and long hops take
- * proportionally longer — one speed across the whole diagram.
+ * The routes an automatic flow takes: every path out of the root, or the one
+ * walk of a `sequence`, plus a journey of its own for any piece of the
+ * selection the walk never reaches.
  */
-function timeRoute(
-  route: string[],
-  lengthOf: (edge: string) => number,
-  speedOf: (edge: string) => number,
-): FlowBranch {
-  const hops: FlowHop[] = []
-  let cursor = 0
-  for (const edge of route) {
-    const duration = Math.max(MIN_HOP, lengthOf(edge) / Math.max(speedOf(edge), 1))
-    hops.push({ edge, start: cursor, duration })
-    cursor += duration
-  }
-  return { hops, journey: cursor }
-}
-
-/**
- * Everything the animation needs, from the flow and the geometry of the lines it
- * runs on. `lengthOf` is the drawn length of a connection in canvas units — the
- * canvas measures the rendered path, the exporter computes it.
- */
-export function flowPlan(
-  flow: MessageFlow,
-  edgesById: Map<string, FlowEdge>,
-  lengthOf: (edge: string) => number,
-): FlowPlan {
-  const edges = resolveEdges(flow, edgesById)
-  const from = flowRoot(flow, edges)
-  const empty: FlowPlan = {
-    branches: [],
-    tokens: 0,
-    offset: 0,
-    duration: 0,
-    stream: flow.stream,
-    edges: new Set(),
-    from: null,
-  }
-  if (!edges.length || !from) return empty
-
+function automaticRoutes(flow: MessageFlow, edges: FlowEdge[], from: string): string[][] {
   const routes: string[][] =
     flow.mode === 'sequence' ? [sequenceFrom(from, edges)] : branchesFrom(from, edges)
 
@@ -247,9 +223,192 @@ export function flowPlan(
     }
   }
 
-  const branches = routes
-    .filter((route) => route.length)
-    .map((route) => timeRoute(route, lengthOf, (edge) => edgeStyle(flow, edge).speed))
+  return routes.filter((route) => route.length)
+}
+
+/**
+ * A hand-set order, made safe to run: ids the flow does not travel are dropped,
+ * a connection named twice keeps its first place, empty steps vanish — and a
+ * connection the order forgot to mention is sent after the last step rather
+ * than silently left still.
+ */
+function customSteps(steps: readonly (readonly string[])[], edges: FlowEdge[]): FlowEdge[][] {
+  const byId = new Map(edges.map((e) => [e.id, e]))
+  const placed = new Set<string>()
+  const out: FlowEdge[][] = []
+  for (const step of steps) {
+    const row: FlowEdge[] = []
+    for (const id of step) {
+      const edge = byId.get(id)
+      if (!edge || placed.has(id)) continue
+      placed.add(id)
+      row.push(edge)
+    }
+    if (row.length) out.push(row)
+  }
+  for (const edge of edges) if (!placed.has(edge.id)) out.push([edge])
+  return out
+}
+
+/**
+ * The steps a flow runs in, as the editor shows them.
+ *
+ * A hand-set order is returned as it stands. Otherwise the steps are read off
+ * the same walk the animation takes: for a fan-out, every connection sits at
+ * the depth it is first reached at, so the copies leaving one node share a
+ * step; for a `sequence`, each connection is a step of its own.
+ */
+export function flowSteps(flow: MessageFlow, edgesById: Map<string, FlowEdge>): string[][] {
+  const edges = resolveEdges(flow, edgesById)
+  if (!edges.length) return []
+  if (flow.steps?.length) return customSteps(flow.steps, edges).map((step) => step.map((e) => e.id))
+
+  const from = flowRoot(flow, edges)
+  if (!from) return []
+  if (flow.mode === 'sequence') {
+    // The walk covers every connection, reached or not, so this is the lot.
+    return sequenceFrom(from, edges).map((id) => [id])
+  }
+
+  const depth = new Map<string, number>()
+  const order: string[] = []
+  for (const route of automaticRoutes(flow, edges, from)) {
+    route.forEach((id, index) => {
+      const known = depth.get(id)
+      if (known === undefined) order.push(id)
+      if (known === undefined || index < known) depth.set(id, index)
+    })
+  }
+  const steps: string[][] = []
+  for (const id of order) (steps[depth.get(id)!] ??= []).push(id)
+  // `filter` skips holes, should a capped walk ever leave a depth empty.
+  return steps.filter((step) => step.length)
+}
+
+/** How long a message takes to cross one connection. */
+function hopDuration(
+  edge: string,
+  lengthOf: (edge: string) => number,
+  speedOf: (edge: string) => number,
+): number {
+  return Math.max(MIN_HOP, lengthOf(edge) / Math.max(speedOf(edge), 1))
+}
+
+/**
+ * Times a route. Each hop begins the instant the message lands at its start
+ * node, so branches out of the same node leave together and long hops take
+ * proportionally longer — one speed across the whole diagram.
+ */
+function timeRoute(
+  route: string[],
+  lengthOf: (edge: string) => number,
+  speedOf: (edge: string) => number,
+): FlowBranch {
+  const hops: FlowHop[] = []
+  let cursor = 0
+  for (const edge of route) {
+    const duration = hopDuration(edge, lengthOf, speedOf)
+    hops.push({ edge, start: cursor, duration })
+    cursor += duration
+  }
+  return { hops, begin: 0, journey: cursor }
+}
+
+/**
+ * Times a hand-set order. Each step leaves once the slowest hop of the one
+ * before it has arrived; everything in a step leaves together.
+ *
+ * The routes are what make it read as *one* message rather than a string of
+ * unrelated ones. A hop that leaves the node an earlier step just arrived at
+ * carries that message on — it waits there, if a sibling took longer — and two
+ * hops leaving that node in the same step are the message splitting, drawn the
+ * way a fan-out is. A node that has already passed its message on and sends
+ * again later sends a fresh one, so nothing is left loitering in between.
+ */
+function steppedBranches(
+  steps: FlowEdge[][],
+  lengthOf: (edge: string) => number,
+  speedOf: (edge: string) => number,
+): FlowBranch[] {
+  /** A message sitting at a node, and the step that sent it on, if one has. */
+  interface Arrival {
+    route: number
+    hops: number
+    takenAt: number | null
+  }
+
+  const routes: FlowHop[][] = []
+  const arrivals = new Map<string, Arrival>()
+  let clock = 0
+
+  steps.forEach((step, index) => {
+    const landed: [string, Arrival][] = []
+    let end = clock
+
+    for (const edge of step) {
+      const hop: FlowHop = { edge: edge.id, start: clock, duration: hopDuration(edge.id, lengthOf, speedOf) }
+      end = Math.max(end, hop.start + hop.duration)
+
+      const at = arrivals.get(edge.source)
+      let route: number
+      if (at && at.takenAt === null) {
+        // The message waiting here goes on.
+        routes[at.route]!.push(hop)
+        at.takenAt = index
+        route = at.route
+      } else if (at && at.takenAt === index) {
+        // It is going on down another connection at this very moment: a copy.
+        routes.push([...routes[at.route]!.slice(0, at.hops), hop])
+        route = routes.length - 1
+      } else {
+        routes.push([hop])
+        route = routes.length - 1
+      }
+      landed.push([edge.target, { route, hops: routes[route]!.length, takenAt: null }])
+    }
+
+    // Arrivals count from the next step on: a hop never continues one that is
+    // still on its way at the same time.
+    for (const [node, arrival] of landed) arrivals.set(node, arrival)
+    clock = end
+  })
+
+  return routes.map((hops) => {
+    const last = hops[hops.length - 1]!
+    return { hops, begin: hops[0]!.start, journey: last.start + last.duration }
+  })
+}
+
+/**
+ * Everything the animation needs, from the flow and the geometry of the lines it
+ * runs on. `lengthOf` is the drawn length of a connection in canvas units — the
+ * canvas measures the rendered path, the exporter computes it.
+ */
+export function flowPlan(
+  flow: MessageFlow,
+  edgesById: Map<string, FlowEdge>,
+  lengthOf: (edge: string) => number,
+): FlowPlan {
+  const edges = resolveEdges(flow, edgesById)
+  const custom = !!flow.steps?.length
+  const ordered = custom ? customSteps(flow.steps!, edges) : null
+  const from = ordered ? (ordered[0]?.[0]?.source ?? null) : flowRoot(flow, edges)
+  const empty: FlowPlan = {
+    branches: [],
+    tokens: 0,
+    offset: 0,
+    duration: 0,
+    stream: flow.stream,
+    custom,
+    edges: new Set(),
+    from: null,
+  }
+  if (!edges.length || !from) return empty
+
+  const speedOf = (edge: string) => edgeStyle(flow, edge).speed
+  const branches = ordered
+    ? steppedBranches(ordered, lengthOf, speedOf)
+    : automaticRoutes(flow, edges, from).map((route) => timeRoute(route, lengthOf, speedOf))
 
   const longest = branches.reduce((max, b) => Math.max(max, b.journey), 0)
   const count = Math.max(1, flow.count)
@@ -270,6 +429,7 @@ export function flowPlan(
       offset: spacing,
       duration: spacing,
       stream: true,
+      custom,
       edges: new Set(branches.flatMap((b) => b.hops.map((h) => h.edge))),
       from,
     }
@@ -285,6 +445,7 @@ export function flowPlan(
     offset: -stagger,
     duration: longest + stagger * (count - 1) + Math.max(0, flow.pause),
     stream: false,
+    custom,
     edges: new Set(branches.flatMap((b) => b.hops.map((h) => h.edge))),
     from,
   }
@@ -295,10 +456,12 @@ export const fadeOf = (journey: number) => Math.min(0.2, journey * 0.22)
 
 /**
  * Where one message is at `time` seconds into the flow. `null` while it is
- * waiting to be sent, or once it has arrived.
+ * waiting to be sent, or once it has arrived. Between two hops of a hand-set
+ * order it sits at the start of the next one, which is the node it is waiting
+ * at.
  */
 export function tokenAt(branch: FlowBranch, time: number): TokenPosition | null {
-  if (time < 0 || time > branch.journey || !branch.hops.length) return null
+  if (time < branch.begin || time > branch.journey || !branch.hops.length) return null
 
   let hop = branch.hops[branch.hops.length - 1]!
   for (const candidate of branch.hops) {
@@ -308,9 +471,9 @@ export function tokenAt(branch: FlowBranch, time: number): TokenPosition | null 
     }
   }
 
-  const fade = fadeOf(branch.journey)
+  const fade = fadeOf(branch.journey - branch.begin)
   const opacity = fade
-    ? Math.min(1, Math.min(time, branch.journey - time) / fade)
+    ? Math.min(1, Math.min(time - branch.begin, branch.journey - time) / fade)
     : 1
 
   return {
@@ -325,7 +488,8 @@ export function describeFlow(plan: FlowPlan): string {
   if (!plan.branches.length) return 'nothing to travel'
   const hops = plan.edges.size
   const parts = [`${hops} hop${hops === 1 ? '' : 's'}`]
-  if (plan.branches.length > 1) parts.push(`fans out to ${plan.branches.length}`)
+  if (plan.custom) parts.push('own order')
+  else if (plan.branches.length > 1) parts.push(`fans out to ${plan.branches.length}`)
   // A stream's cycle is the gap between messages, which is not a fact about the
   // flow anyone wants; how long one message is on the road is.
   const journey = plan.branches.reduce((max, b) => Math.max(max, b.journey), 0)

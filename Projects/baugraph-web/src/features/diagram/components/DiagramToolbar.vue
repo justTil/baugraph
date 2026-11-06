@@ -54,7 +54,7 @@ const saveHint = computed(() => {
       : 'Save to a file…'
   return dirty.value ? `${target} — unsaved changes (⌘S)` : `${target} (⌘S)`
 })
-const { paused, openFlowEditor } = useFlows()
+const { paused, editorOpen: flowEditorOpen, openFlowEditor } = useFlows()
 const { active: laserActive } = useLaserPointer()
 const { presenting, toggle: togglePresentation } = usePresentation()
 const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
@@ -173,15 +173,25 @@ async function copyAiSkills() {
     <!--
       Flows belong to the diagram, not to anything selected on it, so this is
       where they are edited — one door, in the same place whatever is selected.
+      The editor docks under the canvas, so the same button puts it away again.
     -->
     <Tooltip>
       <TooltipTrigger as-child>
-        <Button variant="ghost" size="sm" class="h-8" @click="openFlowEditor()">
+        <Button
+          variant="ghost"
+          size="sm"
+          class="h-8"
+          :class="{ 'bg-accent text-accent-foreground': flowEditorOpen }"
+          :aria-pressed="flowEditorOpen"
+          @click="flowEditorOpen ? (flowEditorOpen = false) : openFlowEditor()"
+        >
           <Waypoints />
           Message flows
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Message flows</TooltipContent>
+      <TooltipContent>
+        {{ flowEditorOpen ? 'Close the message flow editor' : 'Open the message flow editor' }}
+      </TooltipContent>
     </Tooltip>
 
     <!--

@@ -283,7 +283,9 @@ writing it in another order is still valid and will simply be re-sorted.
 
 A flow names a set of edge ids and lets the editor work out the traversal
 order and where the message forks from how those edges are wired — list the
-connections, nothing more.
+connections, nothing more. Add \`steps\` only when the order should differ from
+what the arrows imply (a request waiting for its reply, a hub calling its
+subscribers one by one).
 
 \`\`\`json
 {
@@ -305,6 +307,12 @@ connections, nothing more.
 \`\`\`
 
 - \`edges\` — edge ids this message travels, in any order (at least one).
+- \`steps\` — optional hand-set order: an array of steps, each an array of edge
+  ids from \`edges\` that travel at the same time; a step leaves once the one
+  before it has arrived. Each id at most once; ids left out run after the last
+  step. Omit it to let the order follow the arrows (then \`mode\` applies; with
+  \`steps\` set, \`mode\` is ignored). Example:
+  \`[["client--api"], ["api--db"], ["db--api"], ["api--client", "api--audit"]]\`.
 - \`from\` — node the message starts at; omit to let it be worked out (the one
   end of the edge set that nothing else feeds into).
 - \`color\`, \`motion\` (${enumList(FLOW_MOTIONS)}), \`token\` (${enumList(FLOW_TOKENS)}) — how it is drawn.
