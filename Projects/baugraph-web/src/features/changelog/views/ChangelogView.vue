@@ -49,7 +49,7 @@ const tone = (kind: ChangeKind) =>
       >
         <span
           class="bg-background absolute top-6 -left-[1.8125rem] size-3 rounded-full border-2"
-          :class="index === 0 ? 'border-primary' : 'border-muted-foreground/40'"
+          :class="index === 0 ? 'border-brand' : 'border-muted-foreground/40'"
           aria-hidden="true"
         />
 
@@ -61,7 +61,7 @@ const tone = (kind: ChangeKind) =>
               </h2>
               <span
                 v-if="index === 0"
-                class="border-primary/30 bg-primary/10 text-primary rounded-full border px-1.5 py-0.5 text-[0.6875rem] font-medium"
+                class="border-brand/30 bg-brand/10 text-brand-strong rounded-full border px-1.5 py-0.5 text-[0.6875rem] font-medium"
               >
                 Latest
               </span>

@@ -129,6 +129,8 @@ const {
   setNodeTech,
   updateEdgeData,
   reverseEdge,
+  resetLabelPosition,
+  resetPortPositions,
   reorderNode,
   alignSelection,
   toDocument,
@@ -549,6 +551,13 @@ function copySelectionIds() {
         <Waypoints />
         Animate message from here
       </ContextMenuItem>
+      <ContextMenuItem
+        v-if="node.data?.portPositions"
+        @select="act(() => resetPortPositions(node!.id))"
+      >
+        <RotateCcw />
+        Respread connection points
+      </ContextMenuItem>
       <ContextMenuItem @select="act(() => reorderNode(node!.id, 'front'))">
         <BringToFront />
         Bring to front
@@ -618,6 +627,14 @@ function copySelectionIds() {
       >
         <RotateCcw />
         Reset routing
+      </ContextMenuItem>
+      <ContextMenuItem
+        v-if="edge.data?.label || edge.data?.labelInfo"
+        :disabled="edge.data?.labelPosition === undefined && !edge.data?.labelOffset"
+        @select="act(() => resetLabelPosition(edge!.id))"
+      >
+        <RotateCcw />
+        Recentre label
       </ContextMenuItem>
       <ContextMenuItem @select="animate([edge!.id])">
         <Waypoints />

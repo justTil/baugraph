@@ -30,8 +30,8 @@ const selfHosted = __SELF_HOSTED__
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" class="cursor-default hover:bg-transparent">
             <!--
-              Wordmark: "BG" in the UI sans. public/favicon.svg carries the same
-              two letters as outlines and still needs redrawing to match Geist.
+              The mark: "BG" in Geist Bold on the brand tile. public/favicon.svg
+              is the same two letters as outlines (new_assets/baugraph/generate.py).
             -->
             <div
               class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg font-sans text-[13px] leading-none font-bold tracking-tight"

@@ -1,5 +1,5 @@
-import type { NodePorts, PortSide, Route, Side } from '@/model'
-import { nodePorts, PORT_SIDES } from '@/model'
+import type { NodePorts, PortPositions, PortSide, Route, Side } from '@/model'
+import { nodePorts, portFraction, PORT_SIDES } from '@/model'
 import { EDGE_PX } from '@/features/diagram/lib/theme'
 
 /**
@@ -34,7 +34,14 @@ export interface EdgeGeometry {
    * self-loop connectors, which have no sharp joins to begin with.
    */
   points?: Vec[]
-  /** Midpoint of the path, where the label sits. */
+  /**
+   * The cubic a curved or self-loop connector is drawn as — start, both control
+   * points, end — so anything measuring along the line (a label slid towards
+   * one end) can follow the curve rather than the chord. Absent for polylines,
+   * which `points` already describes.
+   */
+  curve?: [Vec, Vec, Vec, Vec]
+  /** Midpoint of the path, where a label that was never moved sits. */
   mid: Vec
   start: Vec
   end: Vec
@@ -66,23 +73,11 @@ interface Anchor {
 }
 
 /**
- * Where along its side the `port`-th of `count` connection points sits, as a
- * fraction of that side's length.
- *
- * Evenly spread, which is what lets a node store the *count* alone: one point
- * lands at the middle exactly where it always did, and the whole set slides with
- * the side as the node is resized. Ports are 1-based, as the file states them,
- * and an index past the end falls back to the last point that exists — a side
- * that has since been narrowed leaves connections attached rather than adrift.
+ * Where a connector meets `side` of `box`, `f` of the way along it — see
+ * `portFraction` in the model for how a point's place on its side is decided.
  */
-function portFraction(count: number, port: number): number {
-  const n = Math.max(1, Math.round(count))
-  return clamp(Math.round(port), 1, n) / (n + 1)
-}
-
-function anchor(box: Box, side: PortSide, count = 1, port = 1): Anchor {
+function anchor(box: Box, side: PortSide, f = 0.5): Anchor {
   const { x, y, width: w, height: h } = box
-  const f = portFraction(count, port)
   switch (side) {
     case 'top':
       return { point: { x: x + w * f, y }, normal: { x: 0, y: -1 } }
@@ -110,7 +105,13 @@ export function autoSide(from: Box, to: Box): PortSide {
  * gaining points: picking the nearest keeps a connection short instead of
  * sending it back to a middle that is no longer where anything attaches.
  */
-function autoPort(box: Box, side: PortSide, count: number, to: Box): number {
+function autoPort(
+  box: Box,
+  side: PortSide,
+  count: number,
+  to: Box,
+  moved?: Record<string, number>,
+): number {
   if (count < 2) return 1
   const horizontal = side === 'top' || side === 'bottom'
   const origin = horizontal ? box.x : box.y
@@ -119,8 +120,10 @@ function autoPort(box: Box, side: PortSide, count: number, to: Box): number {
 
   let best = 1
   let bestGap = Infinity
+  // Measured from where each point actually is, moved or not: the nearest one
+  // to a point slid down the side is the one that now sits nearest.
   for (let port = 1; port <= count; port++) {
-    const gap = Math.abs(origin + span * portFraction(count, port) - facing)
+    const gap = Math.abs(origin + span * portFraction(count, port, moved) - facing)
     if (gap < bestGap) {
       bestGap = gap
       best = port
@@ -196,8 +199,11 @@ function selfLoop(box: Box): EdgeGeometry {
   const sy = box.y + box.height * 0.3
   const ex = box.x + box.width * 0.7
   const ey = box.y - 2
+  const c1 = { x: sx + 62, y: sy - 26 }
+  const c2 = { x: ex + 40, y: ey - 52 }
   return {
-    path: `M${sx},${sy}C${sx + 62},${sy - 26} ${ex + 40},${ey - 52} ${ex},${ey}`,
+    path: `M${sx},${sy}C${c1.x},${c1.y} ${c2.x},${c2.y} ${ex},${ey}`,
+    curve: [{ x: sx, y: sy }, c1, c2, { x: ex, y: ey }],
     mid: { x: sx + 30, y: ey - 32 },
     start: { x: sx, y: sy },
     end: { x: ex, y: ey },
@@ -914,6 +920,13 @@ export interface EdgeRouteOptions {
    */
   sourcePorts?: Partial<NodePorts>
   targetPorts?: Partial<NodePorts>
+  /**
+   * Where each end's node has had connection points slid to by hand (see
+   * `DiagramNode.portPositions`). Omitted means every point sits in its evenly
+   * spread slot.
+   */
+  sourcePortPositions?: PortPositions
+  targetPortPositions?: PortPositions
   /** Which of those points each end attaches to, 1-based. Ignored while its side is `auto`. */
   sourcePort?: number
   targetPort?: number
@@ -947,6 +960,8 @@ export function edgeGeometry(
     targetSide,
     sourcePorts,
     targetPorts,
+    sourcePortPositions,
+    targetPortPositions,
     sourcePort,
     targetPort,
     route,
@@ -972,20 +987,31 @@ export function edgeGeometry(
   const tSide = targetSide === 'auto' ? autoSide(target, targetFacing) : targetSide
   const sCount = nodePorts(sourcePorts)[sSide]
   const tCount = nodePorts(targetPorts)[tSide]
+  const sMoved = sourcePortPositions?.[sSide]
+  const tMoved = targetPortPositions?.[tSide]
   const sPort =
-    sourceSide === 'auto' ? autoPort(source, sSide, sCount, sourceFacing) : (sourcePort ?? 1)
+    sourceSide === 'auto'
+      ? autoPort(source, sSide, sCount, sourceFacing, sMoved)
+      : (sourcePort ?? 1)
   const tPort =
-    targetSide === 'auto' ? autoPort(target, tSide, tCount, targetFacing) : (targetPort ?? 1)
+    targetSide === 'auto'
+      ? autoPort(target, tSide, tCount, targetFacing, tMoved)
+      : (targetPort ?? 1)
 
-  const sa = anchor(source, sSide, sCount, sPort)
-  const ta = anchor(target, tSide, tCount, tPort)
+  const sa = anchor(source, sSide, portFraction(sCount, sPort, sMoved))
+  const ta = anchor(target, tSide, portFraction(tCount, tPort, tMoved))
   // Only ends that have nowhere else to be get pulled onto a shared line. A side
   // carrying several points was laid out deliberately, and its spacing is finer
   // than the tolerance below — nudging one end would slide a connection onto a
-  // point its node does not say it uses. Skipped entirely while routing
-  // manually: the user has already placed this line, and snapping the anchor
-  // out from under the first bend point would fight that.
-  if (!manual && sCount === 1 && tCount === 1) align(source, target, sa, ta)
+  // point its node does not say it uses. A point slid along its side by hand
+  // was placed deliberately too, and is left exactly where it was put. Skipped
+  // entirely while routing manually: the user has already placed this line,
+  // and snapping the anchor out from under the first bend point would fight that.
+  const sPinned = sMoved?.[String(sPort)] !== undefined
+  const tPinned = tMoved?.[String(tPort)] !== undefined
+  if (!manual && sCount === 1 && tCount === 1 && !sPinned && !tPinned) {
+    align(source, target, sa, ta)
+  }
 
   const gap = 2
   const s: Vec = { x: sa.point.x + sa.normal.x * gap, y: sa.point.y + sa.normal.y * gap }
@@ -1040,6 +1066,7 @@ export function edgeGeometry(
     const ls = Math.hypot(s.x - nearStart.x, s.y - nearStart.y) || 1
     return {
       path: `M${s.x},${s.y}C${c1.x},${c1.y} ${c2.x},${c2.y} ${t.x},${t.y}`,
+      curve: [s, c1, c2, t],
       mid: bezierPoint(s, c1, c2, t, 0.5),
       start: s,
       end: t,
@@ -1055,6 +1082,104 @@ export function edgeGeometry(
     if (around) return fromPolyline(around, DETOUR_RADIUS.orthogonal)
   }
   return fromPolyline(points, DETOUR_RADIUS.orthogonal)
+}
+
+/* --------------------------------------------------- measuring along a line */
+
+/** How finely a curve is followed when measuring along it. */
+const CURVE_SAMPLES = 48
+
+/**
+ * The connector as a polyline to measure along — its own vertices when it is
+ * one, a close sampling of the curve when it is not. The drawn path rounds a
+ * polyline's corners off; measuring the corners square instead is a fraction of
+ * a pixel at any one of them, and it is what keeps the canvas and the exporter,
+ * which only ever see the geometry, agreeing to the pixel.
+ */
+function traceOf(geometry: EdgeGeometry): Vec[] {
+  if (geometry.points && geometry.points.length >= 2) return geometry.points
+  if (geometry.curve) return bezierSamples(...geometry.curve, CURVE_SAMPLES)
+  return [geometry.start, geometry.end]
+}
+
+/** Each leg's length, and all of them together. */
+function legLengths(points: Vec[]): { legs: number[]; total: number } {
+  const legs: number[] = []
+  let total = 0
+  for (let i = 1; i < points.length; i++) {
+    const l = Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y)
+    legs.push(l)
+    total += l
+  }
+  return { legs, total }
+}
+
+/** The point `t` of the way along the connector, by length: `0` at the source, `1` at the target. */
+export function pointAlong(geometry: EdgeGeometry, t: number): Vec {
+  const points = traceOf(geometry)
+  const { legs, total } = legLengths(points)
+  if (!total) return { ...points[0]! }
+  let remaining = clamp(t, 0, 1) * total
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i]!
+    if (remaining <= leg || i === legs.length - 1) {
+      const a = points[i]!
+      const b = points[i + 1]!
+      const f = leg ? clamp(remaining / leg, 0, 1) : 0
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }
+    }
+    remaining -= leg
+  }
+  return { ...points.at(-1)! }
+}
+
+/**
+ * The point on the connector nearest `p`, and how far along the line it is —
+ * the inverse of `pointAlong`, so a label dragged to `p` can be written down
+ * as a place on the line plus how far it was pulled off it.
+ */
+export function projectOnto(geometry: EdgeGeometry, p: Vec): { t: number; point: Vec } {
+  const points = traceOf(geometry)
+  const { legs, total } = legLengths(points)
+  if (!total) return { t: 0.5, point: { ...points[0]! } }
+
+  let best = { t: 0, point: { ...points[0]! }, dist: Infinity }
+  let walked = 0
+  for (let i = 0; i < legs.length; i++) {
+    const a = points[i]!
+    const b = points[i + 1]!
+    const leg = legs[i]!
+    const f = leg
+      ? clamp(((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (leg * leg), 0, 1)
+      : 0
+    const q = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }
+    const dist = (p.x - q.x) ** 2 + (p.y - q.y) ** 2
+    if (dist < best.dist) best = { t: (walked + leg * f) / total, point: q, dist }
+    walked += leg
+  }
+  return { t: best.t, point: best.point }
+}
+
+/**
+ * Where a connection's label is centred: `position` of the way along the line,
+ * then `offset` off it. A label that was never moved — no `position` — sits on
+ * `geometry.mid`, exactly where every label was drawn before labels could be
+ * moved, so no diagram that has not moved one looks any different.
+ */
+export function labelAnchor(geometry: EdgeGeometry, position?: number, offset?: Vec): Vec {
+  const on = position === undefined ? geometry.mid : pointAlong(geometry, position)
+  return { x: on.x + (offset?.x ?? 0), y: on.y + (offset?.y ?? 0) }
+}
+
+/**
+ * The point on the line a label pulled off it belongs to — where the leader
+ * from the label back to its connection ends. `null` while the label sits on
+ * the line, where it needs no leader. Shared by the canvas and the export, so
+ * the two draw the same thread.
+ */
+export function labelFoot(geometry: EdgeGeometry, position?: number, offset?: Vec): Vec | null {
+  if (!offset || (!offset.x && !offset.y)) return null
+  return position === undefined ? geometry.mid : pointAlong(geometry, position)
 }
 
 /** Squared distance from `p` to the segment `a`–`b`. */

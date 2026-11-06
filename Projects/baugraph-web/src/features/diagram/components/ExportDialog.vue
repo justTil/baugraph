@@ -311,7 +311,7 @@ async function run() {
                   class="ring-offset-background focus-visible:ring-ring size-7 rounded-md border transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                   :class="
                     backdrop === option.value
-                      ? 'border-primary ring-primary/40 ring-2'
+                      ? 'border-brand ring-brand/40 ring-2'
                       : 'border-border hover:border-foreground/40'
                   "
                   :title="option.label"

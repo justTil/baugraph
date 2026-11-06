@@ -32,6 +32,7 @@ export default defineConfig({
   },
 
   themeConfig: {
+    // The BG tile reads on both grounds, so one file serves both themes; the site title beside it names it.
     logo: '/favicon.svg',
 
     nav: [
@@ -47,6 +48,7 @@ export default defineConfig({
           { text: 'Getting started', link: '/getting-started' },
           { text: 'The editor', link: '/editor' },
           { text: 'Message flows', link: '/message-flows' },
+          { text: 'The 3D view', link: '/3d-view' },
           { text: 'Exporting', link: '/exports' },
           { text: 'VS Code extension', link: '/vscode' },
           { text: 'Keyboard shortcuts', link: '/shortcuts' },

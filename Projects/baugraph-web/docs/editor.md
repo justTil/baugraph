@@ -33,6 +33,36 @@ Take points away again and anything attached past the end moves onto the
 last point that is left, so a connection never comes adrift from the node it
 belongs to.
 
+### Moving a connection point
+
+Even spacing is not always what a diagram needs — a database whose one
+connection should leave from near the top, or a dot that should line up with
+a node beside it. Hold `Shift` and drag a dot to slide it along its side; the
+connections on it move with it. It snaps to the grid (when the grid is on),
+to the middle of the side, and to its own evenly spread place — let go there
+and it is back to spreading itself evenly, as if it had never been moved.
+Hold `⌥` as well to place it freely.
+
+A moved point keeps its place relative to the side, so it stays proportionally
+where it was when the node is resized. The points that were not moved keep
+spreading themselves evenly as points are added or taken away. **Respread
+connection points**, in the inspector or a node's right-click menu, puts
+every moved point back.
+
+### Moving a label
+
+A connection's label sits in the middle of its line until you drag it
+somewhere else — along the line, towards either end, or off the line
+altogether. It is stored as a place along the line plus how far off it, so
+it stays with its connection, at the same end and on the same side, when the
+nodes are moved. A label pulled off the line keeps a dotted thread back to
+the point it belongs to — on the canvas and in exports.
+
+Drop it back on the line and it sits on the line; drop it on the middle and
+it is back where it started. Double-click a moved label — or use
+**Recentre label** in the right-click menu, or **Recentre** in the inspector —
+to put it back. `⌥` while dragging places it freely, without either pull.
+
 ## What a node is, and what it runs on
 
 Every node carries two things beyond its name, and both are drawn on it:

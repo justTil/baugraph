@@ -51,3 +51,8 @@ extension/dist
 extension/media
 extension/schema
 VSCodeExtension/output
+
+# Brand kit (valsom design kit + Baugraph logo masters, see new_assets/README.md).
+# What the site ships is generated into public/, docs/public/, extension/images/
+# and src/assets/fonts/, and committed there.
+new_assets/

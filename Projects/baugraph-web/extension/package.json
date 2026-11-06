@@ -4,6 +4,7 @@
   "description": "Edit .baugraph.json architecture diagrams on a canvas, inside VS Code.",
   "version": "1.30.0",
   "publisher": "justtil",
+  "icon": "images/icon.png",
   "license": "MIT",
   "private": true,
   "repository": {

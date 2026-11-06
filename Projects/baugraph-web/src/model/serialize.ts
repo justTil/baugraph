@@ -7,7 +7,13 @@ import type {
   MessageFlow,
 } from '@/model/types'
 import { FORMAT_VERSION, PORT_SIDES } from '@/model/types'
-import { EDGE_DEFAULTS, FLOW_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
+import {
+  EDGE_DEFAULTS,
+  FLOW_DEFAULTS,
+  NODE_DEFAULTS,
+  blankDocument,
+  prunePortPositions,
+} from '@/model/defaults'
 import { documentSchema } from '@/model/schema'
 import { migrate } from '@/model/migrate'
 import { sortDocument } from '@/model/sort'
@@ -97,7 +103,9 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'position',
   'size',
   'ports',
+  'portPositions',
   'parent',
+  'extrusion',
   'locked',
   'data',
 ]
@@ -112,6 +120,8 @@ const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'targetPort',
   'label',
   'labelInfo',
+  'labelPosition',
+  'labelOffset',
   'route',
   'waypoints',
   'line',
@@ -142,6 +152,13 @@ const FLOW_KEY_ORDER: (keyof MessageFlow)[] = [
 
 /** Rounds a coordinate so float noise never shows up in a diff. */
 const round = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Rounds a fraction along a line or a side. Finer than a coordinate, because it
+ * is multiplied back out by a length: four places is under a tenth of a pixel
+ * on a side thousands of units long.
+ */
+const roundFraction = (n: number) => Math.round(n * 10000) / 10000
 
 /**
  * Produces the plain object that gets written to disk.
@@ -176,6 +193,21 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
       if (Object.keys(ports).length) trimmed.ports = ports
       else delete trimmed.ports
     }
+    // Only points that were moved, and only ones the node still has: a moved
+    // point on a side since given fewer is an instruction nothing follows.
+    const moved = prunePortPositions(node.portPositions, node.ports)
+    if (moved) {
+      trimmed.portPositions = Object.fromEntries(
+        Object.entries(moved).map(([side, slots]) => [
+          side,
+          Object.fromEntries(
+            Object.entries(slots)
+              .sort(([a], [b]) => Number(a) - Number(b))
+              .map(([port, at]) => [port, roundFraction(at)]),
+          ),
+        ]),
+      )
+    } else delete trimmed.portPositions
     return ordered(trimmed as DiagramNode, NODE_KEY_ORDER)
   })
 
@@ -195,6 +227,17 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
     if (trimmed.waypoints) {
       if (!trimmed.waypoints.length) delete trimmed.waypoints
       else trimmed.waypoints = trimmed.waypoints.map((p) => ({ x: round(p.x), y: round(p.y) }))
+    }
+    // A label that sits on the line has no offset to state, and one that was
+    // never moved has no place along it either — the middle is what saying
+    // nothing means.
+    if (trimmed.labelPosition !== undefined) {
+      trimmed.labelPosition = roundFraction(trimmed.labelPosition)
+    }
+    if (trimmed.labelOffset) {
+      const offset = { x: round(trimmed.labelOffset.x), y: round(trimmed.labelOffset.y) }
+      if (offset.x === 0 && offset.y === 0) delete trimmed.labelOffset
+      else trimmed.labelOffset = offset
     }
     return ordered(trimmed as DiagramEdge, EDGE_KEY_ORDER)
   })
@@ -237,7 +280,7 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
  * `{ "x": 300, "y": 60 }` over four, turning "moved a node" into a four-line
  * diff — the single most common change a diagram ever sees.
  */
-const INLINE_KEYS = new Set(['position', 'size', 'ports'])
+const INLINE_KEYS = new Set(['position', 'size', 'ports', 'portPositions', 'labelOffset'])
 
 /**
  * Keys whose *children* are each one line. A flow's per-connection overrides are
@@ -248,6 +291,20 @@ const INLINE_KEYS = new Set(['position', 'size', 'ports'])
  * or removing a credit is one line as well.
  */
 const INLINE_CHILD_KEYS = new Set(['style', 'waypoints', 'authors'])
+
+/**
+ * One value on one line, spaced the way the rest of the file is — an inline
+ * value that nests, like a node's moved connection points, still reads
+ * `{ "right": { "2": 0.8 } }` rather than dropping into `JSON.stringify`'s
+ * unspaced `{"2":0.8}` one level down.
+ */
+function inlineJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(inlineJson).join(', ')}]`
+  const entries = Object.entries(value).filter(([, v]) => v !== undefined)
+  if (!entries.length) return '{}'
+  return `{ ${entries.map(([k, v]) => `${JSON.stringify(k)}: ${inlineJson(v)}`).join(', ')} }`
+}
 
 function format(value: unknown, indent: string, key?: string, inline = false): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
@@ -266,9 +323,7 @@ function format(value: unknown, indent: string, key?: string, inline = false): s
 
   const entries = Object.entries(value).filter(([, v]) => v !== undefined)
   if (!entries.length) return '{}'
-  if (inline || (key && INLINE_KEYS.has(key))) {
-    return `{ ${entries.map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(', ')} }`
-  }
+  if (inline || (key && INLINE_KEYS.has(key))) return inlineJson(value)
 
   const inner = indent + '  '
   const inlineChildren = !!key && INLINE_CHILD_KEYS.has(key)

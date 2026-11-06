@@ -1,0 +1,63 @@
+{
+  "$schema": "/schema/baugraph-v1.schema.json",
+  "baugraph": "1.0",
+  "meta": {
+    "title": "Orders — moved labels and connection points",
+    "description": "A label slid towards one end and pulled off the line, one parked on the line, and connection points slid along their side."
+  },
+  "canvas": {
+    "theme": "light",
+    "grid": true,
+    "snap": true,
+    "snapSize": 10
+  },
+  "nodes": [
+    {
+      "id": "gateway",
+      "type": "api_gateway",
+      "label": "Gateway",
+      "position": { "x": 0, "y": 100 },
+      "size": { "width": 190, "height": 80 },
+      "ports": { "right": 3 },
+      "portPositions": { "right": { "1": 0.2, "3": 0.85 } }
+    },
+    {
+      "id": "orders",
+      "type": "service",
+      "label": "Orders",
+      "position": { "x": 400, "y": 0 },
+      "size": { "width": 190, "height": 62 },
+      "portPositions": { "left": { "1": 0.3 } }
+    },
+    {
+      "id": "payments",
+      "type": "service",
+      "label": "Payments",
+      "position": { "x": 400, "y": 220 },
+      "size": { "width": 190, "height": 62 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "gateway--orders",
+      "source": "gateway",
+      "target": "orders",
+      "sourceSide": "right",
+      "sourcePort": 1,
+      "targetSide": "left",
+      "label": "POST /orders",
+      "labelPosition": 0.25,
+      "labelOffset": { "x": 0, "y": -16 }
+    },
+    {
+      "id": "gateway--payments",
+      "source": "gateway",
+      "target": "payments",
+      "sourceSide": "right",
+      "sourcePort": 3,
+      "targetSide": "left",
+      "label": "POST /payments",
+      "labelPosition": 0.7
+    }
+  ]
+}

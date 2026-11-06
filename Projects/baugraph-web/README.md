@@ -208,6 +208,33 @@ connections they travel instead.
 | `⌘S` | download the `.baugraph.json` |
 | `⌫` | delete selection |
 | arrows | nudge (`⇧` = ×5) |
+| `3` | the 3D view |
+
+### The 3D view
+
+Press `3` and the diagram stands up — exactly the layout of the canvas, every
+node where it is there, standing up facing the front as the solid its shape
+stands for: a database a drum, a queue a tube, a circle a ball, a box a block,
+with its name and icon on the front, lit softly and casting soft shadows on a
+floating floor. They stay standing whichever way the view is turned.
+
+Every connection is an arch from the top of one node to the top of the next,
+all of a node's connections meeting it at one point on top, so a node that
+talks to many reads as the hub it is. The message flows travel along the
+arches on the same timing as on the canvas — parcels, letters and beads of
+light, standing upright and facing you, that land on the node they were sent to
+with a ripple. `←`/`→` step a
+spotlight through them: one flow at full strength, everything it does not touch
+faded back. That works in presentation mode too, along with a turntable (`R`),
+for walking a room through where the messages go.
+
+The 3D view is for looking: drag to orbit, right-drag to pan, scroll to zoom,
+click a node to fly to it. Nothing is moved or edited there. The one thing a
+node carries for it is its **3D height** in the inspector — *Tall* and *Tower*
+stand what carries the most or matters the most on a post over the rest, *Flat*
+lays it on its back — which the 2D canvas and every export ignore. The view
+itself is never saved, so a diagram always opens flat, and three.js is only
+downloaded the first time the 3D view is opened.
 
 The current diagram autosaves to `localStorage`, so a reload never loses work. That
 copy is a convenience, not the source of truth — export the JSON and commit it.
@@ -412,7 +439,8 @@ src/
     composables/           editor state, undo/redo, autosave, placement,
                            the GSAP message-flow runtime
     lib/                   shape geometry, edge routing, flow traversal,
-                           theme, SVG export
+                           theme, SVG export, the 3D layout (scene3d) and
+                           its three.js renderer (stage3d)
     data/                  node-type and technology catalogues, the palette
                            built from both, curated Lucide icons, sample
   components/

@@ -84,14 +84,15 @@ export const supervisoryAuthority = {
 }
 
 /**
- * `src/style.css` pulls Geist from fonts.googleapis.com at runtime, which sends
- * the visitor's IP to Google. Self-host the font files and set this to `false`
- * to drop both the transfer and the disclosure section below.
+ * Geist is self-hosted (`src/assets/fonts/`, loaded by `src/style.css` and the
+ * docs theme), so no font request goes to Google and the disclosure section
+ * below stays out. Set this back to `true` if a typeface is ever loaded from
+ * fonts.googleapis.com again.
  */
-export const usesGoogleFonts = true
+export const usesGoogleFonts = false
 
 /** Shown as "Stand" / "Last updated". ISO date. */
-export const lastUpdated = '2026-09-06'
+export const lastUpdated = '2026-11-06'
 
 /** True while any placeholder is still unresolved. */
 export const hasPlaceholders = [

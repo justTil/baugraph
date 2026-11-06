@@ -1,7 +1,9 @@
 import type { Theme } from 'vitepress'
-import DefaultTheme from 'vitepress/theme'
+// Without VitePress's bundled Inter: the docs use the app's own Geist (see brand.css).
+import DefaultTheme from 'vitepress/theme-without-fonts'
 import { h } from 'vue'
 import LegalFooter from './LegalFooter.vue'
+import './brand.css'
 
 export default {
   extends: DefaultTheme,

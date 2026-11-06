@@ -239,6 +239,59 @@
               }
             }
           },
+          "portPositions": {
+            "type": "object",
+            "properties": {
+              "top": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[1-6]$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "right": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[1-6]$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "bottom": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[1-6]$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "left": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[1-6]$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          },
           "parent": {
             "default": null,
             "anyOf": [
@@ -251,6 +304,17 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "extrusion": {
+            "default": "regular",
+            "type": "string",
+            "enum": [
+              "flat",
+              "low",
+              "regular",
+              "tall",
+              "tower"
             ]
           },
           "locked": {
@@ -337,6 +401,26 @@
           "labelInfo": {
             "default": "",
             "type": "string"
+          },
+          "labelPosition": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "labelOffset": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
           },
           "route": {
             "default": "orthogonal",

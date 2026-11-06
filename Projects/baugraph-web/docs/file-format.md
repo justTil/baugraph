@@ -114,6 +114,15 @@ All in service of readable diffs:
   omitted while the end is on `auto`, which places itself. A port a node no
   longer offers falls back to the last one that exists rather than failing
   to open.
+- **`portPositions` lists only the points that were moved.** Sliding a
+  connection point along its side writes where it now sits as a fraction of
+  the side — `"portPositions": { "right": { "2": 0.8 } }`, point 2 on the
+  right, 80% of the way down — and nothing for the points that were left
+  alone, which keep their even slots. A fraction rather than a coordinate, so
+  a moved point holds its place relative to the side when the node is
+  resized. The number is the point's identity, so the connections on it move
+  with it. A point the node no longer offers is ignored on open and dropped on
+  the next save; a node with no moved points writes no `portPositions` key.
 - **`locked` is an editing aid**, written only when true. It keeps a node
   out of the way while you work on its neighbours and has no effect on
   rendering or export.
@@ -148,6 +157,21 @@ All in service of readable diffs:
   export carries it as a `<title>`, so SVG viewers do the same). Newlines are
   kept. An edge without it writes no `labelInfo` key, so every file written
   before it existed stays exactly as it was.
+- **A moved label is a place along the line, not a coordinate.**
+  `labelPosition` is how far along the line the label sits, from `0` at the
+  source to `1` at the target, and `labelOffset` (`{ "x": …, "y": … }`, on one
+  line) is how far it was pulled off the line from there. Stored that way, a
+  label dragged next to one end stays next to that end — on the same side of
+  the line — however the nodes are moved later. A label that was never moved
+  writes neither key and sits in the middle of the line, exactly where labels
+  always have; one that sits on the line writes no `labelOffset`.
+- **3D is optional and on top.** A node's `extrusion` (`flat`, `low`,
+  `regular`, `tall`, `tower`) says how it stands in the [3D view](./3d-view) —
+  on the floor, raised on a post for `tall` and `tower`, or lying on its back
+  for `flat`. It is the only 3D key: the 3D view stands every node where its
+  `position` puts it, and the 2D canvas and every export ignore `extrusion`.
+  Omitted means `regular`, so a file that never set it is written exactly as
+  before.
 - **An edge routes itself unless `waypoints` says otherwise.** Every
   connection is auto-routed around obstacles by default, the only behavior
   this format had before manual routing existed. Giving an edge one or more

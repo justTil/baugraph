@@ -2,6 +2,115 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.34.0]
+
+### Added
+
+- **A 3D view.** Press `3`, or **3D** in the toolbar or in the view switch at
+  the top right of the canvas, and the diagram stands up. It is exactly the
+  canvas's layout: every node stands where it is there, so the 3D view is the
+  same diagram looked at from an angle. Node faces are drawn by the same code
+  as the SVG export, so a node reads the same in 3D as everywhere else.
+  - **Nodes stand up, as solids.** Each one stands facing the front as the
+    solid its shape is a drawing of. A database is a drum, a queue a tube on
+    its side with its slots as bands round it, a pill a capsule, and a circle
+    a ball. A box, a rounded box, a hexagon and a diamond are their outlines
+    made deep. A note stays a sheet with its corner turned down. The name,
+    type and icon are laid on the front — on a round solid printed straight
+    onto its curve, like a decal, so the icon and the text stay upright — and
+    read as they do on the canvas. Zones are trays with low glass walls.
+    Nodes stay standing whichever way the view is turned.
+  - **Lit softly, like a studio model.** Matte solids in the node's colour,
+    their edges rounded over — boxes bevelled, a drum's lid and a tube's ends
+    rounded like a tin's — cast soft shadows on the floor and on each other,
+    on a slab that floats over the page on a shadow of its own. Names, icons,
+    connections and messages are drawn unlit, in exactly the theme's colours.
+    Hovering a node lights it faintly; a click flies to it.
+  - **Messages go from top to top.** Every connection is an arch out of the
+    top of the node it leaves and down into the top of the node it reaches,
+    leaving and arriving at the same slant and rising higher the farther it
+    goes, so it clears what stands between. Every connection of a node's, in
+    or out, meets it at one point, the middle of its top, so a node that
+    talks to many reads as the hub it is. A request and its reply between
+    the same two nodes swing apart in the middle. Dashed and dotted
+    connections are drawn with longer dashes than on the canvas, so they stay
+    clean from across the diagram. Message flows travel along the arches on
+    the same timing as on the canvas, as what the flow says they are: a
+    packet is a parcel taped down the middle, and an envelope a letter with
+    its flap down, both drawn like the canvas's glyphs on every side, standing
+    upright and turned to face the viewer. A connection styled differently changes the message as
+    it passes, as on the canvas, and a ripple in the message's colour marks
+    where it lands. `←`/`→` step a spotlight through the flows: the lit flow
+    is drawn in its own colour and everything it does not touch fades back.
+    Messages stay large enough to follow from across the whole diagram.
+  - **A node's 3D height** — *Flat*, *Low*, *Regular*, *Tall* or *Tower* —
+    is set in the inspector, for one node or a whole selection. *Low* and
+    *Regular* stand on the floor, *Low* the thinner, *Tall* and *Tower* on a
+    post over the rest, and *Flat* lies on its back.
+  - **It is for looking.** Nothing is moved, selected or edited in the 3D
+    view, and the editing keys do nothing there; undo and redo still work.
+    Drag or middle-drag orbits, right-drag or `⇧` middle-drag pans, scroll
+    zooms, a click on a node flies to it and a double-click on empty space
+    fits everything. There are angled, top and front views, a turntable
+    (`R`), a toggle for connection labels, and a button that saves the
+    current view as a PNG. The toolbar's zoom and fit buttons drive the 3D
+    camera while it is up.
+  - **Presentation mode** keeps the 3D view. It gains a **3D** switch and a
+    turntable, the spotlight still steps through the flows, and clicking a
+    node flies to it.
+  - three.js is only downloaded the first time the 3D view is opened, so
+    nobody who stays in 2D pays for it.
+- **An optional `extrusion` on a node in the file format** — `flat`, `low`,
+  `regular`, `tall` or `tower` — says how tall it stands in the 3D view. It is
+  the only 3D key: where a node stands in 3D is its `position`. Omitted means
+  `regular` and is not written, so no existing file changes, and the 2D canvas
+  and every export ignore it. The JSON Schema and the AI skills are
+  regenerated to match. Opening a file that uses it in an older Baugraph drops
+  it on the next save, as with any newer field.
+- **Labels can be moved.** Drag a connection's label along its line, towards
+  either end, or off the line altogether. It is kept as a place along the line
+  plus how far off it, so it stays with its connection — at the same end, on
+  the same side — when the nodes move, and the export puts it in the same
+  place, with the image grown to fit a label dragged out past every node.
+  A label pulled off the line keeps a dotted thread back to the point it
+  belongs to, on the canvas and in exports. Dropped back on the line it
+  sits on the line; dropped on the middle it is back where it started.
+  Double-click it, or use **Recentre label** in the right-click menu or
+  **Recentre** in the inspector, to put it back. `⌥` places it freely.
+- **Connection points can be moved.** `⇧`-drag a node's dot to slide it along
+  its side, and its connections go with it. It snaps to the grid, to the
+  middle of the side, and to its own even slot — where it goes back to
+  spreading itself evenly — and `⌥` places it freely. A moved point keeps its
+  place relative to the side as the node is resized; the points that were
+  not moved keep spreading themselves evenly around it. **Respread connection
+  points**, in the inspector or a node's right-click menu, puts them all back.
+- **Three optional keys in the file format for them**: `labelPosition` (`0`
+  at the source, `1` at the target) and `labelOffset` on an edge, and
+  `portPositions` on a node, listing only the points that were moved. None is
+  written for a label or a point that was never moved, so no existing file
+  changes. The JSON Schema and the AI skills are regenerated to match.
+
+### Changed
+
+- **A new logo, as part of the valsom family.** Baugraph's mark is now the
+  letters **BG** in Geist on valsom's orange tile, in the favicon, the home
+  screen icon, the VS Code extension, the docs and the link preview.
+- **The interface keeps its clean, neutral look, with valsom orange as the one
+  accent.** It marks what is current or selected — the focused tab, the latest
+  release, the chosen export backdrop, a drop target — and nothing else, so
+  buttons, switches and focus rings stay as they were.
+- **Fonts are served by Baugraph itself.** Geist and Geist Mono ship with the
+  app, the docs and the VS Code extension instead of being fetched from Google
+  Fonts, so nothing is requested from Google when the page opens, the privacy
+  policy no longer needs to mention it, and the extension shows the right
+  typeface offline. Code and file names are now set in Geist Mono.
+
+### Fixed
+
+- **Reversing a manually routed connection** now walks its bend points the
+  other way too. It used to keep them in their old order, so the reversed line
+  zig-zagged back through them from the wrong end.
+
 ## [1.33.0]
 
 ### Added

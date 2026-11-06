@@ -71,6 +71,15 @@ export const MAX_PORTS = 6
 /** How many connection points each side of a node offers. */
 export type NodePorts = Record<PortSide, number>
 
+/**
+ * Where connection points that were moved by hand sit along their side, keyed
+ * by the point's number on that side (`"1"`…`"6"`, the same 1-based number an
+ * edge's `sourcePort` uses). Each value is a fraction of the side's length:
+ * `0` is its top or left end, `1` its bottom or right end. A point with no
+ * entry was never moved and keeps its evenly spread place.
+ */
+export type PortPositions = Partial<Record<PortSide, Record<string, number>>>
+
 export const ROUTES = ['orthogonal', 'curved', 'straight'] as const
 export type Route = (typeof ROUTES)[number]
 
@@ -88,6 +97,17 @@ export type LineWidth = (typeof LINE_WIDTHS)[number]
 
 export const ARROW_MODES = ['target', 'both', 'none'] as const
 export type ArrowMode = (typeof ARROW_MODES)[number]
+
+/**
+ * How a node stands in the 3D view, where every node stands up where the canvas
+ * has it: `low` and `regular` on the floor, `tall` and `tower` raised on a post
+ * above the rest, and `flat` not at all — it lies on its back. Semantic, the same as
+ * a border or a line weight: the file says `tall` — this one matters more,
+ * carries more, is the one to look at — and the renderer decides what that is
+ * worth. The 2D canvas and every export ignore it.
+ */
+export const EXTRUSIONS = ['flat', 'low', 'regular', 'tall', 'tower'] as const
+export type Extrusion = (typeof EXTRUSIONS)[number]
 
 export interface Vec2 {
   x: number
@@ -168,6 +188,17 @@ export interface DiagramNode {
    */
   ports?: Partial<NodePorts>
   /**
+   * Connection points slid along their side by hand, away from the evenly
+   * spread place `ports` alone gives them — see `PortPositions`. Only the
+   * points that were moved are listed: the rest keep spreading themselves
+   * evenly, around the moved ones, as `ports` changes. A fraction rather than
+   * a coordinate, so a moved point keeps its place relative to the side when
+   * the node is resized. Omitted when no point was moved.
+   */
+  portPositions?: PortPositions
+  /** How tall the node stands in the 3D view. Omitted means `regular`. 3D only. */
+  extrusion?: Extrusion
+  /**
    * Locked nodes cannot be selected, moved, resized or connected in the editor
    * until they are unlocked again. Purely an editing aid — it changes nothing
    * about how the node renders or exports.
@@ -184,10 +215,13 @@ export interface DiagramEdge {
   sourceSide: Side
   targetSide: Side
   /**
-   * Which connection point on `sourceSide` this end attaches to, counted from
-   * the top or from the left and starting at 1. Omitted means the first, which
-   * is the only one a side has until points are added to it. Ignored while the
-   * side is `auto` — that end has not been placed by hand at all.
+   * Which connection point on `sourceSide` this end attaches to, starting at
+   * 1 and numbered from the top or from the left as a side spreads them out.
+   * The number is the point's identity: sliding a point along its side by hand
+   * (see `DiagramNode.portPositions`) moves the connections on it along with
+   * it. Omitted means the first, which is the only one a side has until points
+   * are added to it. Ignored while the side is `auto` — that end has not been
+   * placed by hand at all.
    */
   sourcePort?: number
   /** Which connection point on `targetSide` this end attaches to. See `sourcePort`. */
@@ -199,6 +233,19 @@ export interface DiagramEdge {
    * this on hover. Plain text; newlines are kept. Omitted means none.
    */
   labelInfo?: string
+  /**
+   * Where along the line the label sits, as a fraction of the line's length:
+   * `0` at the source, `1` at the target. A fraction rather than a coordinate,
+   * so a label dragged next to one end stays next to that end however the
+   * nodes are moved. Omitted means the middle of the line, where a label has
+   * always been drawn.
+   */
+  labelPosition?: number
+  /**
+   * How far the label is pulled off the line, in canvas units, from the point
+   * `labelPosition` names. Omitted means none: the label sits on the line.
+   */
+  labelOffset?: Vec2
   route: Route
   line: LineStyle
   /** Weight of the line. Omitted means `regular`. */

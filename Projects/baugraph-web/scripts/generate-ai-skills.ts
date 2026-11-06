@@ -20,6 +20,7 @@ import {
   ARROW_MODES,
   BORDER_WIDTHS,
   COLOR_KEYS,
+  EXTRUSIONS,
   FLOW_MODES,
   FLOW_MOTIONS,
   FLOW_TOKENS,
@@ -216,6 +217,17 @@ writing it in another order is still valid and will simply be re-sorted.
   more than the one every node starts with: \`{ "right": 4 }\`. Up to ${MAX_PORTS} a
   side. Omit entirely unless a fan-out actually needs more than one point on a
   side.
+- \`portPositions\` — optional: connection points slid along their side away
+  from their evenly spread place, keyed by the point's number on that side
+  (1-based, the same number an edge's \`sourcePort\` uses), each a fraction of
+  the side's length — \`0\` at its top/left end, \`1\` at its bottom/right end:
+  \`{ "right": { "2": 0.8 } }\`. Only moved points are listed; the rest keep
+  their even slots. Omit it — even spacing is almost always what you want.
+- \`extrusion\` — 3D only, optional: how the node stands in the 3D view, one of
+  ${enumList(EXTRUSIONS)}. Omit for \`regular\`. The 3D view stands every node
+  up exactly where \`position\` puts it; \`tall\`/\`tower\` raise it on a post —
+  use them for what carries the most traffic or matters the most, sparingly —
+  and \`flat\` lays it on its back. The 2D canvas and every export ignore it.
 - \`locked\` — editor-only convenience; omit.
 - \`data\` — free-form object for anything else.
 
@@ -245,6 +257,12 @@ writing it in another order is still valid and will simply be re-sorted.
 - \`labelInfo\` — optional longer text behind the label (payload, SLA, retry
   policy…). The editor marks the label with an info icon and shows this on
   hover, so it can be as long as it needs to be. Newlines are kept. Omit for none.
+- \`labelPosition\` — optional: where along the line the label sits, as a
+  fraction of its length (\`0\` at the source, \`1\` at the target). Omit for the
+  middle of the line, which is right for nearly every label; set it only to
+  move a label clear of something it would otherwise cover.
+- \`labelOffset\` — optional \`{ "x": number, "y": number }\`: how far the label
+  is pulled off the line from that point, in canvas units. Omit for none.
 - \`route\` — one of ${enumList(ROUTES)}.
 - \`line\` — one of ${enumList(LINE_STYLES)}.
 - \`width\` — one of ${enumList(LINE_WIDTHS)}. Omit for the default.
