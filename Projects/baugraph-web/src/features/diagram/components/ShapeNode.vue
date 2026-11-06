@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { NodeProps } from '@vue-flow/core'
-import { Handle, Position } from '@vue-flow/core'
+import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NodeResizer } from '@vue-flow/node-resizer'
 import { Lock } from '@lucide/vue'
 import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import type { PortSide } from '@/model'
-import { DEFAULT_NODE_SIZE, PORT_SIDES, nodePorts } from '@/model'
+import { DEFAULT_NODE_SIZE, PORT_SIDES, nodePorts, portFraction } from '@/model'
+import { endpointOf } from '@/features/diagram/lib/edge-path'
+import { useShiftHeld } from '@/features/diagram/composables/useShiftHeld'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, shapeElements } from '@/features/diagram/lib/shapes'
 import { minNodeSize } from '@/features/diagram/lib/auto-size'
@@ -19,7 +21,10 @@ import { usePresentation } from '@/features/workspace/composables/usePresentatio
 
 const props = defineProps<NodeProps<NodeData>>()
 
-const { commit, endCoalesce, setNodesLocked, resizingNodeId } = useDiagram()
+const { commit, endCoalesce, setNodesLocked, resizingNodeId, canvas, setPortPosition } =
+  useDiagram()
+const { findNode, screenToFlowCoordinate, updateNodeInternals, viewport } = useVueFlow()
+const shiftHeld = useShiftHeld()
 const { mode: appThemeMode } = useAppTheme()
 const { connecting, from: connectFrom, to: connectTo } = useConnectionTarget()
 const { presenting } = usePresentation()
@@ -121,18 +126,6 @@ const HANDLE_POSITION: Record<PortSide, Position> = {
 }
 
 /**
- * The node's connection points, in the order they are drawn.
- *
- * A side offers one point unless the node says otherwise, and the extras are
- * spread evenly along it — the same fractions `edge-path` anchors on, because a
- * dot has to sit exactly where the connection it starts will meet the node. Vue
- * Flow pins each handle to the middle of its own side, so the offset is written
- * over that one axis and its centring transform does the rest.
- *
- * The id carries both halves — `right:3` — and that is all `onConnect` needs to
- * write the connection down (see `DiagramCanvas`).
- */
-/**
  * The point on this node a release would connect to, while a drag is looking for
  * one. Named rather than left to CSS: the canvas cannot mark it with a class of
  * its own without also marking the drops that would be refused (see
@@ -151,6 +144,19 @@ const fromHandle = computed(() =>
  * An annotation is an overlay, not a participant in the graph — it carries no
  * connection points of its own (see `DiagramNode.kind` in the model).
  */
+/**
+ * The node's connection points, in the order they are drawn.
+ *
+ * A side offers one point unless the node says otherwise, and the extras are
+ * spread evenly along it unless one was slid somewhere else — `portFraction`,
+ * the same answer `edge-path` anchors on, because a dot has to sit exactly
+ * where the connection it starts will meet the node. Vue Flow pins each handle
+ * to the middle of its own side, so the offset is written over that one axis
+ * and its centring transform does the rest.
+ *
+ * The id carries both halves — `right:3` — and that is all `onConnect` needs to
+ * write the connection down (see `DiagramCanvas`).
+ */
 const handles = computed(() => {
   if (props.type === 'annotation') return []
   const ports = nodePorts(props.data.ports)
@@ -167,17 +173,158 @@ const handles = computed(() => {
     const grab = Math.round(Math.min(24, Math.max(12, pitch)))
     const dot = Math.round(Math.min(10, Math.max(6, pitch * 0.55)))
 
-    return Array.from({ length: count }, (_, i) => ({
-      id: `${side}:${i + 1}`,
-      position: HANDLE_POSITION[side],
-      style: {
-        [along]: `${((i + 1) / (count + 1)) * 100}%`,
-        '--bg-handle': `${grab}px`,
-        '--bg-dot': `${dot}px`,
-      },
-    }))
+    const moved = props.data.portPositions?.[side]
+    return Array.from({ length: count }, (_, i) => {
+      const at = portFraction(count, i + 1, moved)
+      return {
+        id: `${side}:${i + 1}`,
+        at,
+        position: HANDLE_POSITION[side],
+        style: {
+          [along]: `${at * 100}%`,
+          '--bg-handle': `${grab}px`,
+          '--bg-dot': `${dot}px`,
+        },
+      }
+    })
   })
 })
+
+/**
+ * Vue Flow measures where each handle is once, when it mounts, and works out
+ * which dot a connection drag lands on from that measurement. A dot that slides
+ * — dragged, undone, reset, or respread by a change of count — would leave it
+ * aiming at where the dot used to be, so every change of layout re-measures.
+ */
+watch(
+  () => handles.value.map((h) => `${h.id}@${h.at}`).join(' '),
+  () => updateNodeInternals([props.id]),
+  { flush: 'post' },
+)
+
+/* ---------------------------------------------------- sliding a dot by hand */
+
+/**
+ * The dot being slid along its side, while a ⇧-drag lasts.
+ *
+ * ⇧ rather than a plain drag, because a plain drag on a dot already means
+ * something — drawing a connection out of it — and that is by far the more
+ * common of the two. ⇧ is the "reshape" modifier elsewhere too: ⇧-dragging a
+ * manually routed line drops a bend point in it.
+ */
+const sliding = ref<{ side: PortSide; port: number } | null>(null)
+/** Whether the slide has written anything yet — the first move takes the undo step, a ⇧-click takes none. */
+let slid = false
+/**
+ * A ⇧-press on a dot is followed by a click on it, and a click on a dot is
+ * Vue Flow's click-to-connect. Swallowed once, for the click that ends a slide.
+ */
+let swallowClick = false
+
+/** How close, in screen pixels, a slid dot has to come to its own even slot, or the middle of its side, to snap there. */
+const SLIDE_SNAP = 6
+
+const canSlide = computed(() => !presenting.value && !props.data.locked)
+
+/**
+ * Takes a ⇧-press on a dot before Vue Flow sees it — in the capture phase, on
+ * the node itself, so neither the handle's own connect-drag nor the node's
+ * move-drag ever starts. Cancelling the pointer press also cancels the mouse
+ * press browsers synthesise from it, which is the one both of those listen to.
+ */
+function onPointerDownCapture(event: PointerEvent) {
+  if (!event.shiftKey || event.button !== 0 || !canSlide.value) return
+  const el = (event.target as Element | null)?.closest?.('.bg-node__handle') as HTMLElement | null
+  const { side, port } = endpointOf(el?.dataset.handleid)
+  if (!el || side === 'auto') return
+  event.stopPropagation()
+  event.preventDefault()
+  sliding.value = { side, port }
+  slid = false
+  swallowClick = true
+  window.addEventListener('pointermove', onSlideMove)
+  window.addEventListener('pointerup', stopSlide, { once: true })
+}
+
+/** Belt and braces for a browser that still sends the mouse press a cancelled pointer press should have suppressed. */
+function onMouseDownCapture(event: MouseEvent) {
+  if (!sliding.value) return
+  event.stopPropagation()
+  event.preventDefault()
+}
+
+function onClickCapture(event: MouseEvent) {
+  if (!swallowClick) return
+  swallowClick = false
+  event.stopPropagation()
+  event.preventDefault()
+}
+
+/**
+ * Moves the dot to wherever along its side the pointer is, written down as a
+ * fraction of the side so it keeps its place as the node is resized.
+ *
+ * It snaps to its own evenly spread slot — and landing there forgets it was ever
+ * moved, so a dot can always be put back by hand — and to the middle of the
+ * side. Otherwise it follows the grid when the grid is on. ⌥ suspends all
+ * three, the same as it does for a node's drag. It stays a little way in from
+ * the corners, where it would read as sitting on two sides at once.
+ */
+function onSlideMove(event: PointerEvent) {
+  const target = sliding.value
+  const node = findNode(props.id)
+  if (!target || !node) return
+
+  const horizontal = target.side === 'top' || target.side === 'bottom'
+  const origin = horizontal ? node.computedPosition.x : node.computedPosition.y
+  const length = horizontal ? width.value : height.value
+  if (!length) return
+
+  const pointer = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+  let along = horizontal ? pointer.x : pointer.y
+  const free = event.altKey
+  const reach = SLIDE_SNAP / (viewport.value.zoom || 1)
+  const count = nodePorts(props.data.ports)[target.side]
+  const home = origin + portFraction(count, target.port) * length
+  const middle = origin + length / 2
+
+  let at: number | null
+  if (!free && Math.abs(along - home) < reach) {
+    at = null
+  } else {
+    if (!free && Math.abs(along - middle) < reach) along = middle
+    else if (!free && canvas.snap) along = Math.round(along / canvas.snapSize) * canvas.snapSize
+    const margin = Math.min(6, length / 4)
+    at = Math.min(length - margin, Math.max(margin, along - origin)) / length
+  }
+
+  const current = props.data.portPositions?.[target.side]?.[String(target.port)] ?? null
+  if (at === current) return
+  if (!slid) {
+    commit()
+    endCoalesce()
+    slid = true
+  }
+  setPortPosition(props.id, target.side, target.port, at)
+}
+
+function stopSlide() {
+  sliding.value = null
+  window.removeEventListener('pointermove', onSlideMove)
+  window.removeEventListener('pointerup', stopSlide)
+  // The click that ends a slide fires straight after this, in the same task. If
+  // it lands somewhere else — the pointer let go off the node — it never comes
+  // past here, and the flag must not be left to eat the next real click.
+  setTimeout(() => {
+    swallowClick = false
+  }, 0)
+}
+
+onBeforeUnmount(stopSlide)
+
+const slidingHandle = computed(() =>
+  sliding.value ? `${sliding.value.side}:${sliding.value.port}` : null,
+)
 </script>
 
 <template>
@@ -207,7 +354,12 @@ const handles = computed(() => {
       'bg-node--selected': selected,
       'bg-node--locked': data.locked,
       'bg-node--connecting': connecting,
+      'bg-node--shift': shiftHeld && canSlide,
+      'bg-node--sliding': !!sliding,
     }"
+    @pointerdown.capture="onPointerDownCapture"
+    @mousedown.capture="onMouseDownCapture"
+    @click.capture="onClickCapture"
   >
     <svg
       class="pointer-events-none absolute inset-0"
@@ -306,8 +458,9 @@ const handles = computed(() => {
       class="bg-node__handle"
       :class="{
         'bg-node__handle--drop': handle.id === dropHandle,
-        'bg-node__handle--from': handle.id === fromHandle,
+        'bg-node__handle--from': handle.id === fromHandle || handle.id === slidingHandle,
       }"
+      :title="canSlide ? 'Drag to connect · ⇧-drag to slide along the side' : undefined"
     />
   </div>
 </template>
@@ -379,8 +532,23 @@ const handles = computed(() => {
 }
 
 .bg-node:hover :deep(.bg-node__handle)::after,
-.bg-node--selected :deep(.bg-node__handle)::after {
+.bg-node--selected :deep(.bg-node__handle)::after,
+.bg-node--sliding :deep(.bg-node__handle)::after {
   opacity: 1;
+}
+
+/*
+ * With ⇧ down, a dot slides along its side instead of starting a connection,
+ * and the cursor says which way before anything is pressed.
+ */
+.bg-node--shift :deep(.vue-flow__handle-left),
+.bg-node--shift :deep(.vue-flow__handle-right) {
+  cursor: ns-resize;
+}
+
+.bg-node--shift :deep(.vue-flow__handle-top),
+.bg-node--shift :deep(.vue-flow__handle-bottom) {
+  cursor: ew-resize;
 }
 
 /*

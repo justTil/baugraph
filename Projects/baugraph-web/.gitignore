@@ -52,5 +52,7 @@ extension/media
 extension/schema
 VSCodeExtension/output
 
-# Brand kit drop (logos, tokens); what the app uses is copied into src/assets/brand and public/
+# Brand kit (valsom design kit + Baugraph logo masters, see new_assets/README.md).
+# What the site ships is generated into public/, docs/public/, extension/images/
+# and src/assets/fonts/, and committed there.
 new_assets/

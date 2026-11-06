@@ -9,13 +9,17 @@ import type { EdgeData, NodeData } from '@/features/diagram/composables/useDiagr
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
 import type { Vec } from '@/features/diagram/lib/edge-path'
 import {
   arrowHeadPath,
   dashArray,
   edgeGeometry,
   endpointOf,
+  labelAnchor,
+  labelFoot as footOfLabel,
   nearestSegmentIndex,
+  projectOnto,
 } from '@/features/diagram/lib/edge-path'
 import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
 import { useAppTheme } from '@/composables/useAppTheme'
@@ -36,8 +40,10 @@ const {
   selectWaypoint,
   shiftWaypointSelectionForInsert,
   shiftWaypointSelectionForRemove,
+  resetLabelPosition,
 } = useDiagram()
-const { getNodes, screenToFlowCoordinate, findEdge } = useVueFlow()
+const { getNodes, screenToFlowCoordinate, findEdge, viewport } = useVueFlow()
+const { presenting } = usePresentation()
 const { highlightOf, registerEdgePath, unregisterEdgePath, invalidateEdgePath } = useFlows()
 const { mode: appThemeMode } = useAppTheme()
 
@@ -76,6 +82,9 @@ const obstacles = computed(() =>
 
 /** A node's connection points, as its data carries them. Zones have none of their own. */
 const portsOf = (node: EdgeProps['sourceNode']) => (node.data as NodeData | undefined)?.ports
+/** Where a node's connection points were slid to by hand, if any were. */
+const portPositionsOf = (node: EdgeProps['sourceNode']) =>
+  (node.data as NodeData | undefined)?.portPositions
 
 const geometry = computed(() =>
   edgeGeometry(boxOf(props.sourceNode), boxOf(props.targetNode), {
@@ -83,6 +92,8 @@ const geometry = computed(() =>
     targetSide: props.data.targetSide,
     sourcePorts: portsOf(props.sourceNode),
     targetPorts: portsOf(props.targetNode),
+    sourcePortPositions: portPositionsOf(props.sourceNode),
+    targetPortPositions: portPositionsOf(props.targetNode),
     sourcePort: props.data.sourcePort,
     targetPort: props.data.targetPort,
     route: props.data.route,
@@ -501,13 +512,116 @@ const haloPath = computed(() => {
   return points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join('')
 })
 
+/* ---------------------------------------------------------------- label */
+
+/** Whether the label has been dragged off its default place in the middle of the line. */
+const labelMoved = computed(
+  () => props.data.labelPosition !== undefined || !!props.data.labelOffset,
+)
+
+/** Where the label is centred — see `labelAnchor`. */
+const labelCenter = computed(() =>
+  labelAnchor(geometry.value, props.data.labelPosition, props.data.labelOffset),
+)
+
 /**
- * The chip at the middle of the line. Additional info adds an icon to it — and
- * is enough on its own to draw one, icon only, so info written on an unlabelled
- * connection is still findable.
+ * The point on the line a label pulled off it belongs to, so a leader can be
+ * drawn back to it — a label floating clear of its connection is otherwise
+ * anyone's guess on a busy diagram. `null` while the label sits on the line.
+ */
+const labelFoot = computed<Vec | null>(() =>
+  footOfLabel(geometry.value, props.data.labelPosition, props.data.labelOffset),
+)
+
+/**
+ * How close, in screen pixels, a dragged label has to come to the line — or to
+ * the middle of it — to be pulled onto it. Screen pixels rather than canvas
+ * units, so the pull feels the same at any zoom.
+ */
+const LABEL_SNAP = 8
+/** How far the pointer has to travel before a press on the label counts as a drag rather than a click. */
+const LABEL_DRAG_THRESHOLD = 3
+
+const draggingLabel = ref(false)
+/** Pointer minus label centre at the moment it was grabbed, so the label does not jump to sit under the cursor. */
+let labelGrab: Vec | null = null
+
+/**
+ * Picks the label up. Nothing is written — and no undo step taken — until the
+ * pointer has actually moved, so a plain click on a label still just selects
+ * its connection.
+ */
+function startDragLabel(event: PointerEvent) {
+  if (event.button !== 0 || presenting.value) return
+  event.stopPropagation()
+  const at = flowPoint(event)
+  labelGrab = { x: at.x - labelCenter.value.x, y: at.y - labelCenter.value.y }
+  window.addEventListener('pointermove', onLabelPointerMove)
+  window.addEventListener('pointerup', stopDraggingLabel, { once: true })
+}
+
+/**
+ * Follows the pointer, writing the label down as a place along the line plus
+ * how far off it the label was pulled — so it rides along with the connection,
+ * at the same end and the same side, however the nodes are moved afterwards.
+ *
+ * Dropped within reach of the line, it sits on the line; within reach of the
+ * middle, it goes back to its default place and the file forgets it was ever
+ * moved. ⌥ suspends both pulls, the same as it does for a node's drag.
+ */
+function onLabelPointerMove(event: PointerEvent) {
+  if (!labelGrab) return
+  const zoom = viewport.value.zoom || 1
+  const at = flowPoint(event)
+  const want = { x: at.x - labelGrab.x, y: at.y - labelGrab.y }
+
+  if (!draggingLabel.value) {
+    const from = labelCenter.value
+    if (Math.hypot(want.x - from.x, want.y - from.y) * zoom < LABEL_DRAG_THRESHOLD) return
+    commit()
+    endCoalesce()
+    draggingLabel.value = true
+  }
+
+  const reach = LABEL_SNAP / zoom
+  const free = event.altKey
+  const mid = geometry.value.mid
+  if (!free && Math.hypot(want.x - mid.x, want.y - mid.y) < reach) {
+    updateEdgeData(props.id, { labelPosition: undefined, labelOffset: undefined })
+    return
+  }
+
+  const { t, point } = projectOnto(geometry.value, want)
+  const offset = { x: want.x - point.x, y: want.y - point.y }
+  const onLine = !free && Math.hypot(offset.x, offset.y) < reach
+  updateEdgeData(props.id, { labelPosition: t, labelOffset: onLine ? undefined : offset })
+}
+
+function stopDraggingLabel() {
+  labelGrab = null
+  draggingLabel.value = false
+  window.removeEventListener('pointermove', onLabelPointerMove)
+  window.removeEventListener('pointerup', stopDraggingLabel)
+}
+
+/** Double-clicking a moved label puts it back in the middle of its line. */
+function onLabelDoubleClick(event: MouseEvent) {
+  if (!labelMoved.value || presenting.value) return
+  event.stopPropagation()
+  commit()
+  endCoalesce()
+  resetLabelPosition(props.id)
+}
+
+onBeforeUnmount(stopDraggingLabel)
+
+/**
+ * The label's chip — in the middle of the line until it is dragged somewhere
+ * else. Additional info adds an icon to it — and is enough on its own to draw
+ * one, icon only, so info written on an unlabelled connection is still findable.
  */
 const label = computed(() => {
-  const box = edgeLabelBox(props.data.label, props.data.labelInfo, geometry.value.mid, measureText)
+  const box = edgeLabelBox(props.data.label, props.data.labelInfo, labelCenter.value, measureText)
   if (!box) return null
   return {
     ...box,
@@ -524,7 +638,7 @@ const label = computed(() => {
  * connection just quietly stops carrying anything, and the reason — a flow turned
  * off somewhere, maybe passes ago — is nowhere on the canvas. Dashed and muted so
  * it reads as "nothing is happening here on purpose", and dropped below the label
- * so the two never share the midpoint.
+ * — wherever the label was moved to — so the two never overlap.
  */
 const pausedFlowCount = computed(
   () => flows.value.filter((flow) => !flow.enabled && flow.edges.includes(props.id)).length,
@@ -533,16 +647,25 @@ const pausedTag = computed(() => {
   if (!pausedFlowCount.value) return null
   const text = pausedFlowCount.value === 1 ? 'Flow paused' : `${pausedFlowCount.value} flows paused`
   const width = measureText(text, 10) + 18
+  const at = label.value ? labelCenter.value : geometry.value.mid
   return {
     text,
-    x: geometry.value.mid.x - width / 2,
-    y: geometry.value.mid.y + (label.value ? 10 : -8),
+    cx: at.x,
+    x: at.x - width / 2,
+    y: at.y + (label.value ? 10 : -8),
     width,
   }
 })
 </script>
 
 <template>
+  <!--
+    Paint order, bottom to top: the line and what travels it, the bend-point
+    strip, the reconnect zones at each end, the label, and the bend points
+    themselves. The label sits above the reconnect zones because it can be
+    dragged right up to an end, where the zone would otherwise swallow the
+    grab; the bend points sit above everything, since a dot is aimed at.
+  -->
   <!--
     Hidden for the length of a reconnect drag: Vue Flow draws its own
     connection-in-progress line from the fixed end to the cursor, and with the
@@ -592,8 +715,105 @@ const pausedTag = computed(() => {
 
     <!-- Messages travelling this connection, and any moving line under them. -->
     <FlowTokens :edge-id="id" :path="geometry.path" :line-width="lineWidth" />
+  </template>
 
-    <template v-if="label && !label.icon">
+  <!--
+    Manual routing: only while the connection is selected, and only once it has
+    been switched to manual routing (from the inspector, or by already carrying
+    a bend point), so an automatic connection stays free of editing chrome.
+    Shift-dragging the line itself drops a new bend point and starts dragging
+    it; the dots are the bend points already placed, draggable to move and
+    double-clickable to remove.
+  -->
+  <template v-if="props.selected && !dragging && waypoints.length">
+    <!--
+      Its own colour, distinct from the blue reconnect zones below: this drags
+      a bend point into being, not an endpoint onto a different node, and the
+      two should not read as the same gesture. Lit only while shift is held —
+      an ordinary click on the line selects it and does not bend it.
+    -->
+    <path
+      v-if="midPath"
+      :d="midPath"
+      fill="none"
+      stroke-width="20"
+      stroke-linecap="round"
+      class="bg-edge__grab-add"
+      :class="{ 'bg-edge__grab-add--armed': !!hoverPoint }"
+      @pointerdown="startAddWaypoint($event)"
+      @pointermove="onHoverAddWaypoint($event)"
+      @pointerleave="clearHoverPoint"
+    />
+    <!-- Live preview of exactly where shift-clicking now would drop a bend point. -->
+    <circle
+      v-if="hoverPoint"
+      :cx="hoverPoint.x"
+      :cy="hoverPoint.y"
+      r="5"
+      :fill="theme.waypoint"
+      fill-opacity="0.45"
+      class="pointer-events-none"
+    />
+  </template>
+
+  <!--
+    Where the connection itself can be picked up and dragged onto a different
+    node — a fixed stretch of the line at each end, not just its exact tip.
+    Invisible until hovered, same as a node's own dots (see `ShapeNode`).
+  -->
+  <path
+    v-if="nearSourcePath"
+    :d="nearSourcePath"
+    fill="none"
+    stroke-width="20"
+    stroke-linecap="round"
+    class="bg-edge__grab"
+    @mousedown="startReconnect($event, 'source')"
+  />
+  <path
+    v-if="nearTargetPath"
+    :d="nearTargetPath"
+    fill="none"
+    stroke-width="20"
+    stroke-linecap="round"
+    class="bg-edge__grab"
+    @mousedown="startReconnect($event, 'target')"
+  />
+
+  <template v-if="!dragging">
+    <!--
+      A label pulled off the line keeps a thread back to the point it belongs
+      to — always, not just while selected: it is what says which connection a
+      label floating clear of its line belongs to. The export draws the same.
+    -->
+    <g v-if="label && labelFoot" class="pointer-events-none">
+      <line
+        :x1="labelFoot.x"
+        :y1="labelFoot.y"
+        :x2="labelCenter.x"
+        :y2="labelCenter.y"
+        :stroke="stroke"
+        stroke-width="1"
+        stroke-dasharray="2 3"
+        stroke-opacity="0.7"
+      />
+      <circle :cx="labelFoot.x" :cy="labelFoot.y" r="2.5" :fill="stroke" />
+    </g>
+
+    <!--
+      The label can be dragged anywhere — along the line, or off it. Double-
+      clicking one that was moved puts it back in the middle.
+    -->
+    <g
+      v-if="label && !label.icon"
+      class="bg-edge__label"
+      :class="{
+        'bg-edge__label--movable': !presenting,
+        'bg-edge__label--dragging': draggingLabel,
+      }"
+      @pointerdown="startDragLabel"
+      @dblclick="onLabelDoubleClick"
+    >
       <rect
         :x="label.x"
         :y="label.y"
@@ -614,7 +834,7 @@ const pausedTag = computed(() => {
       >
         {{ label.text }}
       </text>
-    </template>
+    </g>
     <!--
       A label carrying additional info: the whole chip is the hover target, not
       just the icon — a 11px icon is a hard thing to land a pointer on while the
@@ -622,7 +842,15 @@ const pausedTag = computed(() => {
     -->
     <Tooltip v-else-if="label && label.icon" :delay-duration="150">
       <TooltipTrigger as-child>
-        <g class="bg-edge__label--info">
+        <g
+          class="bg-edge__label bg-edge__label--info"
+          :class="{
+            'bg-edge__label--movable': !presenting,
+            'bg-edge__label--dragging': draggingLabel,
+          }"
+          @pointerdown="startDragLabel"
+          @dblclick="onLabelDoubleClick"
+        >
           <rect
             :x="label.x"
             :y="label.y"
@@ -679,7 +907,7 @@ const pausedTag = computed(() => {
         stroke-dasharray="3 2"
       />
       <text
-        :x="geometry.mid.x"
+        :x="pausedTag.cx"
         :y="pausedTag.y + 11"
         text-anchor="middle"
         font-size="10"
@@ -690,43 +918,7 @@ const pausedTag = computed(() => {
     </g>
   </template>
 
-  <!--
-    Manual routing: only while the connection is selected, and only once it has
-    been switched to manual routing (from the inspector, or by already carrying
-    a bend point), so an automatic connection stays free of editing chrome.
-    Shift-dragging the line itself drops a new bend point and starts dragging
-    it; the dots are the bend points already placed, draggable to move and
-    double-clickable to remove.
-  -->
   <template v-if="props.selected && !dragging && waypoints.length">
-    <!--
-      Its own colour, distinct from the blue reconnect zones below: this drags
-      a bend point into being, not an endpoint onto a different node, and the
-      two should not read as the same gesture. Lit only while shift is held —
-      an ordinary click on the line selects it and does not bend it.
-    -->
-    <path
-      v-if="midPath"
-      :d="midPath"
-      fill="none"
-      stroke-width="20"
-      stroke-linecap="round"
-      class="bg-edge__grab-add"
-      :class="{ 'bg-edge__grab-add--armed': !!hoverPoint }"
-      @pointerdown="startAddWaypoint($event)"
-      @pointermove="onHoverAddWaypoint($event)"
-      @pointerleave="clearHoverPoint"
-    />
-    <!-- Live preview of exactly where shift-clicking now would drop a bend point. -->
-    <circle
-      v-if="hoverPoint"
-      :cx="hoverPoint.x"
-      :cy="hoverPoint.y"
-      r="5"
-      :fill="theme.waypoint"
-      fill-opacity="0.45"
-      class="pointer-events-none"
-    />
     <template v-for="(point, index) in waypoints" :key="index">
       <!--
         Bigger than the dot itself: a 5px dot is not a reliable click target on
@@ -757,30 +949,6 @@ const pausedTag = computed(() => {
       />
     </template>
   </template>
-
-  <!--
-    Where the connection itself can be picked up and dragged onto a different
-    node — a fixed stretch of the line at each end, not just its exact tip.
-    Invisible until hovered, same as a node's own dots (see `ShapeNode`).
-  -->
-  <path
-    v-if="nearSourcePath"
-    :d="nearSourcePath"
-    fill="none"
-    stroke-width="20"
-    stroke-linecap="round"
-    class="bg-edge__grab"
-    @mousedown="startReconnect($event, 'source')"
-  />
-  <path
-    v-if="nearTargetPath"
-    :d="nearTargetPath"
-    fill="none"
-    stroke-width="20"
-    stroke-linecap="round"
-    class="bg-edge__grab"
-    @mousedown="startReconnect($event, 'target')"
-  />
 </template>
 
 <style scoped>
@@ -823,11 +991,23 @@ const pausedTag = computed(() => {
 
 /*
  * Vue Flow only lets an edge's visible stroke take the pointer, which would
- * leave a label's fill dead to hover and the info in it unreachable.
+ * leave a label's fill dead to hover and drag, and the info in it unreachable.
  */
-.bg-edge__label--info {
+.bg-edge__label {
   pointer-events: all;
+}
+
+.bg-edge__label--info {
   cursor: help;
+}
+
+/* A label can be picked up and moved, wherever it sits — except while presenting. */
+.bg-edge__label--movable {
+  cursor: grab;
+}
+
+.bg-edge__label--dragging {
+  cursor: grabbing;
 }
 
 .bg-edge__waypoint-hit {

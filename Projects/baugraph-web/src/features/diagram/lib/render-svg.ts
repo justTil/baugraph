@@ -3,11 +3,19 @@ import type { DiagramDocument, DiagramNode, MessageFlow } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
 import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
-import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
+import {
+  arrowHeadPath,
+  dashArray,
+  edgeGeometry,
+  labelAnchor,
+  labelFoot,
+} from '@/features/diagram/lib/edge-path'
+import type { EdgeLabelBox } from '@/features/diagram/lib/edge-label'
 import { EDGE_LABEL_FONT, EDGE_LABEL_INFO_ICON, edgeLabelBox } from '@/features/diagram/lib/edge-label'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, fadeOf, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
 import { nodeCaption } from '@/features/diagram/lib/node-caption'
+import type { DiagramTheme } from '@/features/diagram/lib/theme'
 import {
   COLOR_HEX,
   diagramTheme,
@@ -113,9 +121,19 @@ export function absoluteBoxes(doc: DiagramDocument): Map<string, Box> {
   return boxes
 }
 
-export function contentBounds(doc: DiagramDocument, padding = EXPORT_PADDING): Box {
-  const boxes = [...absoluteBoxes(doc).values()]
-  if (!boxes.length) return { x: -200, y: -150, width: 400, height: 300 }
+/**
+ * The canvas area an export covers: every node, plus anything else in `extra`
+ * that has to be in the picture — a label dragged out past the outermost node
+ * would otherwise be cut in half by the edge of the image.
+ */
+export function contentBounds(
+  doc: DiagramDocument,
+  padding = EXPORT_PADDING,
+  extra: Box[] = [],
+): Box {
+  const nodes = [...absoluteBoxes(doc).values()]
+  if (!nodes.length) return { x: -200, y: -150, width: 400, height: 300 }
+  const boxes = [...nodes, ...extra]
   const x1 = Math.min(...boxes.map((b) => b.x)) - padding
   const y1 = Math.min(...boxes.map((b) => b.y)) - padding
   const x2 = Math.max(...boxes.map((b) => b.x + b.width)) + padding
@@ -261,7 +279,12 @@ function renderTextBlock(
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
-function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
+function renderZone(
+  node: DiagramNode,
+  box: Box,
+  paint: ReturnType<typeof nodePaint>,
+  withBody = true,
+): string {
   // Held half a stroke inside the box, exactly as `ZoneNode` draws it.
   const inset = paint.strokeWidth / 2
   const frame = roundedRect(
@@ -271,10 +294,12 @@ function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePa
     Math.max(1, box.height - paint.strokeWidth),
     12,
   )
-  let out = paint.strokeWidth
-    ? `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
-      `stroke-width="${paint.strokeWidth}" stroke-dasharray="7 5"/>`
-    : `<path d="${frame}" fill="${paint.fill}"/>`
+  let out = !withBody
+    ? ''
+    : paint.strokeWidth
+      ? `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
+        `stroke-width="${paint.strokeWidth}" stroke-dasharray="7 5"/>`
+      : `<path d="${frame}" fill="${paint.fill}"/>`
 
   const available = box.width - 26
   const label = fitText((node.label || '').toUpperCase(), available, 12, 700)
@@ -288,7 +313,12 @@ function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePa
   return out
 }
 
-function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
+function renderShape(
+  node: DiagramNode,
+  box: Box,
+  paint: ReturnType<typeof nodePaint>,
+  withBody = true,
+): string {
   const parts: string[] = []
 
   // A weightless outline is left off entirely rather than written as `0`, so a
@@ -297,7 +327,8 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
     ? ` stroke="${paint.stroke}" stroke-width="${paint.strokeWidth}" stroke-linejoin="round"`
     : ''
 
-  for (const element of shapeElements(node.shape, box.width, box.height, paint.strokeWidth)) {
+  const body = withBody ? shapeElements(node.shape, box.width, box.height, paint.strokeWidth) : []
+  for (const element of body) {
     // Trim — a cylinder's rim, a queue's ticks — is stroke only, so without one
     // there is nothing to draw.
     if (element.role === 'detail' && !outline) continue
@@ -317,7 +348,9 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
 
   const hasIcon = !!node.icon && !!iconInnerMarkup(node.icon)
   const centered = CENTERED_SHAPES.has(node.shape) || !hasIcon
-  const inset = contentInset(node.shape, box.height)
+  // Without its body, a drum's top is not drawn and takes no room: the text
+  // goes in the middle, where a 3D drum's side has it.
+  const inset = withBody ? contentInset(node.shape, box.height) : { ...contentInset(node.shape, box.height), top: 0 }
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2 + inset.top / 2
   const iconBlock = hasIcon ? ICON_SIZE + ICON_GAP : 0
@@ -365,6 +398,34 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
   }
 
   return parts.join('')
+}
+
+/**
+ * One node on its own, as a standalone SVG of exactly its box — what the 3D view
+ * lays on top of each block, so a node there reads exactly as it does on the
+ * canvas and in an export: the same outline, icon and caption, from the same
+ * code.
+ */
+export function nodeFaceSvg(
+  node: DiagramNode,
+  theme: DiagramTheme,
+  /**
+   * `false` leaves the shape itself out — fill, outline, trim — and keeps only
+   * what is written on it: the icon, the name, the caption, on a transparent
+   * ground. What the 3D view lays on a node that is a solid of its own, where a
+   * drawn outline would only be a picture of the edge already there.
+   */
+  { body: withBody = true }: { body?: boolean } = {},
+): string {
+  const { width, height } = node.size
+  const box: Box = { x: 0, y: 0, width, height }
+  const paint = nodePaint(node, theme)
+  const body =
+    node.kind === 'zone' ? renderZone(node, box, paint, withBody) : renderShape(node, box, paint, withBody)
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
+    `viewBox="0 0 ${width} ${height}"><style>text{font-family:${SANS}}</style>${body}</svg>`
+  )
 }
 
 /* ------------------------------------------------------------------ flows */
@@ -767,7 +828,6 @@ export interface DocumentFrames {
 
 export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): DocumentFrames {
   const theme = diagramTheme(doc.canvas.theme)
-  const bounds = contentBounds(doc, options.padding ?? EXPORT_PADDING)
   const boxes = absoluteBoxes(doc)
 
   const zones = doc.nodes
@@ -799,6 +859,8 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
         targetSide: edge.targetSide,
         sourcePorts: byId.get(edge.source)?.ports,
         targetPorts: byId.get(edge.target)?.ports,
+        sourcePortPositions: byId.get(edge.source)?.portPositions,
+        targetPortPositions: byId.get(edge.target)?.portPositions,
         sourcePort: edge.sourcePort,
         targetPort: edge.targetPort,
         route: edge.route,
@@ -807,6 +869,28 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
       }),
     )
   }
+
+  // Each label's chip, laid out once: drawn from below, and — for a label that
+  // was moved, and so may sit well clear of every node — counted into the
+  // bounds. A label nobody moved stays out of them, so an export of a diagram
+  // that never moved one comes out exactly the size it always did.
+  const labels = new Map<string, EdgeLabelBox>()
+  const movedLabels: Box[] = []
+  for (const edge of doc.edges) {
+    const geometry = geometries.get(edge.id)
+    if (!geometry) continue
+    const label = edgeLabelBox(
+      edge.label,
+      edge.labelInfo,
+      labelAnchor(geometry, edge.labelPosition, edge.labelOffset),
+      measureText,
+    )
+    if (!label) continue
+    labels.set(edge.id, label)
+    if (edge.labelPosition !== undefined || edge.labelOffset) movedLabels.push(label)
+  }
+
+  const bounds = contentBounds(doc, options.padding ?? EXPORT_PADDING, movedLabels)
 
   const edges = doc.edges
     .map((edge) => {
@@ -830,8 +914,20 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
         out += `<path d="${arrowHeadPath(geometry.start, geometry.startDir, stroke)}" fill="${color}"/>`
       }
 
-      const label = edgeLabelBox(edge.label, edge.labelInfo, geometry.mid, measureText)
+      // Wherever the label was dragged to on the canvas — the same anchor the
+      // canvas computes, from the same geometry, so the two cannot drift apart.
+      const label = labels.get(edge.id)
       if (label) {
+        // A label pulled off its line keeps the dotted thread back to it, as
+        // on the canvas — the only thing saying which connection it labels.
+        const foot = labelFoot(geometry, edge.labelPosition, edge.labelOffset)
+        if (foot) {
+          const centre = labelAnchor(geometry, edge.labelPosition, edge.labelOffset)
+          out +=
+            `<line x1="${round2(foot.x)}" y1="${round2(foot.y)}" x2="${round2(centre.x)}" y2="${round2(centre.y)}" ` +
+            `stroke="${color}" stroke-width="1" stroke-dasharray="2 3" stroke-opacity="0.7"/>` +
+            `<circle cx="${round2(foot.x)}" cy="${round2(foot.y)}" r="2.5" fill="${color}"/>`
+        }
         let chip =
           `<rect x="${label.x}" y="${label.y}" width="${label.width}" ` +
           `height="${label.height}" rx="4" fill="${theme.bg}" stroke="${mix(color, theme.bg, 0.72)}" stroke-width="1"/>`

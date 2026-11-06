@@ -13,6 +13,8 @@ const open = defineModel<boolean>('open', { required: true })
 const SHORTCUTS: [string, string][] = [
   ['Shift + drag', 'rubber-band select'],
   ['⌥ + drag', 'ignore the grid and the alignment guides'],
+  ['⇧ + drag a dot', 'slide a connection point along its side'],
+  ['drag a label', 'move a connection’s label (double-click to put it back)'],
   ['Space / middle-drag', 'pan the canvas'],
   ['⌘ + scroll, pinch', 'zoom (plain scroll pans)'],
   ['F', 'fit diagram to window'],
@@ -31,6 +33,20 @@ const SHORTCUTS: [string, string][] = [
   ['⇧⌘S', 'save to a different file'],
   ['⌫', 'delete selection'],
   ['arrows', 'nudge (⇧ = ×5)'],
+  ['3', '3D view — the diagram stood up, its messages in flight'],
+]
+
+/** Keys that mean something else while the 3D view is up. It is for looking: nothing is edited there. */
+const SHORTCUTS_3D: [string, string][] = [
+  ['drag or middle-drag', 'orbit the camera'],
+  ['right-drag or ⇧ middle-drag', 'pan the camera'],
+  ['scroll', 'zoom'],
+  ['click', 'fly to a node'],
+  ['double-click empty space', 'fit everything'],
+  ['← / →', 'spotlight the previous / next message flow'],
+  ['F', 'fit everything'],
+  ['R', 'turntable — a slow spin, for leaving it on screen'],
+  ['3', 'back to 2D'],
 ]
 </script>
 
@@ -61,7 +77,12 @@ const SHORTCUTS: [string, string][] = [
           <p>
             A side carries one dot until you give it more: up to six a side, set per side under
             <em>Connection points</em> in a node's inspector, and spread evenly along it. A
-            connection can be moved between them from its own inspector.
+            connection can be moved between them from its own inspector. ⇧-drag a dot to slide
+            it along its side — its connections go with it.
+          </p>
+          <p>
+            Drag a connection's label to move it along the line or off it; it stays with the
+            connection when nodes move. Double-click a moved label to put it back in the middle.
           </p>
           <p>
             Double-click a node to rename it inline. Icon, colour, shape, routing, arrowheads and
@@ -160,6 +181,41 @@ const SHORTCUTS: [string, string][] = [
             working on a diagram that animates. Exported SVGs keep their animation; PNGs, being
             one frame, leave it out.
           </p>
+        </section>
+
+        <section class="space-y-2">
+          <h3 class="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+            3D view
+          </h3>
+          <p>
+            Press <kbd class="bg-muted rounded px-1 font-mono">3</kbd> (or <em>3D</em> in the
+            toolbar) and the diagram stands up. It is the same layout as on the canvas — every
+            node exactly where it is there, standing as the solid its shape stands for: a
+            database a drum, a queue a tube, a circle a ball. They stay standing whichever way you
+            turn the view.
+          </p>
+          <p>
+            Every connection is an arch from the top of one node to the top of the next, all of a
+            node's connections meeting it at one point on top, so a node that talks to many reads
+            as the hub it is. The message flows travel along the arches as
+            parcels, letters and beads of light, standing upright and facing you. Step through them with
+            <kbd class="bg-muted rounded px-1 font-mono">←</kbd>
+            <kbd class="bg-muted rounded px-1 font-mono">→</kbd>: each one in turn is drawn at full
+            strength while everything it does not touch fades back.
+          </p>
+          <p>
+            The 3D view is for looking: nothing is moved or edited there, and a click on a node
+            flies to it. The one thing to set for it is a node's <em>3D height</em> in the
+            inspector — <em>Tall</em> or <em>Tower</em> raise what carries the most or matters the
+            most on a post, and <em>Flat</em> lays a node on its back. The 2D canvas and every
+            export ignore it.
+          </p>
+          <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+            <template v-for="[keys, description] in SHORTCUTS_3D" :key="keys">
+              <dt><kbd class="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">{{ keys }}</kbd></dt>
+              <dd class="text-muted-foreground">{{ description }}</dd>
+            </template>
+          </dl>
         </section>
 
         <section class="space-y-2">

@@ -927,6 +927,7 @@ export function webAppDocument(): DiagramDocument {
         position: { x: 820, y: 190 },
         size: { width: 168, height: 70 },
         parent: null,
+        extrusion: 'tall',
       },
       {
         id: 'objects',

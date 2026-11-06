@@ -7,6 +7,7 @@ import {
   hasDiagramStore,
 } from '@/features/diagram/composables/useDiagram'
 import { disposeFlowRuntime } from '@/features/diagram/composables/useFlows'
+import { disposeView3D } from '@/features/diagram/composables/useView3D'
 
 /**
  * The diagrams this browser is holding on to.
@@ -128,9 +129,10 @@ export function documentExists(id: string): boolean {
 
 /* ---------------------------------------------------------------- forgetting */
 
-/** Drops a document for good: its autosave, its store and its flow runtime. */
+/** Drops a document for good: its autosave, its store, its flow runtime and its 3D view. */
 export function forgetDocument(id: string) {
   disposeFlowRuntime(id)
+  disposeView3D(id)
   if (hasDiagramStore(id)) diagramStore(id).clearPersisted()
   else {
     try {

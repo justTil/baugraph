@@ -6,9 +6,8 @@
  * in the other.
  */
 
-/** The app's own `--font-sans` (src/style.css), so canvas and chrome share one typeface. */
 export const SANS =
-  "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+  "Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif"
 
 let context: CanvasRenderingContext2D | null | undefined
 
@@ -30,9 +29,7 @@ export async function fontsReady(): Promise<void> {
   const fonts = typeof document === 'undefined' ? undefined : document.fonts
   if (!fonts) return
   try {
-    await Promise.all(
-      [400, 600, 700].map((weight) => fonts.load(`${weight} 13px 'IBM Plex Sans'`)),
-    )
+    await Promise.all([fonts.load('400 13px Geist'), fonts.load('600 13px Geist')])
     await fonts.ready
   } catch {
     // A webfont that never arrives just means the fallback metrics stand.

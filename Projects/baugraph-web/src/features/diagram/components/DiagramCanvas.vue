@@ -3,7 +3,17 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
-import { computed, defineAsyncComponent, h, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  h,
+  markRaw,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
 import type {
   Connection,
   EdgeMouseEvent,
@@ -17,10 +27,12 @@ import { MiniMap } from '@vue-flow/minimap'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
+  Box as Box3D,
   Check,
   Crosshair,
   Minimize2,
   Presentation,
+  Rotate3d,
   Scaling,
   Sparkles,
   Waypoints,
@@ -29,8 +41,8 @@ import type { ColorKey, DiagramParseError } from '@/model'
 import { safeParse, stringify } from '@/model'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Switch } from '@/components/ui/switch'
 import { Toggle } from '@/components/ui/toggle'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppTheme } from '@/composables/useAppTheme'
@@ -46,6 +58,7 @@ import { useSavedNotice } from '@/features/diagram/composables/useDocumentFile'
 import { usePlacement } from '@/features/diagram/composables/usePlacement'
 import { useConnectionTarget } from '@/features/diagram/composables/useConnectionTarget'
 import { useLayersPanel } from '@/features/diagram/composables/useLayersPanel'
+import { nextSpotlight, useView3D } from '@/features/diagram/composables/useView3D'
 import { usePaletteOverview } from '@/features/diagram/composables/usePaletteOverview'
 import ShapeNode from '@/features/diagram/components/ShapeNode.vue'
 import ZoneNode from '@/features/diagram/components/ZoneNode.vue'
@@ -96,6 +109,7 @@ const {
   updateNodeData,
   updateEdgeData,
   nudgeSelection,
+  flows,
   fitRequest,
   toDocument,
   replaceDocument,
@@ -123,6 +137,12 @@ const { installFlowRuntime, stopFlowRuntime } = useFlows()
 const { active: laserActive } = useLaserPointer()
 const { presenting, exit: exitPresentation, toggle: togglePresentation } = usePresentation()
 const { open: layersOpen } = useLayersPanel()
+const {
+  active: view3d,
+  autoRotate,
+  spotlight,
+  commands: view3dCommands,
+} = useView3D()
 const { open: paletteOverviewOpen } = usePaletteOverview()
 
 /** The wrapper the laser pointer tracks the cursor against. */
@@ -188,6 +208,24 @@ const JsonEditor = defineAsyncComponent({
   delay: 150,
 })
 
+/**
+ * The 3D view pulls in three.js, a few hundred kilobytes nobody who stays in 2D
+ * should have to download — so, like Monaco, it is fetched the first time it is
+ * opened and not before.
+ */
+const DiagramView3D = defineAsyncComponent({
+  loader: () => import('@/features/diagram/components/DiagramView3D.vue'),
+  loadingComponent: {
+    render: () =>
+      h(
+        'div',
+        { class: 'text-muted-foreground absolute inset-0 flex items-center justify-center font-mono text-xs' },
+        'Loading 3D view…',
+      ),
+  },
+  delay: 150,
+})
+
 const viewMode = ref<'diagram' | 'json'>('diagram')
 const jsonDraft = ref('')
 const jsonError = ref<DiagramParseError | null>(null)
@@ -197,8 +235,72 @@ const jsonError = ref<DiagramParseError | null>(null)
  * otherwise sit in that corner move out from under it while it is open.
  */
 const cornerLeft = computed(() =>
-  layersOpen.value && !presenting.value && viewMode.value === 'diagram' ? 'left-[17.75rem]' : 'left-4',
+  layersOpen.value && !presenting.value && viewMode.value === 'diagram' && !view3d.value
+    ? 'left-[17.75rem]'
+    : 'left-4',
 )
+
+/** What the view switch shows: the JSON text wins, then whichever of 2D and 3D is on. */
+const shownView = computed(() => (viewMode.value === 'json' ? 'json' : view3d.value ? '3d' : 'diagram'))
+
+/**
+ * The switch in the corner. 2D and 3D are two ways of looking at the same
+ * diagram, so moving between them changes nothing; leaving the JSON text for
+ * either applies whatever was typed there first — and stays put if that does
+ * not parse, exactly as it always has.
+ */
+function setShownView(next: unknown) {
+  if (next !== 'diagram' && next !== '3d' && next !== 'json') return
+  if (next === 'json') {
+    setViewMode('json')
+    return
+  }
+  if (viewMode.value === 'json') {
+    setViewMode('diagram')
+    if (viewMode.value === 'json') return
+  }
+  view3d.value = next === '3d'
+}
+
+/** Turning 3D on from the toolbar or a key while the JSON text is up has to bring the diagram back too. */
+watch(view3d, (on) => {
+  if (!on || viewMode.value !== 'json') return
+  setViewMode('diagram')
+  if (viewMode.value === 'json') view3d.value = false
+})
+
+/** Flows the 3D spotlight can step through: the ones that move. */
+const playableFlows = computed(() => flows.value.filter((f) => f.enabled).map((f) => f.id))
+
+/**
+ * The keys of the 3D view, which is for looking: `F` fits, `R` spins the
+ * turntable, `←`/`→` step the spotlight through the flows. Returns whether the
+ * key was taken.
+ */
+function onKey3D(event: KeyboardEvent): boolean {
+  switch (event.key) {
+    case 'ArrowLeft':
+    case 'ArrowRight':
+      event.preventDefault()
+      spotlight.value = nextSpotlight(
+        spotlight.value,
+        playableFlows.value,
+        event.key === 'ArrowRight' ? 1 : -1,
+      )
+      return true
+    case 'f':
+    case 'F':
+    case 'Home':
+      event.preventDefault()
+      view3dCommands.value?.frame()
+      return true
+    case 'r':
+    case 'R':
+      autoRotate.value = !autoRotate.value
+      return true
+  }
+  return false
+}
 
 /**
  * Switching to JSON snapshots the current document as text; switching back
@@ -618,7 +720,11 @@ function onKeyDown(event: KeyboardEvent) {
   // that drive the presentation itself (and, unusually, still work with the
   // rest of the canvas locked down) do anything below.
   if (presenting.value) {
+    if (in3D() && onKey3D(event)) return
     switch (event.key) {
+      case '3':
+        view3d.value = !view3d.value
+        break
       case 'l':
       case 'L':
         laserActive.value = !laserActive.value
@@ -637,6 +743,23 @@ function onKeyDown(event: KeyboardEvent) {
   }
 
   const meta = event.metaKey || event.ctrlKey
+
+  // Nothing is edited in the 3D view: there is no selection there to act on, so
+  // the editing shortcuts would only reach a selection nobody can see. Undo and
+  // redo still work, for an edit made in the inspector beside it.
+  if (in3D()) {
+    const key = event.key.toLowerCase()
+    if (meta && (key === 'z' || key === 'y')) {
+      event.preventDefault()
+      if (key === 'y' || event.shiftKey) redo()
+      else undo()
+    } else if (!meta && event.key === '3' && !event.altKey) {
+      view3d.value = false
+    } else if (!meta && !onKey3D(event)) {
+      onSharedKey(event)
+    }
+    return
+  }
 
   if (meta) {
     const key = event.key.toLowerCase()
@@ -684,6 +807,12 @@ function onKeyDown(event: KeyboardEvent) {
     return
   }
 
+  if (event.key === '3' && !event.altKey) {
+    view3d.value = !view3d.value
+    return
+  }
+  if (onSharedKey(event)) return
+
   switch (event.key) {
     case 'Backspace':
     case 'Delete':
@@ -702,31 +831,11 @@ function onKeyDown(event: KeyboardEvent) {
     case 'F':
       fitView({ padding: 0.2 })
       break
-    case 'l':
-    case 'L':
-      // The presentation laser pointer — no modifier, since it is reached for
-      // mid-talk rather than mid-edit.
-      laserActive.value = !laserActive.value
-      break
-    case 'p':
-    case 'P':
-      // Presentation mode, same reasoning as the laser pointer above.
-      void togglePresentation()
-      break
     case 'b':
     case 'B':
       // "Browse": everything the palette can add, laid out at once.
       event.preventDefault()
       paletteOverviewOpen.value = true
-      break
-    case 'Escape':
-      if (laserActive.value) {
-        event.preventDefault()
-        laserActive.value = false
-      } else if (presenting.value) {
-        event.preventDefault()
-        void exitPresentation()
-      }
       break
     case 'Enter': {
       const node = selectedNodes.value[0]
@@ -750,6 +859,33 @@ function onKeyDown(event: KeyboardEvent) {
       break
     }
   }
+}
+
+/** Whether the 3D view is what is on screen. */
+const in3D = () => view3d.value && viewMode.value === 'diagram'
+
+/**
+ * Keys that mean the same in 2D and in 3D: the laser pointer and presentation
+ * mode — no modifier, since they are reached for mid-talk rather than mid-edit
+ * — and `Esc` to put the laser away. Returns whether the key was taken.
+ */
+function onSharedKey(event: KeyboardEvent): boolean {
+  switch (event.key) {
+    case 'l':
+    case 'L':
+      laserActive.value = !laserActive.value
+      return true
+    case 'p':
+    case 'P':
+      void togglePresentation()
+      return true
+    case 'Escape':
+      if (!laserActive.value) return false
+      event.preventDefault()
+      laserActive.value = false
+      return true
+  }
+  return false
 }
 
 /** ⌥ can go down and up mid-drag, so its state is tracked rather than sampled. */
@@ -855,9 +991,10 @@ const fitPending = ref(false)
 
 function fitLoaded() {
   if (!fitPending.value) return
-  // A panel hidden behind another tab has no size to fit against; the watcher
-  // below settles the debt the moment it is shown.
-  if (!isVisible.value) return
+  // A panel hidden behind another tab has no size to fit against, and neither
+  // has the 2D pane while the 3D view stands in front of it; the watchers below
+  // settle the debt the moment it is shown.
+  if (!isVisible.value || view3d.value) return
   fitPending.value = false
   fitView({ padding: 0.2 })
 }
@@ -869,6 +1006,10 @@ watch(fitRequest, () => {
 
 watch(isVisible, (visible) => {
   if (visible) nextTick(fitLoaded)
+})
+
+watch(view3d, (on) => {
+  if (!on) nextTick(fitLoaded)
 })
 </script>
 
@@ -891,7 +1032,15 @@ watch(isVisible, (visible) => {
       @drop="onDrop"
     >
     <ContextMenuTrigger as-child>
-      <div v-show="viewMode === 'diagram'" class="absolute inset-0" @contextmenu.capture="onContextMenuCapture">
+      <!--
+        Hidden rather than unmounted in 3D, so the canvas comes back exactly as
+        it was left: viewport, selection and all.
+      -->
+      <div
+        v-show="viewMode === 'diagram' && !view3d"
+        class="absolute inset-0"
+        @contextmenu.capture="onContextMenuCapture"
+      >
         <!--
           `elevate-nodes-on-select` is off on purpose: Vue Flow would otherwise lift
           a selected node 1000 layers up, so selecting a zone made it jump in front
@@ -1136,8 +1285,11 @@ watch(isVisible, (visible) => {
       </div>
     </ContextMenuTrigger>
 
+    <!-- The diagram stood up in 3D. Outside the context-menu trigger: right-drag pans the camera. -->
+    <DiagramView3D v-if="viewMode === 'diagram' && view3d" :visible="isVisible" />
+
     <!-- Every node in the diagram, nested by zone; folds away to a tab on the left edge. -->
-    <LayersPanel v-if="!presenting && viewMode === 'diagram'" />
+    <LayersPanel v-if="!presenting && viewMode === 'diagram' && !view3d" />
 
     <!-- The diagram's document as editable text — the way in for JSON pasted from an AI assistant. -->
     <div
@@ -1195,21 +1347,25 @@ watch(isVisible, (visible) => {
         </Tooltip>
       </div>
 
-      <label
-        class="flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm select-none"
+      <!--
+        Three ways to look at one document. 3D is always something chosen on top
+        of the diagram: a file opens in 2D, and nothing here is saved with it.
+      -->
+      <ToggleGroup
+        type="single"
+        size="sm"
+        :model-value="shownView"
+        class="rounded-lg border p-0.5 shadow-sm"
         :style="{ background: theme.surface, borderColor: theme.line }"
+        aria-label="View"
+        @update:model-value="setShownView"
       >
-        <span :style="{ color: viewMode === 'diagram' ? theme.ink : undefined }" class="text-muted-foreground">
-          Diagram
-        </span>
-        <Switch
-          :model-value="viewMode === 'json'"
-          @update:model-value="setViewMode($event ? 'json' : 'diagram')"
-        />
-        <span :style="{ color: viewMode === 'json' ? theme.ink : undefined }" class="text-muted-foreground">
-          JSON
-        </span>
-      </label>
+        <ToggleGroupItem value="diagram" class="h-7 px-2.5 text-xs" title="The diagram">Diagram</ToggleGroupItem>
+        <ToggleGroupItem value="3d" class="h-7 px-2.5 text-xs" title="The diagram in 3D, to look at (3)">
+          3D
+        </ToggleGroupItem>
+        <ToggleGroupItem value="json" class="h-7 px-2.5 text-xs" title="The file, as text">JSON</ToggleGroupItem>
+      </ToggleGroup>
     </div>
 
     <!--
@@ -1223,6 +1379,28 @@ watch(isVisible, (visible) => {
       class="absolute top-4 right-4 z-40 flex items-center gap-1 rounded-lg border p-1 shadow-sm"
       :style="{ background: theme.surface, borderColor: theme.line }"
     >
+      <!-- 3D belongs in a presentation: it is what shows a room where the messages go. -->
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Toggle size="sm" :model-value="view3d" aria-label="3D view" @update:model-value="view3d = Boolean($event)">
+            <Box3D :size="15" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent>3D view (3)</TooltipContent>
+      </Tooltip>
+      <Tooltip v-if="view3d">
+        <TooltipTrigger as-child>
+          <Toggle
+            size="sm"
+            :model-value="autoRotate"
+            aria-label="Turntable"
+            @update:model-value="autoRotate = Boolean($event)"
+          >
+            <Rotate3d :size="15" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent>Turntable (R)</TooltipContent>
+      </Tooltip>
       <Tooltip>
         <TooltipTrigger as-child>
           <Toggle
@@ -1350,6 +1528,19 @@ watch(isVisible, (visible) => {
 .vue-flow__handle {
   min-width: 0;
   min-height: 0;
+}
+
+/*
+ * Vue Flow's own reconnect anchors stay out of the pointer's way. A connection
+ * is reconnected by dragging the drawn line near either tip (see `DiagramEdge`),
+ * and Vue Flow — which does not route these connections and so cannot know
+ * where they really meet a node — puts its invisible anchors on each node's
+ * first dot instead: the middle of its top, for every connection the node has.
+ * Left live, they sat over whatever was drawn just above a node, a dragged
+ * label included, and took the press for a reconnect of some other line.
+ */
+.vue-flow__edgeupdater {
+  pointer-events: none;
 }
 
 /*

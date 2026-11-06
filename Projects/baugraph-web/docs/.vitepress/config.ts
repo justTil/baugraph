@@ -18,19 +18,7 @@ export default defineConfig({
   description: 'Architecture diagrams — flows, queues, integrations — that live in your repository.',
   cleanUrls: false,
 
-  head: [
-    ['link', { rel: 'icon', href: '/favicon.svg' }],
-    // The app's typefaces (see src/style.css), so the docs read as the same product.
-    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
-    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
-    [
-      'link',
-      {
-        rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500;600;700&family=Jost:wght@500;600&display=swap',
-      },
-    ],
-  ],
+  head: [['link', { rel: 'icon', href: '/favicon.svg' }]],
 
   vite: {
     define: {
@@ -44,7 +32,8 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: { light: '/logo.svg', dark: '/logo-on-dark.svg', alt: 'Baugraph' },
+    // The BG tile reads on both grounds, so one file serves both themes; the site title beside it names it.
+    logo: '/favicon.svg',
 
     nav: [
       { text: 'Guide', link: '/getting-started' },
@@ -59,6 +48,7 @@ export default defineConfig({
           { text: 'Getting started', link: '/getting-started' },
           { text: 'The editor', link: '/editor' },
           { text: 'Message flows', link: '/message-flows' },
+          { text: 'The 3D view', link: '/3d-view' },
           { text: 'Exporting', link: '/exports' },
           { text: 'VS Code extension', link: '/vscode' },
           { text: 'Keyboard shortcuts', link: '/shortcuts' },

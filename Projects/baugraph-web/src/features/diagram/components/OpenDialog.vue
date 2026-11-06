@@ -154,7 +154,7 @@ function loadPasted() {
         <TabsContent value="upload">
           <div
             class="rounded-lg border-2 border-dashed p-8 text-center transition-colors"
-            :class="dragging ? 'border-primary bg-accent' : 'border-muted'"
+            :class="dragging ? 'border-brand bg-brand/5' : 'border-muted'"
             @dragover.prevent="dragging = true"
             @dragleave="dragging = false"
             @drop.prevent="onDrop"
