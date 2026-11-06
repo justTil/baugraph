@@ -4,10 +4,13 @@ import {
   CylinderGeometry,
   ExtrudeGeometry,
   Float32BufferAttribute,
+  LatheGeometry,
   SphereGeometry,
+  Vector2,
   Vector3,
 } from 'three'
 import type { Shape } from 'three'
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { SolidKind } from '@/features/diagram/lib/scene3d'
 import { QUEUE_TICKS } from '@/features/diagram/lib/shapes'
 
@@ -16,7 +19,9 @@ import { QUEUE_TICKS } from '@/features/diagram/lib/shapes'
  * shape is a drawing of, rather than the drawing cut out and made thick. A
  * database is a drum, a queue a tube with its slots as bands round it, a pill
  * a capsule, a circle a ball; a box, a rounded box, a hexagon and a diamond are
- * their outlines made deep — a rounded box with its edges rounded too.
+ * their outlines made deep. Every edge is softened — a box's bevelled, a drum's
+ * lid and a tube's ends rounded over — so they read as made things, lit, rather
+ * than as outlines cut out of card.
  *
  * Everything is built standing in the node's own frame: `x` across it from `0`
  * to its width, `y` up it from `0` to its height, and `z` from its back at `0`
@@ -25,12 +30,9 @@ import { QUEUE_TICKS } from '@/features/diagram/lib/shapes'
  */
 
 export interface Solid {
-  /**
-   * The body. Its groups say which colour each part takes, by index into what
-   * the renderer passes: `0` its face colour, `1` its sides, `2` a drum's top.
-   */
+  /** The body, its faces turned outwards and its normals smooth wherever its surface is. */
   body: BufferGeometry
-  /** Trim drawn in the node's outline colour — a queue's bands. */
+  /** Trim drawn in a deeper shade of the node's colour — a queue's bands. */
   trim: BufferGeometry[]
   /**
    * Where the node's icon, name and caption go: across its front, following
@@ -42,6 +44,56 @@ export interface Solid {
 
 /** How far a label stands off the surface it is laid on, so the two never fight. */
 const PROUD = 0.6
+
+/** Surfaces meeting at less than this are shaded as one smooth surface; more, as an edge. */
+const CREASE = Math.PI / 4
+
+/**
+ * Reverses every triangle — for a geometry mirrored to stand the canvas's
+ * `y`-down outline the right way up, which turns its faces inside out.
+ */
+export function flipWinding(geometry: BufferGeometry) {
+  const index = geometry.getIndex()
+  if (index) {
+    const a = index.array
+    for (let i = 0; i < a.length; i += 3) [a[i + 1], a[i + 2]] = [a[i + 2]!, a[i + 1]!]
+    index.needsUpdate = true
+    return
+  }
+  for (const attribute of Object.values(geometry.attributes)) {
+    const a = attribute.array
+    const n = attribute.itemSize
+    for (let v = 0; v + 2 < attribute.count; v += 3) {
+      for (let k = 0; k < n; k++) {
+        const one = (v + 1) * n + k
+        const two = (v + 2) * n + k
+        ;[a[one], a[two]] = [a[two]!, a[one]!]
+      }
+    }
+    attribute.needsUpdate = true
+  }
+}
+
+/**
+ * An outline for a lathe: up from the middle of the floor, out along the
+ * bottom, round its rim, up its side, round the top rim, and in to the middle
+ * of the top — a solid of revolution `radius` across and `height` tall with
+ * its rims rounded by `round`.
+ */
+function roundedProfile(radius: number, height: number, round: number): Vector2[] {
+  const c = Math.max(0.01, Math.min(round, radius * 0.45, height * 0.45))
+  const points = [new Vector2(0, 0)]
+  const arc = (cx: number, cy: number, from: number) => {
+    for (let k = 0; k <= 8; k++) {
+      const a = from + (k / 8) * (Math.PI / 2)
+      points.push(new Vector2(cx + c * Math.cos(a), cy + c * Math.sin(a)))
+    }
+  }
+  arc(radius - c, c, -Math.PI / 2)
+  arc(radius - c, height - c, 0)
+  points.push(new Vector2(0, height))
+  return points
+}
 
 /**
  * A surface over `u`, `v` ∈ [0, 1], with `uv` = (`u`, `v`): the label laid over
@@ -107,25 +159,30 @@ function frontLabel(w: number, h: number, depth: number): BufferGeometry {
 }
 
 /**
- * A prism: the node's outline, deep. A rounded box gets rounded edges front and
- * back as well, so it reads as soft from any side; the bevel stays inside the
- * outline, so the solid is exactly as wide and tall as the node.
+ * A prism: the node's outline, deep, its edges bevelled front and back so it
+ * catches the light along them — a rounded box more softly than the rest. The
+ * bevel stays inside the outline, so the solid is exactly as wide and tall as
+ * the node.
  */
 function prism(shapes: Shape[], w: number, h: number, depth: number, rounded: boolean): Solid {
-  const bevel = rounded ? Math.min(8, depth * 0.2, h * 0.15) : 0
-  const body = new ExtrudeGeometry(shapes, {
+  const bevel = Math.min(rounded ? 8 : 4.5, depth * 0.2, h * 0.12)
+  const extruded = new ExtrudeGeometry(shapes, {
     depth: Math.max(0.5, depth - bevel * 2),
-    curveSegments: 12,
+    curveSegments: 16,
     bevelEnabled: bevel > 0,
     bevelThickness: bevel,
     bevelSize: bevel,
     bevelOffset: -bevel,
-    bevelSegments: 4,
+    bevelSegments: 5,
   })
-  // Shape space is the canvas, `y` down; mirrored so the node's top is up.
-  body.scale(1, -1, 1)
-  body.translate(0, h, bevel)
-  // Extrusion groups: 0 the front and back, 1 the sides — face colour and side colour.
+  // Shape space is the canvas, `y` down; mirrored so the node's top is up —
+  // which turns it inside out, so its faces are turned back.
+  extruded.scale(1, -1, 1)
+  flipWinding(extruded)
+  extruded.translate(0, h, bevel)
+  // Smooth over the bevels and round corners, sharp where a hexagon or a diamond turns.
+  const body = toCreasedNormals(extruded, CREASE)
+  if (body !== extruded) extruded.dispose()
   return { body, trim: [], label: frontLabel(w, h, depth) }
 }
 
@@ -136,13 +193,10 @@ function prism(shapes: Shape[], w: number, h: number, depth: number, rounded: bo
 function drum(w: number, h: number, depth: number): Solid {
   const rx = w / 2
   const rz = depth / 2
-  const body = new CylinderGeometry(1, 1, h, 64, 1)
-  body.scale(rx, 1, rz)
-  body.translate(w / 2, h / 2, depth / 2)
-  // Cylinder groups: 0 its side, 1 its top, 2 its bottom.
-  body.groups.forEach((group) => {
-    group.materialIndex = group.materialIndex === 1 ? 2 : group.materialIndex === 2 ? 1 : 0
-  })
+  // Turned on a lathe, its lid's rim rounded over the way a tin's is.
+  const body = new LatheGeometry(roundedProfile(rx, h, Math.min(7, h * 0.1)), 72)
+  body.scale(1, 1, rz / rx)
+  body.translate(w / 2, 0, depth / 2)
   // As much of the way round as the face is wide — about a third of the drum.
   const spread = Math.min(1.2, w / 2 / rx)
   const label = surface(32, 1, (u, v, out) => {
@@ -166,10 +220,10 @@ function lieAlongX(geometry: BufferGeometry, w: number, h: number, depth: number
 function tube(w: number, h: number, depth: number): Solid {
   const r = h / 2
   const rz = depth / 2
-  const body = new CylinderGeometry(1, 1, w, 48, 1)
-  lieAlongX(body, w, h, depth, r, rz)
-  // Cylinder groups: 0 its side, 1 and 2 its ends — the ends in the side colour.
-  body.groups.forEach((group) => (group.materialIndex = group.materialIndex === 0 ? 0 : 1))
+  // Turned on a lathe standing up, its ends rounded over, then laid along x.
+  const body = new LatheGeometry(roundedProfile(r, w, Math.min(8, r * 0.35)), 56)
+  body.translate(0, -w / 2, 0)
+  lieAlongX(body, w, h, depth, 1, rz / r)
 
   const trim = QUEUE_TICKS.filter((dx) => dx < w / 2).map((dx) => {
     const band = new CylinderGeometry(1, 1, 3, 48, 1, true)
@@ -225,7 +279,7 @@ function ball(w: number, h: number, depth: number): Solid {
 
 /**
  * The solid for a standing node. `outline` is the node's 2D outline, which a
- * prism is made of; `rounded` asks a prism for rounded edges.
+ * prism is made of; `rounded` asks a prism for softer edges.
  */
 export function buildSolid(
   kind: SolidKind,

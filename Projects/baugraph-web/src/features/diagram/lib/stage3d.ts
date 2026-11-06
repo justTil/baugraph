@@ -5,25 +5,27 @@ import {
   CanvasTexture,
   Color,
   ConeGeometry,
+  CylinderGeometry,
+  DirectionalLight,
   DoubleSide,
-  EdgesGeometry,
   ExtrudeGeometry,
-  Float32BufferAttribute,
+  FrontSide,
   Group,
-  LineBasicMaterial,
-  LineSegments,
   MOUSE,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
+  NeutralToneMapping,
   NormalBlending,
   Object3D,
+  PCFSoftShadowMap,
+  PMREMGenerator,
   PerspectiveCamera,
   PlaneGeometry,
   Quaternion,
   Raycaster,
   Scene,
   Shape,
-  ShapeGeometry,
   SphereGeometry,
   Spherical,
   Sprite,
@@ -40,12 +42,13 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js'
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import gsap from 'gsap'
 import type { DiagramDocument, DiagramNode, FlowToken, MessageFlow } from '@/model'
 import type { CameraPreset } from '@/features/diagram/composables/useView3D'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
-import type { Vec } from '@/features/diagram/lib/edge-path'
 import { dashArray } from '@/features/diagram/lib/edge-path'
 import { svgImage } from '@/features/diagram/lib/export'
 import { nodeFaceSvg } from '@/features/diagram/lib/render-svg'
@@ -63,7 +66,7 @@ import {
   stackLayout,
   track,
 } from '@/features/diagram/lib/scene3d'
-import { buildSolid } from '@/features/diagram/lib/solids3d'
+import { buildSolid, flipWinding } from '@/features/diagram/lib/solids3d'
 
 /**
  * The 3D view's renderer.
@@ -100,8 +103,16 @@ export interface StageMotion {
 /** Room around the content when the camera frames it, as a fraction of its size. */
 const FRAME_MARGIN = 1.08
 const FOV = 38
-/** Where a thing is light comes from, for the flat shading on the blocks. */
-const LIGHT = new Vector3(0.35, 1, 0.6).normalize()
+/**
+ * Where the sun is, seen from the diagram: high, and over its back-left corner,
+ * so every node's shadow falls short and soft to its front-right — on the side
+ * the default view looks at — the way a light over a desk would cast it.
+ */
+const SUN = new Vector3(-0.5, 1.3, -0.35).normalize()
+
+/** How thick the floor the diagram stands on is, and how round its edge. */
+const SLAB = 10
+const SLAB_ROUND = 3
 /** Canvas-units per second at which a moving dash marches — matched to the 2D canvas. */
 const DASH_PATTERN = 22
 /** Seconds between the ghosts trailing a message. */
@@ -144,12 +155,6 @@ const CLICK_SLOP = 5
  */
 const DASH_SCALE = 2
 
-/**
- * How far a connection's ends move aside for another between the same two
- * nodes, as a share of how far its middle swings: so a request and its reply
- * run apart from end to end, not only in the middle.
- */
-const END_SIDE = 0.5
 
 interface NodeEntry {
   stack: StackNode
@@ -157,8 +162,8 @@ interface NodeEntry {
   /** Pickable meshes. */
   pick: Mesh[]
   materials: { material: Material; opacity: number }[]
-  outline: LineBasicMaterial | null
-  outlineColor: Color
+  /** Its lit surfaces, which glow faintly while the pointer is on it. */
+  lit: MeshStandardMaterial[]
   /** Height of its base above the floor: the zone floors under it. */
   base: number
   /** Height of its top above its base, as it stands — or lies — right now. */
@@ -361,7 +366,7 @@ function textSprite(
 
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
-  const sprite = new Sprite(new SpriteMaterial({ map: texture, transparent: true, depthWrite: false }))
+  const sprite = new Sprite(new SpriteMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false }))
   sprite.scale.set(width, height, 1)
   return sprite
 }
@@ -488,36 +493,6 @@ function silhouette(node: DiagramNode): Shape[] {
   return shapes
 }
 
-/**
- * Bakes flat shading into the vertex colours: lit faces keep the colour, faces
- * turned away darken a little. No lights in the scene at all, so every colour
- * on screen is one the theme chose rather than one a light bent.
- */
-function shade(geometry: BufferGeometry, color: Color | Color[]): void {
-  const palette = Array.isArray(color) ? color : [color]
-  const normals = geometry.getAttribute('normal')
-  // Which colour each vertex takes: its group's, by the group's material index.
-  const part = new Uint8Array(normals.count)
-  const index = geometry.getIndex()
-  for (const group of geometry.groups) {
-    const which = Math.min(palette.length - 1, group.materialIndex ?? 0)
-    for (let k = group.start; k < Math.min(group.start + group.count, index ? index.count : normals.count); k++) {
-      part[index ? index.getX(k) : k] = which
-    }
-  }
-  const colors = new Float32Array(normals.count * 3)
-  const n = new Vector3()
-  for (let i = 0; i < normals.count; i++) {
-    n.fromBufferAttribute(normals, i)
-    const f = 0.72 + 0.28 * Math.max(0, n.dot(LIGHT))
-    const c = palette[part[i]!]!
-    colors[i * 3] = c.r * f
-    colors[i * 3 + 1] = c.g * f
-    colors[i * 3 + 2] = c.b * f
-  }
-  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3))
-}
-
 /** Extrudes `shapes` upwards from y = 0 to y = `height`, in canvas-local x/z. */
 function extrude(shapes: Shape[], height: number): ExtrudeGeometry {
   const geometry = new ExtrudeGeometry(shapes, { depth: height, bevelEnabled: false, curveSegments: 10 })
@@ -536,11 +511,42 @@ function extrude(shapes: Shape[], height: number): ExtrudeGeometry {
  */
 function extrudeUpright(shapes: Shape[], height: number, depth: number): ExtrudeGeometry {
   const geometry = new ExtrudeGeometry(shapes, { depth, bevelEnabled: false, curveSegments: 10 })
-  // Shape space is the canvas, `y` down; mirrored so the node's top is up.
+  // Shape space is the canvas, `y` down; mirrored so the node's top is up —
+  // which turns it inside out, so its faces are turned back.
   geometry.scale(1, -1, 1)
+  flipWinding(geometry)
   geometry.translate(0, height, 0)
   return geometry
 }
+
+/**
+ * A soft shadow to lay under the floor, so the diagram reads as standing on a
+ * slab that floats a little over the page: a rounded box `width` by `depth`,
+ * blurred out by `blur`, drawn once into a texture.
+ */
+function softShadow(width: number, depth: number, blur: number): Texture {
+  const scale = Math.min(1, 1024 / (Math.max(width, depth) + blur * 4))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil((width + blur * 4) * scale)
+  canvas.height = Math.ceil((depth + blur * 4) * scale)
+  const ctx = canvas.getContext('2d')!
+  // Drawn off the canvas with its shadow thrown back on: what is left is only
+  // the blur, which a canvas filter would give too, where a browser has one.
+  const away = canvas.width * 2
+  ctx.shadowColor = 'rgba(0, 0, 0, 1)'
+  ctx.shadowBlur = blur * scale
+  ctx.shadowOffsetX = away
+  ctx.fillStyle = '#000'
+  ctx.beginPath()
+  ctx.roundRect(blur * 2 * scale - away, blur * 2 * scale, width * scale, depth * scale, 28 * scale)
+  ctx.fill()
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
+/** No glow at all, for a node the pointer is not on. */
+const NO_GLOW = new Color(0, 0, 0)
 
 /** A ray straight down onto a node, to find its top; reused rather than allocated. */
 const DOWN = new Vector3(0, -1, 0)
@@ -562,6 +568,10 @@ export class Stage3D {
   private raycaster = new Raycaster()
   private textures: FaceTextures
   private glows = new Map<string, Texture>()
+  /** The studio light every lit surface reflects, soft from all round. */
+  private environment: Texture
+  /** The one light that casts shadows, kept over the whole diagram. */
+  private sun = new DirectionalLight('#ffffff', 1.5)
 
   private root = new Group()
   /** The floor and every node standing on it. */
@@ -614,6 +624,26 @@ export class Stage3D {
     host.appendChild(this.renderer.domElement)
     this.textures = new FaceTextures(this.renderer.capabilities.getMaxAnisotropy())
 
+    // Lit, softly: a studio's light from all round, and a sun that casts soft
+    // shadows — tone-mapped so a lit top never burns out to white, while what is
+    // drawn unlit (faces, lines, messages) keeps exactly the theme's colours.
+    this.renderer.toneMapping = NeutralToneMapping
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = PCFSoftShadowMap
+    // Nothing that casts a shadow ever moves, so the shadows are drawn once a build.
+    this.renderer.shadowMap.autoUpdate = false
+    const pmrem = new PMREMGenerator(this.renderer)
+    const room = new RoomEnvironment()
+    this.environment = pmrem.fromScene(room, 0.04).texture
+    room.dispose()
+    pmrem.dispose()
+    this.scene.environment = this.environment
+    this.sun.castShadow = true
+    this.sun.shadow.mapSize.set(2048, 2048)
+    this.sun.shadow.bias = -0.0004
+    this.sun.shadow.normalBias = 0.8
+    this.scene.add(this.sun, this.sun.target)
+
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.09
@@ -654,6 +684,9 @@ export class Stage3D {
     this.flows = flows
     this.layout = stackLayout(doc)
     this.renderer.setClearColor(theme.bg)
+    // Less light on a dark theme, or its dark solids wash out to grey.
+    this.scene.environmentIntensity = theme.dark ? 0.95 : 0.62
+    this.sun.intensity = theme.dark ? 1.4 : 1.25
     this.textures.begin()
 
     this.buildFloor()
@@ -667,6 +700,7 @@ export class Stage3D {
     this.applyVisibility()
     this.applyEmphasis()
     this.applyHover()
+    this.placeSun()
 
     if (!this.framed) {
       this.framed = true
@@ -702,6 +736,8 @@ export class Stage3D {
     this.textures.dispose()
     this.glows.forEach((t) => t.dispose())
     this.tokenFaces.forEach((t) => t.dispose())
+    this.environment.dispose()
+    this.sun.shadow.dispose()
     this.renderer.dispose()
     el.remove()
   }
@@ -782,11 +818,14 @@ export class Stage3D {
 
   /* ------------------------------------------------------------- the scene */
 
-  /** The floor the diagram stands on: a plate under all of it, the way the canvas is under the 2D one. */
+  /**
+   * The floor the diagram stands on: a slab under all of it, its edge rounded,
+   * floating a little over the page on a soft shadow of its own — and taking the
+   * shadows of everything standing on it.
+   */
   private buildFloor() {
     const theme = this.theme!
     const { x, y, width: w, height: h } = this.layout!.footprint
-    const accent = COLOR_HEX.slate
     const r = 28
     const outline = new Shape()
     outline
@@ -800,28 +839,49 @@ export class Stage3D {
       .lineTo(x, y + r)
       .quadraticCurveTo(x, y, x + r, y)
 
-    const plateGeometry = new ShapeGeometry(outline, 8)
-    plateGeometry.rotateX(Math.PI / 2)
-    const plateMaterial = new MeshBasicMaterial({
-      color: mix(accent, theme.bg, theme.dark ? 0.84 : 0.9),
-      transparent: true,
-      opacity: theme.dark ? 0.5 : 0.55,
-      depthWrite: false,
-      side: DoubleSide,
+    const extruded = new ExtrudeGeometry(outline, {
+      depth: SLAB - SLAB_ROUND * 2,
+      bevelEnabled: true,
+      bevelThickness: SLAB_ROUND,
+      bevelSize: SLAB_ROUND,
+      bevelOffset: -SLAB_ROUND,
+      bevelSegments: 3,
+      curveSegments: 12,
     })
-    const plate = new Mesh(plateGeometry, plateMaterial)
-    plate.renderOrder = -10
-    plate.position.y = -0.6
-    this.own(plateGeometry, plateMaterial)
-    this.floor.add(plate)
+    // Laid flat, the canvas's `y` along the world's `z`, and hung down from its
+    // top, which sits just under the zones and nodes on it.
+    extruded.rotateX(Math.PI / 2)
+    extruded.translate(0, -SLAB_ROUND - 0.6, 0)
+    const slabGeometry = toCreasedNormals(extruded, Math.PI / 4)
+    if (slabGeometry !== extruded) extruded.dispose()
+    const slabMaterial = new MeshStandardMaterial({
+      color: mix(COLOR_HEX.slate, theme.bg, theme.dark ? 0.72 : 0.95),
+      roughness: 0.95,
+      metalness: 0,
+    })
+    const slab = new Mesh(slabGeometry, slabMaterial)
+    slab.receiveShadow = true
+    this.own(slabGeometry, slabMaterial)
+    this.floor.add(slab)
 
-    const rim = this.line(
-      outline.getPoints(8).map((p) => ({ x: p.x, y: -0.5, z: p.y })),
-      mix(accent, theme.bg, 0.7),
-      1,
-    )
-    rim.line.renderOrder = -9
-    this.floor.add(rim.line)
+    // Its own shadow on the page below, offset a touch the way the sun throws it.
+    const blur = 42
+    const shadowTexture = softShadow(w, h, blur)
+    const shadowGeometry = new PlaneGeometry(w + blur * 4, h + blur * 4)
+    shadowGeometry.rotateX(-Math.PI / 2)
+    // The texture is the shadow itself, black where it falls and clear elsewhere.
+    const shadowMaterial = new MeshBasicMaterial({
+      map: shadowTexture,
+      transparent: true,
+      opacity: theme.dark ? 0.55 : 0.2,
+      depthWrite: false,
+      toneMapped: false,
+    })
+    const shadow = new Mesh(shadowGeometry, shadowMaterial)
+    shadow.position.set(x + w / 2 + 14, -SLAB - 18, y + h / 2 + 12)
+    shadow.renderOrder = -10
+    this.own(shadowTexture, shadowGeometry, shadowMaterial)
+    this.floor.add(shadow)
   }
 
   private buildNode(stack: StackNode) {
@@ -837,8 +897,7 @@ export class Stage3D {
       group,
       pick: [],
       materials: [],
-      outline: null,
-      outlineColor: new Color(mix(paint.stroke, theme.ink, theme.dark ? 0.1 : 0.2)),
+      lit: [],
       base,
       rise: 0,
       body: null,
@@ -855,37 +914,43 @@ export class Stage3D {
     const { width: w, height: h } = node.size
     const isZone = node.kind === 'zone'
     const isText = node.kind === 'annotation' || node.shape === 'text'
-    const sides = new Color(isZone ? paint.fill : mix(paint.stroke, paint.fill, 0.25))
     // A standing node is a solid of its own shape, so only what is written on
     // it is laid on its front; a note stays a sheet with its corner turned
     // down, drawn, and a flat node lies as the canvas draws it.
     const asSolid = stack.standing && !isText && node.shape !== 'note'
+    // Its colour, a touch deeper than its pale fill on the canvas: lit, a pale
+    // solid would wash into the floor it stands on.
+    const tone = mix(paint.fill, paint.stroke, theme.dark ? 0.3 : 0.26)
 
-    /** A solid in the node's own colour, edged so its shape reads at an angle. */
-    const solid = (geometry: BufferGeometry, parent: Object3D, color: Color | Color[] = sides) => {
-      shade(geometry, color)
-      const material = new MeshBasicMaterial({ vertexColors: true, side: DoubleSide })
+    /** A surface the light falls on, matte, in `color`. */
+    const surfaceOf = (color: string, roughness = 0.72) => {
+      const material = new MeshStandardMaterial({ color, roughness, metalness: 0, side: FrontSide })
       keep(material)
-      const mesh = new Mesh(geometry, material)
+      entry.lit.push(material)
+      return material
+    }
+
+    /** A solid of the node's, lit, casting its shadow and taking its neighbours'. */
+    const solid = (geometry: BufferGeometry, parent: Object3D, color: string = tone) => {
+      const mesh = new Mesh(geometry, surfaceOf(color))
+      mesh.castShadow = true
+      mesh.receiveShadow = true
       mesh.userData.node = node.id
       entry.pick.push(mesh)
       parent.add(mesh)
-      const edgesGeometry = new EdgesGeometry(geometry, 28)
-      const outline = entry.outline ?? new LineBasicMaterial({ color: entry.outlineColor })
-      if (!entry.outline) keep(outline)
-      entry.outline = outline
-      // On the mesh, not beside it, so it moves and grows with it — a post does both.
-      mesh.add(new LineSegments(edgesGeometry, outline))
-      this.own(geometry, edgesGeometry)
+      this.own(geometry)
       return mesh
     }
 
-    // The face: the node exactly as the exporter draws it — or, on a solid,
-    // what is written on it, laid over its front.
+    // The face: the node exactly as the exporter draws it — or, on a solid or
+    // a zone, only what is written on it, laid over its front or its floor.
+    // Drawn unlit, so its text and icon keep exactly the theme's colours.
+    const content = asSolid || isZone
     const faceGeometry: BufferGeometry = new PlaneGeometry(w, h)
     const faceMaterial = new MeshBasicMaterial({
       color: isText ? theme.bg : paint.fill,
       side: DoubleSide,
+      toneMapped: false,
       // A circle or a diamond leaves the corners of its face empty; without this
       // those empty corners would still hide whatever runs underneath them.
       alphaTest: 0.02,
@@ -893,9 +958,9 @@ export class Stage3D {
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
     })
-    // Nothing to show of a text annotation, or of what is written on a solid,
-    // until the text itself has been drawn.
-    keep(faceMaterial, isText || asSolid ? 0 : 1)
+    // Nothing to show of a text annotation, or of what is written on a solid
+    // or a zone, until the text itself has been drawn.
+    keep(faceMaterial, isText || content ? 0 : 1)
     const face = new Mesh(faceGeometry, faceMaterial)
     face.userData.node = node.id
     face.renderOrder = isZone ? 1 : 2
@@ -903,8 +968,16 @@ export class Stage3D {
     this.own(faceGeometry)
 
     if (isZone) {
-      // A zone is a floor with glass walls: it encloses what it holds without hiding it.
-      if (shapes.length) solid(extrude(shapes, ZONE_FLOOR), group)
+      // A zone is a tray with glass walls: it encloses what it holds without
+      // hiding it, and takes the shadows of what stands in it.
+      if (shapes.length) {
+        const floor = new Mesh(extrude(shapes, ZONE_FLOOR), surfaceOf(paint.fill, 0.9))
+        floor.receiveShadow = true
+        floor.userData.node = node.id
+        entry.pick.push(floor)
+        group.add(floor)
+        this.own(floor.geometry)
+      }
       if (stack.height > 0 && shapes.length) {
         const rim = shapes[0]!.getPoints(10)
         const ring = new Shape(rim.map((p) => p.clone()))
@@ -917,12 +990,14 @@ export class Stage3D {
         ring.holes.push(new Shape(shrunk))
         const geometry = extrude([ring], stack.height)
         geometry.translate(0, ZONE_FLOOR, 0)
-        const material = new MeshBasicMaterial({
-          color: mix(paint.accent, theme.bg, 0.55),
+        const material = new MeshStandardMaterial({
+          color: mix(paint.accent, theme.bg, 0.4),
+          roughness: 0.15,
+          metalness: 0,
           depthWrite: false,
           side: DoubleSide,
         })
-        keep(material, theme.dark ? 0.22 : 0.18)
+        keep(material, theme.dark ? 0.3 : 0.24)
         group.add(new Mesh(geometry, material))
         this.own(geometry)
       }
@@ -932,52 +1007,43 @@ export class Stage3D {
       entry.rise = ZONE_FLOOR
     } else {
       // Everything else is built standing, facing the front, and laid on its
-      // back by `pose` for as long as it lies down.
+      // back by `pose` if it is set to lie flat.
       const body = new Group()
       entry.body = body
       group.add(body)
       const depth = stack.thickness
       if (asSolid) {
-        const kind = solidKind(node.shape)
-        const built = buildSolid(kind, shapes, w, h, depth, node.shape === 'round')
-        // Its face colour, the colour of its sides, and a drum's top a shade
-        // lighter. A round solid is all face, so it takes a touch of its
-        // outline colour too — pale all over, it would wash into the floor.
-        const tone = kind === 'prism' ? paint.fill : mix(paint.fill, paint.stroke, 0.14)
-        solid(built.body, body, [
-          new Color(tone),
-          sides,
-          new Color(mix(tone, theme.dark ? paint.stroke : '#ffffff', 0.35)),
-        ])
+        const built = buildSolid(solidKind(node.shape), shapes, w, h, depth, node.shape === 'round')
+        solid(built.body, body)
         for (const trim of built.trim) {
-          shade(trim, new Color(paint.stroke))
-          const material = new MeshBasicMaterial({ vertexColors: true, side: DoubleSide })
-          keep(material)
-          body.add(new Mesh(trim, material))
+          const band = new Mesh(trim, surfaceOf(mix(tone, paint.stroke, 0.55), 0.45))
+          band.castShadow = true
+          body.add(band)
           this.own(trim)
         }
         face.geometry = built.label
         faceGeometry.dispose()
         this.own(built.label)
       } else {
-        if (!isText && depth > 0 && shapes.length) solid(extrudeUpright(shapes, h, depth), body)
+        if (!isText && depth > 0 && shapes.length) solid(extrudeUpright(shapes, h, depth), body, paint.fill)
         faceGeometry.translate(w / 2, h / 2, depth + 0.25)
       }
       body.add(face)
 
-      // A post under a node that stands higher than the rest, so it is held up
-      // rather than floating — narrower than the node, in its darker colour.
+      // A slim column under a node that stands higher than the rest, so it is
+      // held up rather than floating, in a deeper shade of its colour.
       if (stack.stand > 0) {
-        const geometry = new BoxGeometry(Math.min(30, Math.max(10, w * 0.16)), stack.stand, Math.max(6, depth * 0.6))
+        const radius = Math.min(9, Math.max(4, w * 0.05))
+        const geometry = new CylinderGeometry(radius, radius, stack.stand, 32)
         geometry.translate(0, stack.stand / 2, 0)
-        const post = solid(geometry, group, new Color(mix(paint.stroke, theme.ink, 0.15)))
+        const post = solid(geometry, group, mix(tone, paint.stroke, 0.35))
         post.position.set(w / 2, 0, h / 2)
         entry.post = post
       }
       this.pose(entry)
     }
 
-    void this.textures.get(node, theme, asSolid).then((texture) => {
+    void this.textures.get(node, theme, content).then((texture) => {
       if (!texture || this.nodes.get(node.id) !== entry) return
       faceMaterial.map = texture
       faceMaterial.color.set('#ffffff')
@@ -1045,7 +1111,7 @@ export class Stage3D {
       const size = 1 + Math.max(0, stroke - EDGE_PX.regular) * 0.22
       const geometry = new ConeGeometry(4.6 * size, 11 * size, 14)
       geometry.translate(0, -5.5 * size, 0)
-      const coneMaterial = new MeshBasicMaterial({ color, transparent: true })
+      const coneMaterial = new MeshBasicMaterial({ color, transparent: true, toneMapped: false })
       this.own(geometry, coneMaterial)
       const cone = new Mesh(geometry, coneMaterial)
       this.arcs.add(cone)
@@ -1072,13 +1138,14 @@ export class Stage3D {
   }
 
   /**
-   * Where a connection meets a node: at `at` on the floor plan, on the node's
-   * own top — found on the solid itself, so it sits on a drum's lid, on the
-   * curve of a ball or a tube, on the slope of a diamond. A zone is met at the
-   * top of its wall.
+   * The one point every connection of a node's meets it: the middle of its
+   * top, found on the solid itself — so it sits on a drum's lid, on the crown
+   * of a ball or a tube, on the peak of a diamond. A zone's is on top of its
+   * back wall.
    */
-  private endOn(entry: NodeEntry, at: Vec): Vec3 {
+  private hubOf(entry: NodeEntry): Vec3 {
     const { stack } = entry
+    const at = anchor(stack)
     if (stack.node.kind === 'zone') return { x: at.x, y: entry.base + ZONE_FLOOR + stack.height, z: at.y }
     this.raycaster.set(DOWN_FROM.set(at.x, 1e5, at.y), DOWN)
     const hit = this.raycaster.intersectObjects(entry.pick, false)[0]
@@ -1089,16 +1156,7 @@ export class Stage3D {
   private arcFor(stack: StackEdge): Vec3[] {
     const s = this.nodes.get(stack.edge.source)!
     const t = this.nodes.get(stack.edge.target)!
-    const centre = (e: NodeEntry) => ({
-      x: e.stack.box.x + e.stack.box.width / 2,
-      y: e.stack.box.y + e.stack.box.height / 2,
-    })
-    // Aside to the same side at both ends: measured from each end towards the
-    // other, the target's left is the source's right.
-    const aside = stack.bow * END_SIDE
-    const from = this.endOn(s, anchor(s.stack, centre(t), aside))
-    const to = this.endOn(t, anchor(t.stack, centre(s), -aside))
-    return arcPoints(from, to, stack.bow)
+    return arcPoints(this.hubOf(s), this.hubOf(t), stack.bow)
   }
 
   /** Arrowheads, along the arch into the top they land on, and the label at the top of the arch. */
@@ -1182,6 +1240,7 @@ export class Stage3D {
       depthWrite: false,
       blending: theme.dark ? AdditiveBlending : NormalBlending,
       opacity: theme.dark ? 0.9 : 0.55,
+      toneMapped: false,
     })
     this.own(glowMaterial)
     const glow = new Sprite(glowMaterial)
@@ -1223,7 +1282,7 @@ export class Stage3D {
    */
   private tokenHead(look: FlowToken): TokenHead {
     const material = () => {
-      const m = new MeshBasicMaterial({ color: '#ffffff', transparent: true })
+      const m = new MeshBasicMaterial({ color: '#ffffff', transparent: true, toneMapped: false })
       this.own(m)
       return m
     }
@@ -1411,6 +1470,7 @@ export class Stage3D {
       depthWrite: false,
       blending: dark ? AdditiveBlending : NormalBlending,
       opacity: 0,
+      toneMapped: false,
     })
     const sprite = new Sprite(material)
     sprite.position.set(at.x, at.y, at.z)
@@ -1442,13 +1502,17 @@ export class Stage3D {
 
   /* ------------------------------------------------------------- emphasis */
 
-  /** Picks out the node under the pointer — a click on it flies there. */
+  /** Picks out the node under the pointer with a faint glow — a click on it flies there. */
   private applyHover() {
     const theme = this.theme
     if (!theme) return
+    const glow = new Color(theme.selection)
     for (const [id, entry] of this.nodes) {
-      if (!entry.outline) continue
-      entry.outline.color.copy(id === this.hovered ? new Color(theme.selection) : entry.outlineColor)
+      const on = id === this.hovered
+      for (const material of entry.lit) {
+        material.emissive.copy(on ? glow : NO_GLOW)
+        material.emissiveIntensity = on ? 0.22 : 0
+      }
     }
     this.invalidate()
   }
@@ -1637,6 +1701,7 @@ export class Stage3D {
       dashed: !!dash,
       dashSize: dash?.[0] ?? 1,
       gapSize: dash?.[1] ?? 0,
+      toneMapped: false,
     })
     material.resolution.set(this.size.width, this.size.height)
     this.lineMaterials.add(material)
@@ -1663,6 +1728,29 @@ export class Stage3D {
     this.nodes.clear()
     this.edges.clear()
     this.runs = []
+  }
+
+  /**
+   * Puts the sun over the diagram and fits its shadows to it — as tight as the
+   * floor allows, so they stay soft-edged rather than blocky — and has them
+   * drawn again, once, for this build.
+   */
+  private placeSun() {
+    const { center, half } = this.bounds()
+    const reach = Math.hypot(half.x, half.z) + 40
+    this.sun.target.position.set(center.x, 0, center.z)
+    this.sun.position.copy(this.sun.target.position).addScaledVector(SUN, reach * 2)
+    const camera = this.sun.shadow.camera
+    camera.left = -reach
+    camera.right = reach
+    camera.top = reach
+    camera.bottom = -reach
+    camera.near = reach * 0.25
+    camera.far = reach * 4
+    camera.updateProjectionMatrix()
+    this.sun.updateMatrixWorld()
+    this.sun.target.updateMatrixWorld()
+    this.renderer.shadowMap.needsUpdate = true
   }
 
   /** The box around the whole diagram — its floor, its nodes and the arcs over them: its centre and half its size. */

@@ -188,9 +188,9 @@ const SHORTCUTS_3D: [string, string][] = [
             turn the view.
           </p>
           <p>
-            Every connection is an arch from the top of one node to the top of the next, each
-            leaving from its own spot on the side facing the other end, so a node that talks to
-            many reads as a hub with its spokes. The message flows travel along the arches as
+            Every connection is an arch from the top of one node to the top of the next, all of a
+            node's connections meeting it at one point on top, so a node that talks to many reads
+            as the hub it is. The message flows travel along the arches as
             parcels, letters and beads of light, standing upright and facing you. Step through them with
             <kbd class="bg-muted rounded px-1 font-mono">←</kbd>
             <kbd class="bg-muted rounded px-1 font-mono">→</kbd>: each one in turn is drawn at full

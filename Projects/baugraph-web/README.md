@@ -215,12 +215,12 @@ connections they travel instead.
 Press `3` and the diagram stands up — exactly the layout of the canvas, every
 node where it is there, standing up facing the front as the solid its shape
 stands for: a database a drum, a queue a tube, a circle a ball, a box a block,
-with its name and icon on the front. They stay standing whichever way the view
-is turned.
+with its name and icon on the front, lit softly and casting soft shadows on a
+floating floor. They stay standing whichever way the view is turned.
 
 Every connection is an arch from the top of one node to the top of the next,
-each leaving from its own spot on the side facing the other end, so a node that
-talks to many reads as a hub with its spokes. The message flows travel along the
+all of a node's connections meeting it at one point on top, so a node that
+talks to many reads as the hub it is. The message flows travel along the
 arches on the same timing as on the canvas — parcels, letters and beads of
 light, standing upright and facing you, that land on the node they were sent to
 with a ripple. `←`/`→` step a

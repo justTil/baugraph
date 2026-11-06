@@ -262,7 +262,12 @@ function renderTextBlock(
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
-function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
+function renderZone(
+  node: DiagramNode,
+  box: Box,
+  paint: ReturnType<typeof nodePaint>,
+  withBody = true,
+): string {
   // Held half a stroke inside the box, exactly as `ZoneNode` draws it.
   const inset = paint.strokeWidth / 2
   const frame = roundedRect(
@@ -272,10 +277,12 @@ function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePa
     Math.max(1, box.height - paint.strokeWidth),
     12,
   )
-  let out = paint.strokeWidth
-    ? `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
-      `stroke-width="${paint.strokeWidth}" stroke-dasharray="7 5"/>`
-    : `<path d="${frame}" fill="${paint.fill}"/>`
+  let out = !withBody
+    ? ''
+    : paint.strokeWidth
+      ? `<path d="${frame}" fill="${paint.fill}" stroke="${paint.stroke}" ` +
+        `stroke-width="${paint.strokeWidth}" stroke-dasharray="7 5"/>`
+      : `<path d="${frame}" fill="${paint.fill}"/>`
 
   const available = box.width - 26
   const label = fitText((node.label || '').toUpperCase(), available, 12, 700)
@@ -396,7 +403,8 @@ export function nodeFaceSvg(
   const { width, height } = node.size
   const box: Box = { x: 0, y: 0, width, height }
   const paint = nodePaint(node, theme)
-  const body = node.kind === 'zone' ? renderZone(node, box, paint) : renderShape(node, box, paint, withBody)
+  const body =
+    node.kind === 'zone' ? renderZone(node, box, paint, withBody) : renderShape(node, box, paint, withBody)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
     `viewBox="0 0 ${width} ${height}"><style>text{font-family:${SANS}}</style>${body}</svg>`

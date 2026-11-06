@@ -7,13 +7,19 @@ every node where it is there, the same diagram looked at from an angle.
 The nodes stand up facing the front, each as the solid its shape is a drawing
 of: a database is a drum, a queue a tube on its side with its slots as bands
 round it, a pill a capsule, a circle a ball, and a box, a rounded box, a
-hexagon or a diamond its outline made deep — a rounded box with its edges
-rounded too. A note stays a sheet of paper with its corner turned down. The
-name, type and icon are laid on the front — on a ball, a tube or a capsule
-printed straight onto the curve, like a decal, so the icon and the text stay
-upright — and read the way they do on the canvas. Zones are floors with low
-glass walls around what they hold. The nodes stay standing whichever way the
-view is turned.
+hexagon or a diamond its outline made deep. A note stays a sheet of paper with
+its corner turned down. The name, type and icon are laid on the front — on a
+ball, a tube or a capsule printed straight onto the curve, like a decal, so the
+icon and the text stay upright — and read the way they do on the canvas. Zones
+are trays with low glass walls around what they hold. The nodes stay standing
+whichever way the view is turned.
+
+Everything is lit softly, the way a studio lights a model: matte solids in the
+node's colour with their edges rounded over — a box bevelled, a drum's lid and
+a tube's ends rounded like a tin's — each casting a soft shadow on the floor and
+on its neighbours, all on a slab that floats a little over the page. Names,
+icons, connections and messages are drawn unlit, so they keep exactly the
+theme's colours.
 
 The 3D view is for looking. Nothing is moved, selected or edited there, and
 it changes nothing about the diagram: the 2D canvas and every export ignore
@@ -25,11 +31,12 @@ saved, so a diagram always opens flat.
 Every connection is an arch: out of the top of the node it leaves, over, and
 down into the top of the node it reaches, leaving and arriving at the same
 slant. The farther apart two nodes stand, the higher the arch rises, so it
-clears what stands in between. Each connection meets a node at its own spot on
-its top, on the side facing the other end, so a node that talks to many — a
-gateway, a topic, a database everyone writes to — reads at a glance as a hub
-with its spokes. Two connections between the same two nodes, a request and its
-reply, run apart from end to end so both can be followed. Dashed and dotted
+clears what stands in between. Every connection of a node's, in or out, meets
+it at the same point — the middle of its top — so a node that talks to many —
+a gateway, a topic, a database everyone writes to — reads at a glance as the
+hub it is. A zone's point is on top of its back wall, clear of what it holds.
+Two connections between the same two nodes, a request and its reply, swing
+apart in the middle so both can be followed. Dashed and dotted
 connections are drawn with longer dashes than on the canvas, which from across
 the diagram would shrink into a fizz.
 

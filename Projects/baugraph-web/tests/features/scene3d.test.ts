@@ -209,29 +209,13 @@ describe('anchor', () => {
   )
   const by = Object.fromEntries(layout.nodes.map((n) => [n.node.id, n]))
 
-  it('meets a node off the middle of its top, on the side facing the other end', () => {
-    // Straight to the right: half way from the middle to the right end of its top.
-    expect(anchor(by.svc!, { x: 1000, y: 30 })).toEqual({ x: 90, y: 30 })
-    // Straight to the front: half way to the front of what it stands on — as deep as it is.
-    const deep = by.svc!.thickness
-    expect(anchor(by.svc!, { x: 60, y: 1000 })).toEqual({ x: 60, y: 30 + deep / 4 })
-    // Lying flat, its top is its whole box.
-    expect(anchor(by.mat!, { x: 60, y: 1000 })).toEqual({ x: 60, y: 330 + 15 })
+  it('meets every connection of a node at one point, the middle of its top', () => {
+    expect(anchor(by.svc!)).toEqual({ x: 60, y: 30 })
+    expect(anchor(by.mat!)).toEqual({ x: 60, y: 330 })
   })
 
-  it('moves a connection aside, but never off the top', () => {
-    const ahead = anchor(by.svc!, { x: 1000, y: 30 })
-    const aside = anchor(by.svc!, { x: 1000, y: 30 }, 6)
-    expect(aside.x).toBeCloseTo(ahead.x, 6)
-    // To the left of the way to the right is the back, the canvas's up.
-    expect(aside.y).toBeLessThan(ahead.y)
-    const shoved = anchor(by.svc!, { x: 1000, y: 30 }, 1000)
-    const half = { x: 60 * 0.75, y: (by.svc!.thickness / 2) * 0.75 }
-    expect(((shoved.x - 60) / half.x) ** 2 + ((shoved.y - 30) / half.y) ** 2).toBeLessThanOrEqual(1 + 1e-9)
-  })
-
-  it('meets a zone over its wall, towards the other end', () => {
-    expect(anchor(by.zone!, { x: 60, y: 50 })).toEqual({ x: 400, y: 50 })
+  it('meets a zone over the middle of its back wall, clear of what it holds', () => {
+    expect(anchor(by.zone!)).toEqual({ x: 500, y: 0 })
   })
 })
 

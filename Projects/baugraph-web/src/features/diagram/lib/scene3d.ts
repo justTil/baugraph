@@ -11,8 +11,8 @@ import { absoluteBoxes } from '@/features/diagram/lib/render-svg'
  * Nothing is laid out anew here and nothing can be moved: a node stands in 3D
  * exactly where the canvas has it, so the 3D view is the same diagram looked at
  * from a different angle. Connections leave their 2D routes behind, though —
- * out of the top and into the top, each from its own spot on the side facing
- * the other end, so a node that talks to many reads as a hub with its spokes.
+ * out of the top and into the top, every one of a node's from the same point
+ * on it, so a node that talks to many reads as the hub it is.
  *
  * Pure and free of three.js on purpose: it is what the tests pin down, and it
  * keeps the 3D renderer's weight out of everything that only needs the numbers.
@@ -257,73 +257,15 @@ export function stackLayout(doc: DiagramDocument): StackLayout {
 /* ------------------------------------------------------------------- arcs */
 
 /**
- * How far from the middle of a node's top towards its edge a connection meets
- * it: far enough that each connection has its own spot, so they fan out like
- * spokes rather than knotting in one point, and near enough to stay well clear
- * of the edge.
+ * Where on the floor plan every connection of `n`'s meets it — in and out
+ * alike, one point, so a node reads as a hub its connections fan out of: the
+ * middle of its top. A zone holds other nodes in its middle, so its point is
+ * the middle of its back wall, over which a connection enters it.
  */
-const SPOKE = 0.5
-
-/** The furthest from the middle of its top a connection may meet a node, however it is pushed aside. */
-const SPOKE_LIMIT = 0.75
-
-/**
- * What a node's top covers on the floor, about its middle: half its width
- * across, and half as deep as it stands — or, lying flat, half its height on
- * the canvas.
- */
-function topHalf(n: StackNode): Vec {
-  return { x: n.box.width / 2, y: (n.standing ? n.thickness : n.box.height) / 2 }
-}
-
-/**
- * Where on the floor plan a connection meets `n`, on its way to or from
- * `toward`: off the middle of its top on the side facing the other end, so
- * every connection a node has leaves from its own spot, and `side` canvas units
- * further to the left of that way — for connections that share their two nodes
- * with another, which then run apart from end to end. A zone holds other nodes
- * in its middle, so it is met at its wall, over which a connection enters it.
- */
-export function anchor(n: StackNode, toward: Vec, side = 0): Vec {
+export function anchor(n: StackNode): Vec {
   const { box } = n
-  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-  const dx = toward.x - centre.x
-  const dy = toward.y - centre.y
-  const length = Math.hypot(dx, dy)
-  if (length < 1e-6) return centre
-  const ux = dx / length
-  const uy = dy / length
-
-  if (n.node.kind === 'zone') {
-    // Out from the middle along the line to the other end, as far as the wall.
-    const reach = Math.min(
-      ux ? box.width / 2 / Math.abs(ux) : Infinity,
-      uy ? box.height / 2 / Math.abs(uy) : Infinity,
-    )
-    return { x: centre.x + ux * reach, y: centre.y + uy * reach }
-  }
-
-  const half = topHalf(n)
-  // Towards the other end, as far across the top as the top reaches that way…
-  const reach = Math.min(
-    ux ? half.x / Math.abs(ux) : Infinity,
-    uy ? half.y / Math.abs(uy) : Infinity,
-  )
-  let ox = ux * reach * SPOKE
-  let oy = uy * reach * SPOKE
-  // …and aside, to the left of the way there.
-  ox += uy * side
-  oy -= ux * side
-  // Never off the top, whatever pushed it there — kept inside the ellipse the
-  // top encloses, which a round top is and a square one more than covers.
-  if (!half.x) ox = 0
-  if (!half.y) oy = 0
-  const q = (half.x ? (ox / (half.x * SPOKE_LIMIT)) ** 2 : 0) + (half.y ? (oy / (half.y * SPOKE_LIMIT)) ** 2 : 0)
-  if (q > 1) {
-    ox /= Math.sqrt(q)
-    oy /= Math.sqrt(q)
-  }
-  return { x: centre.x + ox, y: centre.y + oy }
+  const x = box.x + box.width / 2
+  return n.node.kind === 'zone' ? { x, y: box.y } : { x, y: box.y + box.height / 2 }
 }
 
 /** How high an arch rises over the straight line between its ends, for the distance between them. */

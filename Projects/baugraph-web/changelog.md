@@ -15,19 +15,24 @@ All notable changes to this project will be documented in this file.
     solid its shape is a drawing of. A database is a drum, a queue a tube on
     its side with its slots as bands round it, a pill a capsule, and a circle
     a ball. A box, a rounded box, a hexagon and a diamond are their outlines
-    made deep, the rounded box with rounded edges too. A note stays a sheet
-    with its corner turned down. The name, type and icon are laid on the
-    front — on a round solid printed straight onto its curve, like a decal,
-    so the icon and the text stay upright — and read as they do on the
-    canvas. Zones are floors with low glass walls. Nodes stay standing
-    whichever way the view is turned.
+    made deep. A note stays a sheet with its corner turned down. The name,
+    type and icon are laid on the front — on a round solid printed straight
+    onto its curve, like a decal, so the icon and the text stay upright — and
+    read as they do on the canvas. Zones are trays with low glass walls.
+    Nodes stay standing whichever way the view is turned.
+  - **Lit softly, like a studio model.** Matte solids in the node's colour,
+    their edges rounded over — boxes bevelled, a drum's lid and a tube's ends
+    rounded like a tin's — cast soft shadows on the floor and on each other,
+    on a slab that floats over the page on a shadow of its own. Names, icons,
+    connections and messages are drawn unlit, in exactly the theme's colours.
+    Hovering a node lights it faintly; a click flies to it.
   - **Messages go from top to top.** Every connection is an arch out of the
     top of the node it leaves and down into the top of the node it reaches,
     leaving and arriving at the same slant and rising higher the farther it
-    goes, so it clears what stands between. Each connection meets a node at
-    its own spot on its top, on the side facing the other end, so a node that
-    talks to many reads as a hub with its spokes. A request and its reply
-    between the same two nodes run apart from end to end. Dashed and dotted
+    goes, so it clears what stands between. Every connection of a node's, in
+    or out, meets it at one point, the middle of its top, so a node that
+    talks to many reads as the hub it is. A request and its reply between
+    the same two nodes swing apart in the middle. Dashed and dotted
     connections are drawn with longer dashes than on the canvas, so they stay
     clean from across the diagram. Message flows travel along the arches on
     the same timing as on the canvas, as what the flow says they are: a
