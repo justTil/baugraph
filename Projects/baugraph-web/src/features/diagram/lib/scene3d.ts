@@ -140,11 +140,11 @@ export function standsUp(node: DiagramNode): boolean {
 
 /**
  * Front to back, standing up; thick, lying flat. A text annotation is only its
- * face, and a note a sheet of paper. A drum is as deep as it is wide, so it is
- * round — up to a little more than it is tall, past which it turns oval rather
- * than reaching out over its neighbours, which were laid out on the canvas
- * around its height; a tube, a capsule and a ball are as deep as they are
- * tall. A prism is made as deep as most of its shorter side, within reason.
+ * face, and a note a sheet of paper. A drum is exactly as deep as it is wide,
+ * so its lid is a circle — at any setting, *Low* included, since a database
+ * drawn oval reads as a mistake; a tube, a capsule and a ball are as deep as
+ * they are tall. A prism is made as deep as most of its shorter side, within
+ * reason.
  */
 export function nodeThickness(node: DiagramNode): number {
   if (isText(node)) return 0
@@ -155,7 +155,7 @@ export function nodeThickness(node: DiagramNode): number {
   const slim = extrusion === 'low' ? LOW_SLIM : 1
   switch (solidKind(node.shape)) {
     case 'drum':
-      return Math.min(w, h * 1.25) * slim
+      return w
     case 'tube':
     case 'capsule':
       return h * slim

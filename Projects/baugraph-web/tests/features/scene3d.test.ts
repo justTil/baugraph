@@ -82,9 +82,9 @@ describe('stackLayout', () => {
     const size = { width: 160, height: 100 }
     const thickness = (shape: string, extra: Record<string, unknown> = {}) =>
       stackLayout(doc({ nodes: [node('n', 0, 0, { shape, size, ...extra })] })).nodes[0]!.thickness
-    // A database is a drum: round, but never reaching far past its box on the canvas.
-    expect(thickness('cylinder')).toBe(125)
-    expect(thickness('cylinder', { size: { width: 100, height: 100 } })).toBe(100)
+    // A database is a drum, its lid a circle: as deep as it is wide, even set Low.
+    expect(thickness('cylinder')).toBe(160)
+    expect(thickness('cylinder', { extrusion: 'low' })).toBe(160)
     // A queue is a tube and a circle a ball: round, so as deep as they are tall.
     expect(thickness('queue')).toBe(100)
     expect(thickness('circle')).toBe(100)
