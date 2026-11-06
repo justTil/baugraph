@@ -1171,6 +1171,17 @@ export function labelAnchor(geometry: EdgeGeometry, position?: number, offset?: 
   return { x: on.x + (offset?.x ?? 0), y: on.y + (offset?.y ?? 0) }
 }
 
+/**
+ * The point on the line a label pulled off it belongs to — where the leader
+ * from the label back to its connection ends. `null` while the label sits on
+ * the line, where it needs no leader. Shared by the canvas and the export, so
+ * the two draw the same thread.
+ */
+export function labelFoot(geometry: EdgeGeometry, position?: number, offset?: Vec): Vec | null {
+  if (!offset || (!offset.x && !offset.y)) return null
+  return position === undefined ? geometry.mid : pointAlong(geometry, position)
+}
+
 /** Squared distance from `p` to the segment `a`–`b`. */
 function segmentDistanceSq(p: Vec, a: Vec, b: Vec): number {
   const dx = b.x - a.x

@@ -17,8 +17,8 @@ import {
   edgeGeometry,
   endpointOf,
   labelAnchor,
+  labelFoot as footOfLabel,
   nearestSegmentIndex,
-  pointAlong,
   projectOnto,
 } from '@/features/diagram/lib/edge-path'
 import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
@@ -529,13 +529,9 @@ const labelCenter = computed(() =>
  * drawn back to it — a label floating clear of its connection is otherwise
  * anyone's guess on a busy diagram. `null` while the label sits on the line.
  */
-const labelFoot = computed<Vec | null>(() => {
-  const offset = props.data.labelOffset
-  if (!offset || (!offset.x && !offset.y)) return null
-  return props.data.labelPosition === undefined
-    ? geometry.value.mid
-    : pointAlong(geometry.value, props.data.labelPosition)
-})
+const labelFoot = computed<Vec | null>(() =>
+  footOfLabel(geometry.value, props.data.labelPosition, props.data.labelOffset),
+)
 
 /**
  * How close, in screen pixels, a dragged label has to come to the line — or to
@@ -787,11 +783,10 @@ const pausedTag = computed(() => {
   <template v-if="!dragging">
     <!--
       A label pulled off the line keeps a thread back to the point it belongs
-      to, but only while its connection is selected or the label is in hand:
-      the rest of the time it would be one more line on a diagram full of them.
-      Canvas only — an export shows the label where it was put and nothing else.
+      to — always, not just while selected: it is what says which connection a
+      label floating clear of its line belongs to. The export draws the same.
     -->
-    <g v-if="label && labelFoot && (props.selected || draggingLabel)" class="pointer-events-none">
+    <g v-if="label && labelFoot" class="pointer-events-none">
       <line
         :x1="labelFoot.x"
         :y1="labelFoot.y"

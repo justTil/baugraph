@@ -3,7 +3,13 @@ import type { DiagramDocument, DiagramNode, MessageFlow } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
 import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
-import { arrowHeadPath, dashArray, edgeGeometry, labelAnchor } from '@/features/diagram/lib/edge-path'
+import {
+  arrowHeadPath,
+  dashArray,
+  edgeGeometry,
+  labelAnchor,
+  labelFoot,
+} from '@/features/diagram/lib/edge-path'
 import type { EdgeLabelBox } from '@/features/diagram/lib/edge-label'
 import { EDGE_LABEL_FONT, EDGE_LABEL_INFO_ICON, edgeLabelBox } from '@/features/diagram/lib/edge-label'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
@@ -912,6 +918,16 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
       // canvas computes, from the same geometry, so the two cannot drift apart.
       const label = labels.get(edge.id)
       if (label) {
+        // A label pulled off its line keeps the dotted thread back to it, as
+        // on the canvas — the only thing saying which connection it labels.
+        const foot = labelFoot(geometry, edge.labelPosition, edge.labelOffset)
+        if (foot) {
+          const centre = labelAnchor(geometry, edge.labelPosition, edge.labelOffset)
+          out +=
+            `<line x1="${round2(foot.x)}" y1="${round2(foot.y)}" x2="${round2(centre.x)}" y2="${round2(centre.y)}" ` +
+            `stroke="${color}" stroke-width="1" stroke-dasharray="2 3" stroke-opacity="0.7"/>` +
+            `<circle cx="${round2(foot.x)}" cy="${round2(foot.y)}" r="2.5" fill="${color}"/>`
+        }
         let chip =
           `<rect x="${label.x}" y="${label.y}" width="${label.width}" ` +
           `height="${label.height}" rx="4" fill="${theme.bg}" stroke="${mix(color, theme.bg, 0.72)}" stroke-width="1"/>`

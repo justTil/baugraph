@@ -72,8 +72,8 @@ All notable changes to this project will be documented in this file.
   plus how far off it, so it stays with its connection — at the same end, on
   the same side — when the nodes move, and the export puts it in the same
   place, with the image grown to fit a label dragged out past every node.
-  While the connection is selected, a dotted thread runs from a label pulled
-  off the line back to the point it belongs to. Dropped back on the line it
+  A label pulled off the line keeps a dotted thread back to the point it
+  belongs to, on the canvas and in exports. Dropped back on the line it
   sits on the line; dropped on the middle it is back where it started.
   Double-click it, or use **Recentre label** in the right-click menu or
   **Recentre** in the inspector, to put it back. `⌥` places it freely.

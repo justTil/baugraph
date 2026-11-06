@@ -55,8 +55,8 @@ A connection's label sits in the middle of its line until you drag it
 somewhere else — along the line, towards either end, or off the line
 altogether. It is stored as a place along the line plus how far off it, so
 it stays with its connection, at the same end and on the same side, when the
-nodes are moved. While the connection is selected, a dotted thread runs from
-a label pulled off the line back to the point it belongs to.
+nodes are moved. A label pulled off the line keeps a dotted thread back to
+the point it belongs to — on the canvas and in exports.
 
 Drop it back on the line and it sits on the line; drop it on the middle and
 it is back where it started. Double-click a moved label — or use

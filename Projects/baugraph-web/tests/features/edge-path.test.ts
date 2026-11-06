@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Box, Vec } from '@/features/diagram/lib/edge-path'
-import { edgeGeometry, labelAnchor, pointAlong, projectOnto } from '@/features/diagram/lib/edge-path'
+import {
+  edgeGeometry,
+  labelAnchor,
+  labelFoot,
+  pointAlong,
+  projectOnto,
+} from '@/features/diagram/lib/edge-path'
 
 /** Two nodes stacked one above the other, with a gap of 60..140 between them. */
 const start: Box = { x: 0, y: 0, width: 150, height: 60 }
@@ -225,5 +231,13 @@ describe('measuring along a connection', () => {
       x: straight.mid.x + 10,
       y: straight.mid.y,
     })
+  })
+
+  it('ties a label pulled off the line back to its point on it, and only then', () => {
+    expect(labelFoot(straight, 0.25, { x: 0, y: -20 })).toEqual({ x: 151, y: 50 })
+    expect(labelFoot(straight, undefined, { x: 10, y: 0 })).toEqual(straight.mid)
+    expect(labelFoot(straight, 0.25)).toBeNull()
+    expect(labelFoot(straight, 0.25, { x: 0, y: 0 })).toBeNull()
+    expect(labelFoot(straight)).toBeNull()
   })
 })
