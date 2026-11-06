@@ -9,10 +9,11 @@ of: a database is a drum, a queue a tube on its side with its slots as bands
 round it, a pill a capsule, a circle a ball, and a box, a rounded box, a
 hexagon or a diamond its outline made deep — a rounded box with its edges
 rounded too. A note stays a sheet of paper with its corner turned down. The
-name, type and icon are laid on the front, following its curve, so they read
-the way they do on the canvas. Zones are floors with low glass walls around
-what they hold. Look from straight above and the nodes lie back down, and the
-view from above is the 2D diagram again.
+name, type and icon are laid on the front — on a ball, a tube or a capsule
+printed straight onto the curve, like a decal, so the icon and the text stay
+upright — and read the way they do on the canvas. Zones are floors with low
+glass walls around what they hold. The nodes stay standing whichever way the
+view is turned.
 
 The 3D view is for looking. Nothing is moved, selected or edited there, and
 it changes nothing about the diagram: the 2D canvas and every export ignore
@@ -21,20 +22,23 @@ saved, so a diagram always opens flat.
 
 ## Messages, from top to top
 
-Every connection is an arc: out of the top of the node it leaves, over, and
-down into the top of the node it reaches. The farther apart two nodes stand,
-the higher the arc climbs, so it clears what stands in between. Every
-connection a node has leaves from one point on top of it, so a node that talks
-to many — a gateway, a topic, a database everyone writes to — reads at a glance
-as the hub it is. Two connections between the same two nodes, a request and
-its reply, swing apart so both can be followed.
+Every connection is an arch: out of the top of the node it leaves, over, and
+down into the top of the node it reaches, leaving and arriving at the same
+slant. The farther apart two nodes stand, the higher the arch rises, so it
+clears what stands in between. Each connection meets a node at its own spot on
+its top, on the side facing the other end, so a node that talks to many — a
+gateway, a topic, a database everyone writes to — reads at a glance as a hub
+with its spokes. Two connections between the same two nodes, a request and its
+reply, run apart from end to end so both can be followed. Dashed and dotted
+connections are drawn with longer dashes than on the canvas, which from across
+the diagram would shrink into a fizz.
 
-[Message flows](./message-flows) travel along the arcs exactly as they run
+[Message flows](./message-flows) travel along the arches exactly as they run
 across the canvas: the same hops, the same timing, the same split where a path
 forks. Messages travel as what the flow says they are. A dot is a bead of
 light; a **packet** is a parcel, taped down the middle, and an **envelope** a
 letter with its flap folded down — drawn like the canvas's glyphs on every
-side, in the flow's colour, and turned to face the way they are going. A
+side, in the flow's colour, standing upright and turned to face you. A
 connection the flow styles differently changes the message as it passes, the
 same as on the canvas: an envelope can become a red packet on the way to a
 dead-letter queue. Where a message drops into a node, a ripple in its colour
@@ -78,8 +82,8 @@ to act on. `⌘Z` and `⇧⌘Z` still undo and redo, for an edit made in the
 inspector beside it.
 
 The bar at the bottom left switches between an angled view, the view from
-above (the 2D layout, every node lying back down) and the view from the front
-(every node face on, the arcs over them), fits everything, turns connection
+above (the 2D layout as a plan, the arches spread over it) and the view from
+the front (every node face on, the arches over them), fits everything, turns connection
 labels on and off, starts the turntable, and saves the current view as a PNG.
 
 ## Presenting

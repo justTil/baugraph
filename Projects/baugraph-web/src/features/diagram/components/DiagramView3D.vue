@@ -185,7 +185,7 @@ async function saveSnapshot() {
 
 const PRESETS: { preset: CameraPreset; icon: unknown; title: string }[] = [
   { preset: 'iso', icon: Box, title: 'Angled view' },
-  { preset: 'top', icon: PanelTop, title: 'From above — the 2D layout' },
+  { preset: 'top', icon: PanelTop, title: 'From above' },
   { preset: 'front', icon: RectangleVertical, title: 'From the front — every node face on' },
 ]
 

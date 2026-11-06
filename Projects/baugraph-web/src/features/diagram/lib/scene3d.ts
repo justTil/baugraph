@@ -4,16 +4,15 @@ import { absoluteBoxes } from '@/features/diagram/lib/render-svg'
 
 /**
  * The 3D view's layout: the 2D diagram exactly as the canvas lays it out, with
- * every node stood up off its back where it is — facing the front, as the
- * solid its shape is a drawing of — and every connection an arc from the top
- * of one node to the top of the next, the way a message leaves one service and
- * drops into another.
+ * every node stood up where it is — facing the front, as the solid its shape is
+ * a drawing of — and every connection an arch from the top of one node to the
+ * top of the next, the way a message leaves one service and drops into another.
  *
  * Nothing is laid out anew here and nothing can be moved: a node stands in 3D
  * exactly where the canvas has it, so the 3D view is the same diagram looked at
  * from a different angle. Connections leave their 2D routes behind, though —
- * out of the top and into the top, every connection a node has fans out from
- * one point on it, so a node that talks to many reads as the hub it is.
+ * out of the top and into the top, each from its own spot on the side facing
+ * the other end, so a node that talks to many reads as a hub with its spokes.
  *
  * Pure and free of three.js on purpose: it is what the tests pin down, and it
  * keeps the 3D renderer's weight out of everything that only needs the numbers.
@@ -127,7 +126,7 @@ export interface StackLayout {
 const FLOOR_PADDING = 60
 
 /** How far apart connections between the same two nodes swing, in canvas units. */
-const BOW_STEP = 30
+const BOW_STEP = 24
 
 const isText = (node: DiagramNode) => node.kind === 'annotation' || node.shape === 'text'
 
@@ -258,74 +257,123 @@ export function stackLayout(doc: DiagramDocument): StackLayout {
 /* ------------------------------------------------------------------- arcs */
 
 /**
- * Where on the floor a connection meets `n`, looking towards `toward`: the
- * middle of a node, which is where its top is; the rim of a zone, which holds
- * other nodes in its middle and is entered over its wall.
+ * How far from the middle of a node's top towards its edge a connection meets
+ * it: far enough that each connection has its own spot, so they fan out like
+ * spokes rather than knotting in one point, and near enough to stay well clear
+ * of the edge.
  */
-export function anchor(n: StackNode, toward: Vec): Vec {
-  const { box } = n
-  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-  if (n.node.kind !== 'zone') return centre
-  const dx = toward.x - centre.x
-  const dy = toward.y - centre.y
-  if (!dx && !dy) return centre
-  // Out from the middle along the line to the other end, as far as the wall.
-  const reach = Math.min(
-    dx ? box.width / 2 / Math.abs(dx) : Infinity,
-    dy ? box.height / 2 / Math.abs(dy) : Infinity,
-  )
-  return { x: centre.x + dx * reach, y: centre.y + dy * reach }
-}
+const SPOKE = 0.5
 
-/** How high an arc climbs over the higher of its two ends, for the distance between them. */
-export const arcLift = (distance: number) => Math.max(40, distance * 0.4)
+/** The furthest from the middle of its top a connection may meet a node, however it is pushed aside. */
+const SPOKE_LIMIT = 0.75
 
 /**
- * A connection's arc: straight up out of `from`, over, and straight down into
- * `to` — out of the top of one node and into the top of the other. The longer
- * the way, the higher it climbs, so it clears what stands in between. `bow`
- * swings it out to its left (seen from `from`), to tell apart connections
- * between the same two nodes. A connection from a node to itself loops over
- * its top.
+ * What a node's top covers on the floor, about its middle: half its width
+ * across, and half as deep as it stands — or, lying flat, half its height on
+ * the canvas.
+ */
+function topHalf(n: StackNode): Vec {
+  return { x: n.box.width / 2, y: (n.standing ? n.thickness : n.box.height) / 2 }
+}
+
+/**
+ * Where on the floor plan a connection meets `n`, on its way to or from
+ * `toward`: off the middle of its top on the side facing the other end, so
+ * every connection a node has leaves from its own spot, and `side` canvas units
+ * further to the left of that way — for connections that share their two nodes
+ * with another, which then run apart from end to end. A zone holds other nodes
+ * in its middle, so it is met at its wall, over which a connection enters it.
+ */
+export function anchor(n: StackNode, toward: Vec, side = 0): Vec {
+  const { box } = n
+  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  const dx = toward.x - centre.x
+  const dy = toward.y - centre.y
+  const length = Math.hypot(dx, dy)
+  if (length < 1e-6) return centre
+  const ux = dx / length
+  const uy = dy / length
+
+  if (n.node.kind === 'zone') {
+    // Out from the middle along the line to the other end, as far as the wall.
+    const reach = Math.min(
+      ux ? box.width / 2 / Math.abs(ux) : Infinity,
+      uy ? box.height / 2 / Math.abs(uy) : Infinity,
+    )
+    return { x: centre.x + ux * reach, y: centre.y + uy * reach }
+  }
+
+  const half = topHalf(n)
+  // Towards the other end, as far across the top as the top reaches that way…
+  const reach = Math.min(
+    ux ? half.x / Math.abs(ux) : Infinity,
+    uy ? half.y / Math.abs(uy) : Infinity,
+  )
+  let ox = ux * reach * SPOKE
+  let oy = uy * reach * SPOKE
+  // …and aside, to the left of the way there.
+  ox += uy * side
+  oy -= ux * side
+  // Never off the top, whatever pushed it there — kept inside the ellipse the
+  // top encloses, which a round top is and a square one more than covers.
+  if (!half.x) ox = 0
+  if (!half.y) oy = 0
+  const q = (half.x ? (ox / (half.x * SPOKE_LIMIT)) ** 2 : 0) + (half.y ? (oy / (half.y * SPOKE_LIMIT)) ** 2 : 0)
+  if (q > 1) {
+    ox /= Math.sqrt(q)
+    oy /= Math.sqrt(q)
+  }
+  return { x: centre.x + ox, y: centre.y + oy }
+}
+
+/** How high an arch rises over the straight line between its ends, for the distance between them. */
+export const arcHeight = (distance: number) => Math.max(30, distance * 0.28)
+
+/**
+ * A connection's arch from `from` to `to` — the tops of the two nodes it joins.
+ * A parabola over the straight line between them: it leaves one top at a slant
+ * and drops into the other at the same slant, at the same angle however long
+ * it is, rising higher the farther it goes so it clears what stands in between.
+ * It always arrives from above, even on a node raised on a post far over the
+ * one it left. `bow` swings its middle out to its left (seen from `from`), to
+ * tell apart connections between the same two nodes. A connection from a node
+ * to itself loops up over its top.
  */
 export function arcPoints(from: Vec3, to: Vec3, bow = 0, steps = 48): Vec3[] {
   const dx = to.x - from.x
+  const dy = to.y - from.y
   const dz = to.z - from.z
   const distance = Math.hypot(dx, dz)
-  const top = Math.max(from.y, to.y)
+  const out: Vec3[] = []
 
-  let c1: Vec3
-  let c2: Vec3
   if (distance < 1) {
-    // A loop: up and out to one side, round, and back down into where it left.
-    const lift = arcLift(0) * 1.6
+    // A loop standing on the node's top, out to one side and back.
     const turn = (bow / BOW_STEP) * 0.9
     const ux = Math.cos(turn)
     const uz = Math.sin(turn)
-    const r = 34
-    c1 = { x: from.x - ux * r, y: top + lift, z: from.z - uz * r }
-    c2 = { x: to.x + ux * r, y: top + lift, z: to.z + uz * r }
-  } else {
-    const lift = arcLift(distance)
-    // Left of the way from `from` to `to`, on the floor.
-    const sx = (dz / distance) * bow
-    const sz = (-dx / distance) * bow
-    c1 = { x: from.x + sx, y: top + lift, z: from.z + sz }
-    c2 = { x: to.x + sx, y: top + lift, z: to.z + sz }
+    const r = 26
+    for (let k = 0; k <= steps; k++) {
+      const a = (k / steps) * Math.PI * 2
+      out.push({
+        x: from.x + ux * r * Math.sin(a) + dx * (k / steps),
+        y: from.y + r * 1.3 * (1 - Math.cos(a)) + dy * (k / steps),
+        z: from.z + uz * r * Math.sin(a) + dz * (k / steps),
+      })
+    }
+    return out
   }
 
-  const out: Vec3[] = []
+  // High enough over the chord that the far end, however much higher, is reached from above.
+  const rise = Math.max(arcHeight(distance), Math.abs(dy) / 4 + 20)
+  const sx = (dz / distance) * bow
+  const sz = (-dx / distance) * bow
   for (let k = 0; k <= steps; k++) {
     const t = k / steps
-    const m = 1 - t
-    const a = m * m * m
-    const b = 3 * m * m * t
-    const c = 3 * m * t * t
-    const e = t * t * t
+    const lift = 4 * t * (1 - t)
     out.push({
-      x: a * from.x + b * c1.x + c * c2.x + e * to.x,
-      y: a * from.y + b * c1.y + c * c2.y + e * to.y,
-      z: a * from.z + b * c1.z + c * c2.z + e * to.z,
+      x: from.x + dx * t + sx * lift,
+      y: from.y + dy * t + rise * lift,
+      z: from.z + dz * t + sz * lift,
     })
   }
   return out

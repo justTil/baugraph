@@ -77,6 +77,30 @@ function surface(segU: number, segV: number, at: (u: number, v: number, out: Vec
   return geometry
 }
 
+/**
+ * A label printed onto a curved front the way a decal is: the face laid out flat
+ * as the 2D node lays it out, then pressed straight back onto the surface — so
+ * from the front it is the 2D face exactly, its icon and its text upright and
+ * undistorted, as they are on a box. `front` says how far out of the middle the
+ * front is at each point of the face, `null` off the solid's silhouette — where
+ * the face has nothing to show, and the label tucks in behind the front.
+ */
+function decal(
+  w: number,
+  h: number,
+  depth: number,
+  segU: number,
+  segV: number,
+  front: (x: number, y: number) => number | null,
+): BufferGeometry {
+  return surface(segU, segV, (u, v, out) => {
+    const x = u * w
+    const y = v * h
+    const z = front(x, y)
+    out.set(x, y, depth / 2 + (z === null ? 0 : z + PROUD))
+  })
+}
+
 /** A flat label across the front of a prism. */
 function frontLabel(w: number, h: number, depth: number): BufferGeometry {
   return surface(1, 1, (u, v, out) => out.set(u * w, v * h, depth + PROUD))
@@ -155,9 +179,9 @@ function tube(w: number, h: number, depth: number): Solid {
     return band
   })
 
-  const label = surface(1, 24, (u, v, out) => {
-    const b = (v - 0.5) * 2
-    out.set(u * w, h / 2 + (r + PROUD) * Math.sin(b), depth / 2 + (rz + PROUD) * Math.cos(b))
+  const label = decal(w, h, depth, 1, 32, (_, y) => {
+    const q = ((y - h / 2) / r) ** 2
+    return rz * Math.sqrt(Math.max(0, 1 - q))
   })
   return { body, trim, label }
 }
@@ -170,16 +194,16 @@ function capsule(w: number, h: number, depth: number): Solid {
   const body = new CapsuleGeometry(r, straight, 12, 48, 1)
   lieAlongX(body, w, h, depth, 1, rz / r)
 
-  // Round the ends the label follows the surface in, rather than standing off it.
+  // How round it is across at `x`: all of it along the straight, less into the ends.
   const radiusAt = (x: number) => {
     const into = x < r ? r - x : x > w - r ? x - (w - r) : 0
     return Math.sqrt(Math.max(0, r * r - into * into))
   }
-  const label = surface(48, 24, (u, v, out) => {
-    const x = u * w
+  const label = decal(w, h, depth, 48, 32, (x, y) => {
     const radius = radiusAt(x)
-    const b = (v - 0.5) * 2
-    out.set(x, h / 2 + (radius + PROUD) * Math.sin(b), depth / 2 + ((radius * rz) / r + PROUD) * Math.cos(b))
+    const dy = y - h / 2
+    if (Math.abs(dy) > radius) return null
+    return (rz / r) * Math.sqrt(radius * radius - dy * dy)
   })
   return { body, trim: [], label }
 }
@@ -192,18 +216,9 @@ function ball(w: number, h: number, depth: number): Solid {
   const body = new SphereGeometry(1, 48, 32)
   body.scale(rx, ry, rz)
   body.translate(rx, ry, rz)
-  // Over the front, short of the edges, where a label curving away out of sight
-  // would only be lost.
-  const across = 0.95
-  const up = 0.9
-  const label = surface(32, 24, (u, v, out) => {
-    const a = (u - 0.5) * 2 * across
-    const b = (v - 0.5) * 2 * up
-    out.set(
-      rx + (rx + PROUD) * Math.cos(b) * Math.sin(a),
-      ry + (ry + PROUD) * Math.sin(b),
-      rz + (rz + PROUD) * Math.cos(b) * Math.cos(a),
-    )
+  const label = decal(w, h, depth, 32, 32, (x, y) => {
+    const q = ((x - rx) / rx) ** 2 + ((y - ry) / ry) ** 2
+    return q < 1 ? rz * Math.sqrt(1 - q) : null
   })
   return { body, trim: [], label }
 }

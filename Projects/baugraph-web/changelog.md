@@ -17,21 +17,23 @@ All notable changes to this project will be documented in this file.
     a ball. A box, a rounded box, a hexagon and a diamond are their outlines
     made deep, the rounded box with rounded edges too. A note stays a sheet
     with its corner turned down. The name, type and icon are laid on the
-    front, following its curve, so they read as they do on the canvas.
-    Zones are floors with low glass walls. Seen from straight above, every
-    node lies back down, so the view from above is the 2D diagram. Nodes lie
-    down as the camera comes over the top and stand up as it tilts away, so
-    the intro has them getting up.
-  - **Messages go from top to top.** Every connection is an arc out of the
+    front — on a round solid printed straight onto its curve, like a decal,
+    so the icon and the text stay upright — and read as they do on the
+    canvas. Zones are floors with low glass walls. Nodes stay standing
+    whichever way the view is turned.
+  - **Messages go from top to top.** Every connection is an arch out of the
     top of the node it leaves and down into the top of the node it reaches,
-    climbing higher the farther it goes, so it clears what stands between.
-    Every connection a node has leaves from one point on it, so a node that
-    talks to many reads as a hub. A request and its reply between the same
-    two nodes swing apart. Message flows travel along the arcs on the same
-    timing as on the canvas, as what the flow says they are: a packet is a
-    parcel taped down the middle, and an envelope a letter with its flap
-    down, both drawn like the canvas's glyphs on every side and turned to
-    face their way. A connection styled differently changes the message as
+    leaving and arriving at the same slant and rising higher the farther it
+    goes, so it clears what stands between. Each connection meets a node at
+    its own spot on its top, on the side facing the other end, so a node that
+    talks to many reads as a hub with its spokes. A request and its reply
+    between the same two nodes run apart from end to end. Dashed and dotted
+    connections are drawn with longer dashes than on the canvas, so they stay
+    clean from across the diagram. Message flows travel along the arches on
+    the same timing as on the canvas, as what the flow says they are: a
+    packet is a parcel taped down the middle, and an envelope a letter with
+    its flap down, both drawn like the canvas's glyphs on every side, standing
+    upright and turned to face the viewer. A connection styled differently changes the message as
     it passes, as on the canvas, and a ripple in the message's colour marks
     where it lands. `←`/`→` step a spotlight through the flows: the lit flow
     is drawn in its own colour and everything it does not touch fades back.

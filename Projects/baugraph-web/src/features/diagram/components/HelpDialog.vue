@@ -184,13 +184,14 @@ const SHORTCUTS_3D: [string, string][] = [
             Press <kbd class="bg-muted rounded px-1 font-mono">3</kbd> (or <em>3D</em> in the
             toolbar) and the diagram stands up. It is the same layout as on the canvas — every
             node exactly where it is there, standing as the solid its shape stands for: a
-            database a drum, a queue a tube, a circle a ball. Look from straight above and they
-            lie back down into the 2D diagram.
+            database a drum, a queue a tube, a circle a ball. They stay standing whichever way you
+            turn the view.
           </p>
           <p>
-            Every connection is an arc from the top of one node to the top of the next, so a
-            node that talks to many reads as a hub, and the message flows travel along the arcs
-            as parcels, letters and beads of light. Step through them with
+            Every connection is an arch from the top of one node to the top of the next, each
+            leaving from its own spot on the side facing the other end, so a node that talks to
+            many reads as a hub with its spokes. The message flows travel along the arches as
+            parcels, letters and beads of light, standing upright and facing you. Step through them with
             <kbd class="bg-muted rounded px-1 font-mono">←</kbd>
             <kbd class="bg-muted rounded px-1 font-mono">→</kbd>: each one in turn is drawn at full
             strength while everything it does not touch fades back.

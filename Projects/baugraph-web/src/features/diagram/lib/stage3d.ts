@@ -11,7 +11,6 @@ import {
   Float32BufferAttribute,
   Group,
   LineBasicMaterial,
-  Matrix4,
   LineSegments,
   MOUSE,
   Mesh,
@@ -46,6 +45,7 @@ import type { DiagramDocument, DiagramNode, FlowToken, MessageFlow } from '@/mod
 import type { CameraPreset } from '@/features/diagram/composables/useView3D'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
+import type { Vec } from '@/features/diagram/lib/edge-path'
 import { dashArray } from '@/features/diagram/lib/edge-path'
 import { svgImage } from '@/features/diagram/lib/export'
 import { nodeFaceSvg } from '@/features/diagram/lib/render-svg'
@@ -129,14 +129,6 @@ const PRESETS: Record<CameraPreset, { polar: number; azimuth: number }> = {
 /** Never below the floor: the diagram is read from above or from the side. */
 const MAX_POLAR = Math.PI * 0.495
 
-/**
- * Nodes stand up as the camera tilts away from straight above, and lie back
- * down as it comes over the top — from above, the view reads as the 2D
- * diagram, which is what the view from above is for. Polar angles, in radians.
- */
-const LIE_DOWN_BELOW = (14 * Math.PI) / 180
-const STAND_UP_ABOVE = (34 * Math.PI) / 180
-
 /** How long the ripple lasts where a message lands, in seconds. */
 const LANDING_S = 0.6
 /** How far into a hop counts as having arrived. */
@@ -144,6 +136,20 @@ const ARRIVED = 0.985
 
 /** How far the pointer may travel between press and release and still be a click. */
 const CLICK_SLOP = 5
+
+/**
+ * Dashed and dotted connections, drawn longer than on the canvas: an arch is
+ * seen from further off than a line on the canvas at its usual zoom, and the
+ * canvas's own pattern shrinks into a fizz there.
+ */
+const DASH_SCALE = 2
+
+/**
+ * How far a connection's ends move aside for another between the same two
+ * nodes, as a share of how far its middle swings: so a request and its reply
+ * run apart from end to end, not only in the middle.
+ */
+const END_SIDE = 0.5
 
 interface NodeEntry {
   stack: StackNode
@@ -536,28 +542,9 @@ function extrudeUpright(shapes: Shape[], height: number, depth: number): Extrude
   return geometry
 }
 
-/** Scratch space for turning messages, reused every frame rather than allocated. */
-const HEADING = new Vector3()
-const AHEAD_A: Vec3 = { x: 0, y: 0, z: 0 }
-const AHEAD_B: Vec3 = { x: 0, y: 0, z: 0 }
-const BASIS = new Matrix4()
-const SIDE = new Vector3()
-const UP = new Vector3()
-const WORLD_UP = new Vector3(0, 1, 0)
-const NORTH = new Vector3(0, 0, 1)
-
-/**
- * Turns `object` so its `x` runs along `dir` and its top stays as near to up
- * as it can — so an envelope travels long side first and lies flat, and on a
- * cable climbing straight up it tips forward rather than rolling over.
- */
-function faceAlong(object: Object3D, dir: Vector3) {
-  const reference = Math.abs(dir.y) > 0.97 ? NORTH : WORLD_UP
-  SIDE.crossVectors(dir, reference).normalize()
-  UP.crossVectors(SIDE, dir)
-  BASIS.makeBasis(dir, UP, SIDE)
-  object.quaternion.setFromRotationMatrix(BASIS)
-}
+/** A ray straight down onto a node, to find its top; reused rather than allocated. */
+const DOWN = new Vector3(0, -1, 0)
+const DOWN_FROM = new Vector3()
 
 function flatten(points: Vec3[]): number[] {
   const out: number[] = []
@@ -591,8 +578,8 @@ export class Stage3D {
   private lineMaterials = new Set<LineMaterial>()
   private disposables: { dispose(): void }[] = []
 
-  /** How far up the nodes stand: `0` on their backs, from straight above; `1` upright. */
-  private upright = 1
+  /** Which way the camera looks from, about the vertical: every message turns its face to it. */
+  private facing = 0
   /** Message faces, by look and colour; kept across rebuilds like the glows. */
   private tokenFaces = new Map<string, Texture>()
   /** Where messages have just landed, spreading out and fading. */
@@ -671,9 +658,10 @@ export class Stage3D {
 
     this.buildFloor()
     for (const stack of this.layout.nodes) this.buildNode(stack)
+    // Connections are laid onto the nodes' own surfaces, found where they stand.
+    this.root.updateMatrixWorld(true)
     for (const stack of this.layout.edges) this.buildEdge(stack)
     this.buildFlows()
-    this.layEdges()
     this.textures.sweep()
 
     this.applyVisibility()
@@ -777,9 +765,8 @@ export class Stage3D {
   }
 
   /**
-   * The opening move: the diagram as it looks in 2D — from straight above,
-   * every node on its back — tilts away, and the nodes get up as it does. Says
-   * what the 3D view is in a second.
+   * The opening move: the diagram from straight above, the way the canvas shows
+   * it, tilts away into the angled view. Says what the 3D view is in a second.
    */
   intro() {
     if (this.motion.reduced || !this.layout) return
@@ -1006,44 +993,25 @@ export class Stage3D {
   }
 
   /**
-   * Stands a node up — or lays it on its back — as far as `upright` says. It
-   * turns about its bottom edge: lying, it covers its box the way the canvas
-   * draws it; standing, it stands across the middle of it, facing the front,
-   * on its post if it has one. A node set to lie *flat* never gets up.
+   * Puts a node's body where it stands, and stays there whichever way the
+   * camera turns. Standing, it stands across the middle of its box, facing the
+   * front, on its post if it has one; a node set to lie *flat* lies on its back
+   * over its box, the way the canvas draws it.
    */
   private pose(entry: NodeEntry) {
     const body = entry.body
     if (!body) return
     const { stack } = entry
-    const u = stack.standing ? this.upright : 0
     const h = stack.node.size.height
     const depth = stack.thickness
-    body.rotation.x = (-Math.PI / 2) * (1 - u)
-    body.position.set(0, stack.stand * u, h + (h / 2 - depth / 2 - h) * u)
-    if (entry.post) {
-      entry.post.scale.y = Math.max(1e-3, u)
-      entry.post.visible = u > 0.01
+    if (stack.standing) {
+      body.position.set(0, stack.stand, h / 2 - depth / 2)
+      entry.rise = Math.max(stack.height, depth)
+    } else {
+      body.rotation.x = -Math.PI / 2
+      body.position.set(0, 0, h)
+      entry.rise = depth + 0.25
     }
-    const lying = depth + 0.25
-    entry.rise = lying + (Math.max(stack.height, lying) - lying) * u
-  }
-
-  /** Stands every node up, or lays it down, and re-lays the arcs onto their new tops. */
-  private setUpright(u: number) {
-    if (Math.abs(u - this.upright) < 1e-4) return
-    this.upright = u
-    for (const entry of this.nodes.values()) this.pose(entry)
-    this.layEdges()
-  }
-
-  /** How far up the nodes stand for the camera as it is: lying from straight above, upright once it tilts. */
-  private uprightForCamera(): number {
-    const offset = this.camera.position.clone().sub(this.controls.target)
-    const length = offset.length()
-    if (!length) return this.upright
-    const polar = Math.acos(Math.min(1, Math.max(-1, offset.y / length)))
-    const t = Math.min(1, Math.max(0, (polar - LIE_DOWN_BELOW) / (STAND_UP_ABOVE - LIE_DOWN_BELOW)))
-    return t * t * (3 - 2 * t)
   }
 
   private buildEdge(stack: StackEdge) {
@@ -1052,7 +1020,9 @@ export class Stage3D {
     const color = edgeColor(edge.color, theme)
     const stroke = edgeStrokeWidth(edge.width)
     const width = (stroke / EDGE_PX.regular) * 2
-    const dash = dashArray(edge.line, stroke)?.split(' ').map(Number)
+    const dash = dashArray(edge.line, stroke)
+      ?.split(' ')
+      .map((n) => Number(n) * DASH_SCALE)
 
     const points = this.arcFor(stack)
     const { line, material } = this.line(points, color, width, dash)
@@ -1101,13 +1071,21 @@ export class Stage3D {
     this.placeEdgeDecorations(entry)
   }
 
-  /** The middle of a node's top, as it stands — or lies — right now; a zone's at the top of its wall. */
-  private topOf(entry: NodeEntry): number {
+  /**
+   * Where a connection meets a node: at `at` on the floor plan, on the node's
+   * own top — found on the solid itself, so it sits on a drum's lid, on the
+   * curve of a ball or a tube, on the slope of a diamond. A zone is met at the
+   * top of its wall.
+   */
+  private endOn(entry: NodeEntry, at: Vec): Vec3 {
     const { stack } = entry
-    return entry.base + (stack.node.kind === 'zone' ? ZONE_FLOOR + stack.height : entry.rise)
+    if (stack.node.kind === 'zone') return { x: at.x, y: entry.base + ZONE_FLOOR + stack.height, z: at.y }
+    this.raycaster.set(DOWN_FROM.set(at.x, 1e5, at.y), DOWN)
+    const hit = this.raycaster.intersectObjects(entry.pick, false)[0]
+    return { x: at.x, y: hit ? hit.point.y : entry.base + entry.rise, z: at.y }
   }
 
-  /** A connection's arc: out of the top of its source and into the top of its target. */
+  /** A connection's arch: out of the top of its source and into the top of its target. */
   private arcFor(stack: StackEdge): Vec3[] {
     const s = this.nodes.get(stack.edge.source)!
     const t = this.nodes.get(stack.edge.target)!
@@ -1115,25 +1093,15 @@ export class Stage3D {
       x: e.stack.box.x + e.stack.box.width / 2,
       y: e.stack.box.y + e.stack.box.height / 2,
     })
-    const a = anchor(s.stack, centre(t))
-    const b = anchor(t.stack, centre(s))
-    return arcPoints({ x: a.x, y: this.topOf(s), z: a.y }, { x: b.x, y: this.topOf(t), z: b.y }, stack.bow)
+    // Aside to the same side at both ends: measured from each end towards the
+    // other, the target's left is the source's right.
+    const aside = stack.bow * END_SIDE
+    const from = this.endOn(s, anchor(s.stack, centre(t), aside))
+    const to = this.endOn(t, anchor(t.stack, centre(s), -aside))
+    return arcPoints(from, to, stack.bow)
   }
 
-  /** Lays a connection along `points`: its line and flow dashes, and what rides on it. */
-  private setEdgePoints(entry: EdgeEntry, points: Vec3[]) {
-    const positions = flatten(points.length > 1 ? points : [...points, ...points])
-    ;(entry.line.geometry as LineGeometry).setPositions(positions)
-    entry.line.computeLineDistances()
-    for (const dash of entry.dashes) {
-      ;(dash.line.geometry as LineGeometry).setPositions(positions)
-      dash.line.computeLineDistances()
-    }
-    entry.track = track(points)
-    this.placeEdgeDecorations(entry)
-  }
-
-  /** Arrowheads — pointing down into the top they land on — and the label at the top of the arc. */
+  /** Arrowheads, along the arch into the top they land on, and the label at the top of the arch. */
   private placeEdgeDecorations(entry: EdgeEntry) {
     const points = entry.track.points
     const ends: [Vec3, Vec3][] = []
@@ -1153,14 +1121,6 @@ export class Stage3D {
       const mid = pointOnTrack(entry.track, 0.5, { x: 0, y: 0, z: 0 })
       entry.label.position.set(mid.x, mid.y + 4, mid.z)
     }
-  }
-
-  /** Re-lays every arc onto the tops of its nodes, as they stand now. */
-  private layEdges() {
-    for (const entry of this.edges.values()) this.setEdgePoints(entry, this.arcFor(entry.stack))
-    // An arc's length is part of a message's timing, so the plans follow it.
-    if (this.runs.length) this.replan()
-    this.invalidate()
   }
 
   /* ----------------------------------------------------------------- flows */
@@ -1207,15 +1167,6 @@ export class Stage3D {
       ]),
     )
     return flowPlan(flow, byId, (id) => this.edges.get(id)?.track.length ?? 0)
-  }
-
-  /** Re-times every flow against the arcs as they now are, keeping each where it was. */
-  private replan() {
-    for (const run of this.runs) {
-      const before = run.plan.duration
-      run.plan = this.plan(run.flow)
-      if (before > 0) run.time = (run.time / before) * run.plan.duration
-    }
   }
 
   /** One message: its head, a glow and a short trail of ghosts behind it. */
@@ -1268,7 +1219,7 @@ export class Stage3D {
   /**
    * A message's head. A dot is a bead of light; a packet and an envelope are
    * things — a parcel and a letter, drawn like the canvas's glyphs on every
-   * side and turned to face where they are going.
+   * side, standing upright and turned to whoever is looking.
    */
   private tokenHead(look: FlowToken): TokenHead {
     const material = () => {
@@ -1279,11 +1230,11 @@ export class Stage3D {
     let mesh: Mesh
     let materials: MeshBasicMaterial[]
     if (look === 'envelope') {
-      // Long side along the way it travels, lying flat; the front on top.
-      const geometry = new BoxGeometry(15, 2.6, 11)
+      // A letter standing on its long edge, its front to the viewer.
+      const geometry = new BoxGeometry(15, 11, 2.6)
       const [edge, front, back] = [material(), material(), material()]
       materials = [edge, front, back]
-      mesh = new Mesh(geometry, [edge, edge, front, back, edge, edge])
+      mesh = new Mesh(geometry, [edge, edge, edge, edge, front, back])
       this.own(geometry)
     } else if (look === 'packet') {
       const geometry = new BoxGeometry(11, 9, 9)
@@ -1391,7 +1342,7 @@ export class Stage3D {
         const hop = run.plan.branches[token.branch]?.hops.find((h) => !shown.has(h.edge))
         const at = token.index === 0 && hop ? this.sample(hop.edge, 0.5, scratch) : null
         if (hop && at) shown.add(hop.edge)
-        this.placeToken(token, visible ? at : null, 1, hop?.edge ?? null, 0.5, run.flow)
+        this.placeToken(token, visible ? at : null, 1, hop?.edge ?? null, run.flow)
         token.trail.forEach((t) => (t.visible = false))
       }
       return
@@ -1402,7 +1353,7 @@ export class Stage3D {
       const time = run.time + token.index * run.plan.offset
       const position = branch ? tokenAt(branch, time) : null
       const at = position ? this.sample(position.edge, position.progress, scratch) : null
-      this.placeToken(token, visible ? at : null, position?.opacity ?? 0, position?.edge ?? null, position?.progress ?? 0, run.flow)
+      this.placeToken(token, visible ? at : null, position?.opacity ?? 0, position?.edge ?? null, run.flow)
       if (visible) this.watchLanding(token, position?.edge ?? null, position?.progress ?? 0)
 
       token.trail.forEach((ghost, i) => {
@@ -1414,14 +1365,7 @@ export class Stage3D {
     }
   }
 
-  private placeToken(
-    token: TokenEntry,
-    at: Vec3 | null,
-    opacity: number,
-    edge: string | null,
-    progress: number,
-    flow: MessageFlow,
-  ) {
+  private placeToken(token: TokenEntry, at: Vec3 | null, opacity: number, edge: string | null, flow: MessageFlow) {
     if (at && edge) {
       // Each hop in its own look and colour, the way the canvas draws it.
       const look = edgeStyle(flow, edge)
@@ -1435,21 +1379,9 @@ export class Stage3D {
     token.glow.position.set(at.x, at.y, at.z)
     for (const material of token.head.materials) material.opacity = opacity
     ;(token.glow.material as SpriteMaterial).opacity = opacity * (this.theme?.dark ? 0.9 : 0.55)
-    // A bead looks the same from every side; a parcel or a letter faces its way.
-    if (edge && token.head.look !== 'dot' && this.heading(edge, progress, HEADING)) faceAlong(head, HEADING)
-  }
-
-  /** Which way a message on `edge` is going at `progress`; `false` where it cannot tell. */
-  private heading(edge: string, progress: number, out: Vector3): boolean {
-    const track = this.edges.get(edge)?.track
-    if (!track || track.length <= 0) return false
-    const step = Math.min(0.05, 3 / track.length)
-    const a = pointOnTrack(track, Math.max(0, progress - step), AHEAD_A)
-    const b = pointOnTrack(track, Math.min(1, progress + step), AHEAD_B)
-    out.set(b.x - a.x, b.y - a.y, b.z - a.z)
-    if (out.lengthSq() < 1e-8) return false
-    out.normalize()
-    return true
+    // Upright, like the canvas's glyph, and turned to whoever is looking: a
+    // letter or a parcel reads from any side and never tips over on a slope.
+    head.rotation.set(0, this.facing, 0)
   }
 
   /**
@@ -1595,8 +1527,7 @@ export class Stage3D {
     }
 
     if (animating || this.dirty || moving || this.controls.autoRotate || this.landings.length) {
-      // Lying down from straight above, standing up as the camera tilts away.
-      this.setUpright(this.uprightForCamera())
+      this.facing = this.controls.getAzimuthalAngle()
       const scale = this.tokenScale()
       this.runs.forEach((run) => this.paintRun(run, scale))
       this.settleLandings()

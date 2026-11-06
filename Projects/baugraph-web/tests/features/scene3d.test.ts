@@ -5,7 +5,7 @@ import {
   FLAT_DEPTH,
   STAND_HEIGHT,
   anchor,
-  arcLift,
+  arcHeight,
   arcPoints,
   edgeBows,
   pointOnTrack,
@@ -141,56 +141,97 @@ describe('edgeBows', () => {
 
   it('fans three connections between one pair out evenly about the middle', () => {
     const bows = edgeBows([edge('1', 'a', 'b'), edge('2', 'a', 'b'), edge('3', 'a', 'b')])
-    expect([bows.get('1'), bows.get('2'), bows.get('3')]).toEqual([-30, 0, 30])
+    expect([bows.get('1'), bows.get('2'), bows.get('3')]).toEqual([-24, 0, 24])
   })
 })
 
 describe('arcs', () => {
-  it('leave straight up out of the top of one node and drop straight down into the other', () => {
+  const peak = (points: { y: number }[]) => Math.max(...points.map((p) => p.y))
+
+  it('arch from the top of one node to the top of the other, at the same slant at both ends', () => {
     const from = { x: 0, y: 60, z: 0 }
     const to = { x: 400, y: 60, z: 100 }
     const points = arcPoints(from, to)
     expect(points[0]).toEqual(from)
     expect(points.at(-1)).toEqual(to)
-    // Up and down, barely sideways, at either end.
-    expect(Math.hypot(points[1]!.x - from.x, points[1]!.z - from.z)).toBeLessThan(1)
-    expect(points[1]!.y).toBeGreaterThan(from.y)
-    expect(Math.hypot(points.at(-2)!.x - to.x, points.at(-2)!.z - to.z)).toBeLessThan(1)
-    expect(points.at(-2)!.y).toBeGreaterThan(to.y)
+    // Up out of the one, down into the other — at a slant, not straight up like a staple.
+    const out = { run: Math.hypot(points[1]!.x - from.x, points[1]!.z - from.z), rise: points[1]!.y - from.y }
+    const into = { run: Math.hypot(to.x - points.at(-2)!.x, to.z - points.at(-2)!.z), rise: points.at(-2)!.y - to.y }
+    expect(out.run).toBeGreaterThan(0)
+    expect(out.rise).toBeGreaterThan(0)
+    expect(into.rise).toBeCloseTo(out.rise, 6)
+    expect(into.run).toBeCloseTo(out.run, 6)
   })
 
-  it('climb higher the farther they go, clear of what stands between', () => {
-    const peak = (distance: number) =>
-      Math.max(...arcPoints({ x: 0, y: 0, z: 0 }, { x: distance, y: 0, z: 0 }).map((p) => p.y))
-    expect(peak(800)).toBeGreaterThan(peak(200))
-    // A cubic with both handles at the lift tops out at three quarters of it.
-    expect(peak(800)).toBeCloseTo(arcLift(800) * 0.75, 0)
-    expect(peak(50)).toBeGreaterThan(25)
+  it('rise higher the farther they go, at the same angle whatever the length', () => {
+    const arch = (distance: number) => arcPoints({ x: 0, y: 0, z: 0 }, { x: distance, y: 0, z: 0 })
+    expect(peak(arch(800))).toBeCloseTo(arcHeight(800), 6)
+    expect(peak(arch(800))).toBeGreaterThan(peak(arch(300)))
+    const slant = (points: { x: number; y: number }[]) => points[1]!.y / points[1]!.x
+    expect(slant(arch(800))).toBeCloseTo(slant(arch(300)), 6)
+    // Never flatter than a hop, between two nodes side by side.
+    expect(peak(arch(40))).toBe(30)
   })
 
-  it('climb over the higher end, so a post-mounted node is reached from above', () => {
-    const points = arcPoints({ x: 0, y: 0, z: 0 }, { x: 200, y: 160, z: 0 })
-    expect(points.at(-2)!.y).toBeGreaterThan(160)
+  it('drop into a node raised far above the one they left from above', () => {
+    const points = arcPoints({ x: 0, y: 0, z: 0 }, { x: 60, y: 200, z: 0 })
+    expect(points.at(-2)!.y).toBeGreaterThan(200)
+  })
+
+  it('swing their middle aside by the bow, and keep their ends', () => {
+    const from = { x: 0, y: 0, z: 0 }
+    const to = { x: 300, y: 0, z: 0 }
+    const points = arcPoints(from, to, 20)
+    expect(points[0]).toEqual(from)
+    expect(points.at(-1)).toEqual(to)
+    expect(Math.abs(points[points.length >> 1]!.z)).toBeCloseTo(20, 6)
   })
 
   it('loop over the top of a node that sends to itself', () => {
     const at = { x: 50, y: 60, z: 30 }
     const points = arcPoints(at, at)
     expect(points[0]).toEqual(at)
-    expect(points.at(-1)).toEqual(at)
-    expect(Math.max(...points.map((p) => p.y))).toBeGreaterThan(at.y + 20)
+    expect(points.at(-1)!.x).toBeCloseTo(at.x, 6)
+    expect(points.at(-1)!.y).toBeCloseTo(at.y, 6)
+    expect(peak(points)).toBeGreaterThan(at.y + 20)
+  })
+})
+
+describe('anchor', () => {
+  const layout = stackLayout(
+    doc({
+      nodes: [
+        node('svc', 0, 0, { size: { width: 120, height: 60 } }),
+        node('zone', 400, 0, { kind: 'zone', size: { width: 200, height: 100 } }),
+        node('mat', 0, 300, { extrusion: 'flat' }),
+      ],
+    }),
+  )
+  const by = Object.fromEntries(layout.nodes.map((n) => [n.node.id, n]))
+
+  it('meets a node off the middle of its top, on the side facing the other end', () => {
+    // Straight to the right: half way from the middle to the right end of its top.
+    expect(anchor(by.svc!, { x: 1000, y: 30 })).toEqual({ x: 90, y: 30 })
+    // Straight to the front: half way to the front of what it stands on — as deep as it is.
+    const deep = by.svc!.thickness
+    expect(anchor(by.svc!, { x: 60, y: 1000 })).toEqual({ x: 60, y: 30 + deep / 4 })
+    // Lying flat, its top is its whole box.
+    expect(anchor(by.mat!, { x: 60, y: 1000 })).toEqual({ x: 60, y: 330 + 15 })
   })
 
-  it('meet a node in the middle of its top, and a zone over its wall towards the other end', () => {
-    const layout = stackLayout(
-      doc({
-        nodes: [node('svc', 0, 0), node('zone', 400, 0, { kind: 'zone', size: { width: 200, height: 100 } })],
-      }),
-    )
-    const [svc, zone] = layout.nodes
-    expect(anchor(svc!, { x: 1000, y: 0 })).toEqual({ x: 60, y: 30 })
-    // From the zone's middle towards svc, as far as its left wall.
-    expect(anchor(zone!, { x: 60, y: 50 })).toEqual({ x: 400, y: 50 })
+  it('moves a connection aside, but never off the top', () => {
+    const ahead = anchor(by.svc!, { x: 1000, y: 30 })
+    const aside = anchor(by.svc!, { x: 1000, y: 30 }, 6)
+    expect(aside.x).toBeCloseTo(ahead.x, 6)
+    // To the left of the way to the right is the back, the canvas's up.
+    expect(aside.y).toBeLessThan(ahead.y)
+    const shoved = anchor(by.svc!, { x: 1000, y: 30 }, 1000)
+    const half = { x: 60 * 0.75, y: (by.svc!.thickness / 2) * 0.75 }
+    expect(((shoved.x - 60) / half.x) ** 2 + ((shoved.y - 30) / half.y) ** 2).toBeLessThanOrEqual(1 + 1e-9)
+  })
+
+  it('meets a zone over its wall, towards the other end', () => {
+    expect(anchor(by.zone!, { x: 60, y: 50 })).toEqual({ x: 400, y: 50 })
   })
 })
 
