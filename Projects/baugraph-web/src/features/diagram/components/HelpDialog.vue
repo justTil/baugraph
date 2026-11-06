@@ -212,7 +212,8 @@ const SHORTCUTS_3D: [string, string][] = [
             edge adds and names them, takes nodes dragged onto them, and fades the canvas down to
             one plane when you point at it. Right-click a node for its <em>Plane</em>, or open its
             <em>3D</em> section in the inspector, which also picks its height — <em>Tall</em> or
-            <em>Tower</em> for what carries the most or matters the most. A node that names no plane
+            <em>Tower</em> raise what carries the most or matters the most on a post, and
+            <em>Flat</em> lays a node on its back. A node that names no plane
             follows its zone, so putting a zone on a plane takes everything in it along. All of it
             is optional: the 2D canvas and every export ignore it, and a diagram without planes
             opens exactly as before.

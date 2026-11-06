@@ -84,7 +84,7 @@ const extrusion = computed(() => {
   return values.size === 1 ? [...values][0]! : ''
 })
 
-/** A text annotation is a label lying on its plane; it has no height to set. */
+/** A text annotation is only its face; it has no height to set. */
 const extrudable = computed(() => selected.value.some((n) => n.type !== 'annotation'))
 
 const EXTRUSION_LABELS: Record<Extrusion, string> = {
@@ -263,7 +263,8 @@ function finishAdding(save: boolean) {
     </div>
 
     <p class="text-muted-foreground text-[11px] leading-snug">
-      Only the 3D view reads these. Height says what matters more — load, criticality — at a glance.
+      Only the 3D view reads these. Height says what matters more — load, criticality — at a glance:
+      Tall and Tower stand on a post, Flat lies on its back.
     </p>
   </section>
 </template>

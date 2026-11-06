@@ -90,10 +90,12 @@ export const ARROW_MODES = ['target', 'both', 'none'] as const
 export type ArrowMode = (typeof ARROW_MODES)[number]
 
 /**
- * How tall a node stands off its plane in the 3D view. Semantic, the same as a
- * border or a line weight: the file says `tall` — this one matters more, carries
- * more, is the one to look at — and the renderer decides what that is worth.
- * The 2D canvas and every export ignore it.
+ * How a node stands in the 3D view, where every node is stood up off its back:
+ * `low` and `regular` on the floor, `tall` and `tower` raised on a post above
+ * the rest, and `flat` not at all — it lies on its back. Semantic, the same as
+ * a border or a line weight: the file says `tall` — this one matters more,
+ * carries more, is the one to look at — and the renderer decides what that is
+ * worth. The 2D canvas and every export ignore it.
  */
 export const EXTRUSIONS = ['flat', 'low', 'regular', 'tall', 'tower'] as const
 export type Extrusion = (typeof EXTRUSIONS)[number]

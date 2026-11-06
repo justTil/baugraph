@@ -222,9 +222,10 @@ writing it in another order is still valid and will simply be re-sorted.
   3D view (see "Planes" below). Omit it and the node follows its zone's plane,
   or stands on the ground plane if it has no zone — so set it on a zone and
   leave its children alone. The 2D canvas and every export ignore it.
-- \`extrusion\` — 3D only, optional: how tall the node stands, one of
-  ${enumList(EXTRUSIONS)}. Omit for \`regular\`. Use \`tall\`/\`tower\` for what
-  carries the most traffic or matters the most, sparingly.
+- \`extrusion\` — 3D only, optional: how the node stands in the 3D view, one of
+  ${enumList(EXTRUSIONS)}. Omit for \`regular\`. Every node stands up there;
+  \`tall\`/\`tower\` raise it on a post — use them for what carries the most
+  traffic or matters the most, sparingly — and \`flat\` lays it on its back.
 - \`position3d\` — 3D only, optional: \`{ "x": number, "y": number, "z": number }\`,
   where a person moved the node in the 3D view — absolute canvas units (never
   relative to the zone) and \`z\` the height above its plane. Never write one
@@ -338,8 +339,8 @@ obvious height axis).
   data), tiers, environments (dev → test → prod), OSI-style layers. A
   connection between two planes is drawn as a vertical cable, so a flow that
   crosses a boundary stands out.
-- Nothing moves in 3D: nodes keep their 2D \`position\` and only gain a height,
-  so lay the diagram out for 2D as usual. Prefer putting a whole zone on a
+- Nodes start in 3D where their 2D \`position\` puts them, stood up and lifted
+  onto their plane, so lay the diagram out for 2D as usual. Prefer putting a whole zone on a
   plane over setting \`plane\` on each node inside it.
 
 ## Layout and placement

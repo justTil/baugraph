@@ -5,7 +5,9 @@ import { edgeGeometry } from '@/features/diagram/lib/edge-path'
 import { absoluteBoxes } from '@/features/diagram/lib/render-svg'
 
 /**
- * The 3D view's layout: the 2D diagram, stood up in layers.
+ * The 3D view's layout: the 2D diagram, stood up in layers — and every node on
+ * it stood up too, off its back and facing the front, so it reads the way it
+ * does on the canvas from wherever the stack is looked at.
  *
  * Nothing is laid out anew here. A node stands where it was placed in 3D, or —
  * until it is moved there — exactly where the 2D canvas has it, lifted onto the
@@ -29,13 +31,27 @@ export interface Vec3 {
   z: number
 }
 
-/** How tall each extrusion setting stands, in canvas units. */
-export const EXTRUSION_HEIGHT: Record<Extrusion, number> = {
+/**
+ * How high each setting lifts a standing node off its floor, on a post — what
+ * makes a *Tall* or a *Tower* node stand out over the rest. *Flat* is the one
+ * setting that does not stand at all: the node lies on its back on the floor,
+ * the way the canvas draws it.
+ */
+export const STAND_HEIGHT: Record<Extrusion, number> = {
+  flat: 0,
+  low: 0,
+  regular: 0,
+  tall: 48,
+  tower: 110,
+}
+
+/** How deep a node is, front to back — or, lying flat, how thick. */
+export const NODE_DEPTH: Record<Extrusion, number> = {
   flat: 3,
-  low: 12,
-  regular: 24,
-  tall: 52,
-  tower: 96,
+  low: 8,
+  regular: 16,
+  tall: 18,
+  tower: 20,
 }
 
 /**
@@ -67,17 +83,42 @@ export interface StackPlane {
 
 export interface StackNode {
   node: DiagramNode
-  /** Absolute footprint on its plane — where it stands in 3D. */
+  /**
+   * Where it is on its plane — its box on the canvas, moved to its 3D place. A
+   * node lying flat covers it; one standing up stands across its middle.
+   */
   box: Box
   /** Absolute footprint on the 2D canvas, which `box` equals until the node is moved in 3D. */
   canvas: Box
+  /**
+   * What it takes up on its floor: all of `box` for a node lying flat or a
+   * zone, a strip across the middle of it as deep as the node for one standing
+   * up — which is what connections run up to and route around.
+   */
+  floor: Box
   level: number
   /** How many zones on the same plane it stands inside — each one's floor raises it. */
   depth: number
   /** How far its base is lifted off its plane: `position3d.z`, or its zone's. */
   elevation: number
-  /** Height above its own floor. */
+  /** Whether it stands up, facing the front; `false` for a zone or a node set to lie flat. */
+  standing: boolean
+  /** How high a standing node's post lifts it; `0` for one standing on its floor. */
+  stand: number
+  /** Front to back, standing; how thick, lying flat. `0` for a text annotation, which is only its face. */
+  thickness: number
+  /** How high its top is above its own floor, standing up: its post and its face. */
   height: number
+}
+
+/**
+ * How high above its plane one end of a connection meets its node: lying flat
+ * — which every node does when the stack is seen from straight above — and
+ * standing up.
+ */
+export interface EndHeight {
+  flat: number
+  up: number
 }
 
 export interface StackEdge {
@@ -94,8 +135,12 @@ export interface StackEdge {
   /** Unit vectors out of each end along the route, for arrowheads. */
   startDir: Vec
   endDir: Vec
-  /** Height above the plane an in-plane route runs at. */
-  lift: number
+  /**
+   * How high the route meets each end: a connection to a standing node plugs
+   * into its side at its face's height, and one between two heights rises
+   * from the one to the other along the way.
+   */
+  ends: [EndHeight, EndHeight]
 }
 
 export interface StackLayout {
@@ -115,22 +160,35 @@ export interface StackLayout {
 /** Room left around the content on each plate. */
 const PLATE_PADDING = 60
 
-/** How tall a node stands off its floor. A text annotation is a label, not a block. */
+const isText = (node: DiagramNode) => node.kind === 'annotation' || node.shape === 'text'
+
+/**
+ * Whether a node stands up in 3D: every one but a zone, which is a floor with
+ * walls, and one set to lie *flat*.
+ */
+export function standsUp(node: DiagramNode): boolean {
+  return node.kind !== 'zone' && (node.extrusion ?? 'regular') !== 'flat'
+}
+
+/** Front to back, standing up; thick, lying flat. A text annotation is only its face. */
+export function nodeThickness(node: DiagramNode): number {
+  return isText(node) ? 0 : NODE_DEPTH[node.extrusion ?? 'regular']
+}
+
+/** How high a node's top is above its floor: a zone's walls, a flat node's thickness, a standing one's post and face. */
 export function nodeHeight(node: DiagramNode): number {
   const extrusion = node.extrusion ?? 'regular'
   if (node.kind === 'zone') return ZONE_WALL[extrusion]
-  if (node.kind === 'annotation' || node.shape === 'text') return 0
-  return EXTRUSION_HEIGHT[extrusion]
+  if (!standsUp(node)) return nodeThickness(node)
+  return STAND_HEIGHT[extrusion] + node.size.height
 }
 
 /**
- * Where an in-plane connection runs: halfway up the lower of the two blocks it
- * joins, so it plugs into their sides rather than trailing along the floor —
- * capped, so a tower does not lift its connections into the air.
+ * How high a connection runs over something lying on the floor: halfway up
+ * it, so it meets its side rather than trailing under it — capped, so a zone's
+ * walls do not lift what runs out of it into the air.
  */
-export function edgeLift(sourceHeight: number, targetHeight: number): number {
-  return Math.min(14, Math.max(2, Math.min(sourceHeight, targetHeight) / 2))
-}
+const lyingLift = (height: number) => Math.min(14, Math.max(2, height / 2))
 
 /** Two floors closer than this are one: a connection between them runs along it. */
 const SAME_FLOOR = 0.5
@@ -174,17 +232,64 @@ export function stackNodes(doc: DiagramDocument): { planes: StackPlane[]; nodes:
 
   const nodes: StackNode[] = doc.nodes.map((node) => {
     const at = space.get(node.id)!
+    const box = { x: at.x, y: at.y, width: node.size.width, height: node.size.height }
+    const standing = standsUp(node)
+    const thickness = nodeThickness(node)
     return {
       node,
-      box: { x: at.x, y: at.y, width: node.size.width, height: node.size.height },
+      box,
       canvas: canvas.get(node.id)!,
+      floor: standing ? standingFloor(box, thickness) : box,
       level: levelOf.get(node.id) ?? 0,
       depth: depthOf(node),
       elevation: at.z,
+      standing,
+      stand: standing ? STAND_HEIGHT[node.extrusion ?? 'regular'] : 0,
+      thickness,
       height: nodeHeight(node),
     }
   })
   return { planes, nodes }
+}
+
+/**
+ * The strip a standing node takes up on its floor: across the middle of its
+ * box, as deep as the node — never so thin that a connection has nowhere on
+ * it to attach.
+ */
+export function standingFloor(box: Box, thickness: number): Box {
+  const deep = Math.max(thickness, 2)
+  return { x: box.x, y: box.y + box.height / 2 - deep / 2, width: box.width, height: deep }
+}
+
+/** How far down a standing node's face a connection to its canvas top, or its bottom, meets it. */
+const TOP_END = 0.12
+const BOTTOM_END = 0.88
+
+/**
+ * How high above its plane a connection meets `n`, at `point` on its floor
+ * strip, with `dir` pointing into the node there — as `edgeGeometry` gives it.
+ *
+ * A standing node is the canvas node stood up, so each canvas side keeps its
+ * place: into a side it plugs in at the height its connection point has on
+ * the canvas; one to the canvas top meets the back near the top, and one to
+ * the canvas bottom the front near the foot — clear of the face's text in
+ * between, which a line into the middle of the front would run across.
+ */
+export function endHeight(n: StackNode, point: Vec, dir: Vec): EndHeight {
+  const base = n.depth * ZONE_FLOOR + n.elevation
+  const flat = base + lyingLift(n.standing ? n.thickness : n.height)
+  if (!n.standing) return { flat, up: flat }
+  const h = n.node.size.height
+  let fromTop: number
+  if (Math.abs(dir.x) >= Math.abs(dir.y)) {
+    // Down the strip is down the canvas side, which standing up is down the face.
+    const along = n.floor.height > 0 ? (point.y - n.floor.y) / n.floor.height : 0.5
+    fromTop = Math.min(1, Math.max(0, along))
+  } else {
+    fromTop = dir.y > 0 ? TOP_END : BOTTOM_END
+  }
+  return { flat, up: base + n.stand + h * (1 - fromTop) }
 }
 
 /** What a connection on a floor routes around: blocks, not zones or labels. */
@@ -202,16 +307,17 @@ const offset = (n: StackNode): Vec => ({ x: n.box.x - n.canvas.x, y: n.box.y - n
  * may have to route around; only the ones on its own floor are in the way.
  */
 export function stackEdge(edge: DiagramEdge, source: StackNode, target: StackNode, solids: StackNode[]): StackEdge {
-  const lift = edgeLift(source.height || 24, target.height || 24)
   if (!sameFloor(source, target)) {
+    const centre = (n: StackNode) => ({ x: n.floor.x + n.floor.width / 2, y: n.floor.y + n.floor.height / 2 })
+    const none = { x: 0, y: 0 }
     return {
       edge,
       from: source.level,
       to: target.level,
       route: null,
-      startDir: { x: 0, y: 0 },
-      endDir: { x: 0, y: 0 },
-      lift,
+      startDir: none,
+      endDir: none,
+      ends: [endHeight(source, centre(source), none), endHeight(target, centre(target), none)],
     }
   }
 
@@ -224,7 +330,10 @@ export function stackEdge(edge: DiagramEdge, source: StackNode, target: StackNod
   const together = Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6
   const waypoints = together ? edge.waypoints?.map((p) => ({ x: p.x + a.x, y: p.y + a.y })) : undefined
 
-  const geometry = edgeGeometry(source.box, target.box, {
+  // Routed between what the nodes take up on their floor — a standing node's
+  // strip — so a connection runs up to the node itself, not to where its face
+  // would lie on the canvas.
+  const geometry = edgeGeometry(source.floor, target.floor, {
     sourceSide: edge.sourceSide,
     targetSide: edge.targetSide,
     sourcePorts: source.node.ports,
@@ -234,7 +343,7 @@ export function stackEdge(edge: DiagramEdge, source: StackNode, target: StackNod
     route: edge.route,
     obstacles: solids
       .filter((n) => n !== source && n !== target && sameFloor(n, source))
-      .map((n) => n.box),
+      .map((n) => n.floor),
     waypoints,
   })
   return {
@@ -244,8 +353,28 @@ export function stackEdge(edge: DiagramEdge, source: StackNode, target: StackNod
     route: samplePath(geometry.path),
     startDir: geometry.startDir,
     endDir: geometry.endDir,
-    lift,
+    ends: [endHeight(source, geometry.start, geometry.startDir), endHeight(target, geometry.end, geometry.endDir)],
   }
+}
+
+/**
+ * Lifts a route along the floor to the heights it meets its two ends at: level
+ * out of the one, level into the other, and an even rise in between — so a
+ * connection between a node on a post and one on the floor slopes down
+ * between them rather than kinking at either end.
+ */
+export function liftRoute(route: Vec[], from: number, to: number): Vec3[] {
+  if (route.length < 2 || from === to) return route.map((p) => onPlane(p, from))
+  const at = [0]
+  for (let i = 1; i < route.length; i++) {
+    at.push(at[i - 1]! + Math.hypot(route[i]!.x - route[i - 1]!.x, route[i]!.y - route[i - 1]!.y))
+  }
+  const length = at.at(-1) || 1
+  return route.map((p, i) => {
+    const t = at[i]! / length
+    const eased = t * t * (3 - 2 * t)
+    return onPlane(p, from + (to - from) * eased)
+  })
 }
 
 /** A box around every box, padded by `pad` on each side. */

@@ -151,7 +151,8 @@ All in service of readable diffs:
 - **3D is optional and on top.** `planes` lists the levels of the
   [3D view](./3d-view), ground first; a node's `plane` names the one it
   stands on and `extrusion` (`flat`, `low`, `regular`, `tall`, `tower`) how
-  tall it stands. The 2D canvas and every export ignore all three, nodes keep
+  it stands — on the floor, raised on a post for `tall` and `tower`, or lying
+  on its back for `flat`. The 2D canvas and every export ignore all three, nodes keep
   their 2D `position`, and a file without them is written exactly as before.
   A node without `plane` follows its zone, and one with no zone stands on the
   first plane — so a whole zone moves with one line. `planes` is the one

@@ -25,13 +25,31 @@ All notable changes to this project will be documented in this file.
     one go. The inspector's **3D planes** section (nothing selected) edits the
     same list, and the 3D view shows it as a legend: click a plane to fly to
     it, hide it from the view, or put the selection on it.
+  - **Nodes stand up.** Each one is the canvas's node stood up off its back
+    and facing the front, so its name, type and icon read as they do on the
+    canvas. A database is a standing drum and a topic stands in its own
+    shape. Seen from straight above, every node lies back down, so the view
+    from above is the 2D diagram. Nodes lie down as the camera comes over
+    the top and stand up as it tilts away, so the intro has them getting up.
   - **A node's 3D section** picks its plane and its height (*Flat*, *Low*,
-    *Regular*, *Tall*, *Tower*), for one node or a whole selection. *Auto*
+    *Regular*, *Tall*, *Tower*), for one node or a whole selection. *Low*
+    and *Regular* stand on the floor, *Tall* and *Tower* on a post over the
+    rest, and *Flat* lies on its back. *Auto*
     follows the node's zone, so putting a zone on a plane takes everything
     inside it along. In the 3D view, `↑`/`↓` move the selection one plane up
     or down.
   - **Message flows run through the stack** on the same timing as on the
-    canvas. `←`/`→` step a spotlight through them: the lit flow is drawn in its
+    canvas. Connections on one floor run between the standing nodes at the
+    height of their faces. They plug into each side where the canvas has
+    them, into the back near the top for the canvas top, and into the front
+    at the foot for the bottom, clear of the face's text. Between a node on
+    a post and one on the floor, a connection rises evenly. Cables between
+    planes leave the top of the lower node and enter the foot of the higher.
+    Messages travel as what the flow says they are. A packet is a parcel
+    taped down the middle, and an envelope a letter with its flap down, both
+    drawn like the canvas's glyphs on every side and turned to face their way.
+    A connection styled differently changes the message as it passes, as on
+    the canvas. A ripple in the message's colour marks where it lands. `←`/`→` step a spotlight through them: the lit flow is drawn in its
     own colour and everything it does not touch fades back. Messages stay
     large enough to follow from across the whole stack.
   - **Nodes are moved in 3D the way Blender moves objects**, and the 2D

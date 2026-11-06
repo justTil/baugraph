@@ -214,7 +214,8 @@ connections they travel instead.
 
 Press `3` and the diagram stands up in layers — the same diagram, with a height
 axis added. Nodes start exactly where they are on the canvas, lifted onto the
-*plane* they belong to. The height means whatever the planes say it means: trust
+*plane* they belong to, and stand up off their backs, facing the front, so they
+read the way they do on the canvas; seen from straight above they lie back down. The height means whatever the planes say it means: trust
 zones (DMZ, application, data), tiers, environments. A connection that crosses
 from one plane to another becomes a vertical cable, which is what makes a
 boundary crossing stand out from any angle.
@@ -232,7 +233,8 @@ down to one plane when you point at it. Right-click a node or a selection to pic
 plane, or **New plane…** to name one and put them on it. A
 node's **3D** section picks its plane — *Auto* follows its zone, so putting a zone
 on a plane takes everything in it along — and its height, *Flat* to *Tower*, for
-what carries the most or matters the most. In the 3D view, `↑`/`↓` move the
+what carries the most or matters the most: *Tall* and *Tower* stand on a post over
+the rest, *Flat* lies on its back. In the 3D view, `↑`/`↓` move the
 selection a plane up or down.
 
 Message flows run through the stack on the same timing as on the canvas, and

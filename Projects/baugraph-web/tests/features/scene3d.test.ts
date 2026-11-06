@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { DiagramDocument } from '@/model'
 import { parse } from '@/model'
 import {
-  EXTRUSION_HEIGHT,
+  NODE_DEPTH,
+  STAND_HEIGHT,
   cablePoints,
+  liftRoute,
   pointOnTrack,
   samplePath,
   stackLayout,
@@ -79,21 +81,85 @@ describe('stackLayout', () => {
     expect(depth).toEqual({ zone: 0, inside: 1, lifted: 0 })
   })
 
-  it('gives each extrusion its height, and a text annotation none', () => {
+  it('stands every node up but a zone and a flat one, a Tall or a Tower on a post', () => {
     const layout = stackLayout(
       doc({
         nodes: [
           node('a', 0, 0),
           node('b', 0, 0, { extrusion: 'tower' }),
+          node('mat', 0, 0, { extrusion: 'flat' }),
+          node('zone', 0, 0, { kind: 'zone' }),
           node('note', 0, 0, { kind: 'annotation', shape: 'text' }),
         ],
       }),
     )
-    expect(layout.nodes.map((n) => n.height)).toEqual([
-      EXTRUSION_HEIGHT.regular,
-      EXTRUSION_HEIGHT.tower,
-      0,
-    ])
+    const by = Object.fromEntries(layout.nodes.map((n) => [n.node.id, n]))
+    expect(Object.fromEntries(layout.nodes.map((n) => [n.node.id, n.standing]))).toEqual({
+      a: true,
+      b: true,
+      mat: false,
+      zone: false,
+      note: true,
+    })
+    // Standing, a node is as tall as its face, and a post adds to that.
+    expect(by.a!.height).toBe(60)
+    expect(by.b!).toMatchObject({ stand: STAND_HEIGHT.tower, height: STAND_HEIGHT.tower + 60 })
+    // Lying flat, it is only as thick as it is; a text annotation is only its face.
+    expect(by.mat!.height).toBe(NODE_DEPTH.flat)
+    expect(by.note!.thickness).toBe(0)
+  })
+
+  it('stands a node across the middle of its box, as deep as it is', () => {
+    const [a] = stackLayout(doc({ nodes: [node('a', 100, 200)] })).nodes
+    expect(a!.floor).toEqual({ x: 100, y: 230 - NODE_DEPTH.regular / 2, width: 120, height: NODE_DEPTH.regular })
+  })
+
+  it('plugs a connection into a standing node’s side at its connection point’s height', () => {
+    const layout = stackLayout(
+      doc({
+        nodes: [node('a', 0, 0, { ports: { right: 3 } }), node('b', 400, 0)],
+        edges: [
+          { id: 'top', source: 'a', target: 'b', sourceSide: 'right', sourcePort: 1, targetSide: 'left' },
+          { id: 'bottom', source: 'a', target: 'b', sourceSide: 'right', sourcePort: 3, targetSide: 'left' },
+        ],
+      }),
+    )
+    const [top, bottom] = layout.edges
+    // The first of three points down the canvas side sits high on the standing side, the last low.
+    expect(top!.ends[0].up).toBeCloseTo(45)
+    expect(bottom!.ends[0].up).toBeCloseTo(15)
+    // Into the middle of the other node's side.
+    expect(top!.ends[1].up).toBeCloseTo(30)
+    // Seen from straight above everything lies flat, and the line runs just over the floor.
+    expect(top!.ends[0].flat).toBeLessThan(10)
+  })
+
+  it('meets a standing node’s canvas top high on its back, and its bottom low on its front', () => {
+    const layout = stackLayout(
+      doc({
+        nodes: [node('a', 0, 0), node('b', 0, 300)],
+        edges: [{ id: 'down', source: 'a', target: 'b', sourceSide: 'bottom', targetSide: 'top' }],
+      }),
+    )
+    const [down] = layout.edges
+    // Out of a's foot, at the front…
+    expect(down!.ends[0].up).toBeLessThan(15)
+    // …into b near its top, at the back.
+    expect(down!.ends[1].up).toBeGreaterThan(45)
+  })
+
+  it('rises evenly between two heights, level out of one end and into the other', () => {
+    const points = liftRoute(
+      [
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+        { x: 100, y: 0 },
+      ],
+      10,
+      70,
+    )
+    expect(points.map((p) => p.y)).toEqual([10, 40, 70])
+    expect(points.map((p) => p.z)).toEqual([0, 0, 0])
   })
 
   it('keeps an in-plane connection on the route the canvas draws', () => {

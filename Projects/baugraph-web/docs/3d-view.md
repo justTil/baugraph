@@ -5,6 +5,12 @@ canvas — and the diagram stands up in layers. Every node starts exactly where
 it is on the 2D canvas, lifted onto the *plane* it belongs to: the same
 diagram, looked at with a height axis added.
 
+The nodes stand up too. Each one is the canvas's node stood up off its back,
+facing the front, so its name, type and icon read the way they do on the
+canvas from wherever the stack is looked at — a database is a standing drum, a
+decision a standing diamond. Look from straight above and they lie back down,
+and the view from above is the 2D diagram again.
+
 From there you can [arrange it in 3D](#moving-nodes-in-3d) — grab nodes, drag
 them along an axis, lift them — the way a 3D editor such as Blender moves
 objects. Those moves belong to the 3D view alone: the 2D canvas never sees
@@ -69,7 +75,10 @@ at the bottom otherwise:
   zone stands on the ground. Pick a plane to set one node apart from its zone.
 - **Height** — *Flat*, *Low*, *Regular*, *Tall* or *Tower*. Use it to say
   what matters at a glance: the database that carries the load, the gateway
-  everything depends on.
+  everything depends on. *Low* and *Regular* stand on the floor, *Low* the
+  thinner of the two; *Tall* and *Tower* stand on a post, high over the rest.
+  *Flat* does not stand at all — the node lies on its back, the way a floor
+  marking does.
 
 Select several nodes and the same section sets them all at once. In the 3D
 view, `↑` and `↓` move the selection one plane up or down — the quickest way
@@ -148,8 +157,8 @@ The axis ball in the top-right corner shows which way `X`, `Y` and `Z` point;
 click one to look straight along it.
 
 The bar at the bottom left switches between an angled view, the view from
-above (the 2D layout, from the top) and the view from the side (the stack
-itself, every boundary crossing a vertical line). **Spread** pulls the planes
+above (the 2D layout, from the top, every node lying back down) and the view
+from the side (the stack itself, every boundary crossing a vertical line). **Spread** pulls the planes
 apart or lays them flat on each other, and the camera button saves the
 current view as a PNG.
 
@@ -157,9 +166,24 @@ current view as a PNG.
 
 [Message flows](./message-flows) run through the stack exactly as they run
 across the canvas: the same hops, the same timing, the same split where a path
-forks. A connection within a plane keeps the route the canvas draws for it; one
-between planes is a cable from one floor to the next, so a message visibly
-leaves its zone.
+forks.
+
+A connection on one floor runs between the standing nodes at the height of
+their faces and plugs into them where the canvas has it: into a side at the
+height its connection point has on the canvas side, into the back near the top
+for one to the canvas top, and into the front at the foot for one to the
+bottom — clear of the text on the face. Between a node on a post and one on
+the floor it rises evenly from the one to the other. One between planes is a
+cable out of the top of the lower node and into the foot of the higher, so a
+message visibly leaves its zone.
+
+Messages travel as what the flow says they are. A dot is a bead of light; a
+**packet** is a parcel, taped down the middle, and an **envelope** a letter
+with its flap folded down — drawn like the canvas's glyphs on every side, in
+the flow's colour, and turned to face the way they are going. A connection the
+flow styles differently changes the message as it passes, the same as on the
+canvas: an envelope can become a red packet on the way to a dead-letter queue.
+Where a message reaches a node, a ripple in its colour marks the landing.
 
 `←` and `→` step a **spotlight** through the flows. The one in the spotlight
 is drawn at full strength in its own colour while everything it does not touch
