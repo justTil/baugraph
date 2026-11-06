@@ -1,21 +1,20 @@
 import type { Ref, ShallowRef } from 'vue'
 import { ref, shallowRef } from 'vue'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
-import type { Axis } from '@/features/diagram/lib/axes3d'
 
 /**
  * The 3D view of one open diagram.
  *
  * A way of looking at the diagram rather than a part of it: whether it is on,
- * how far apart the planes stand, which flow is in the spotlight. None of it is
- * written to the file — the same as the 2D viewport — so a diagram opens flat
- * every time, and the 3D view is always something chosen on top of it.
+ * which flow is in the spotlight, whether the turntable is turning. None of it
+ * is written to the file — the same as the 2D viewport — so a diagram opens
+ * flat every time, and the 3D view is always something chosen on top of it.
  *
  * State is per document: switching one tab to 3D must not switch another.
  */
 
 /** Where the camera can be sent in one move. */
-export type CameraPreset = 'iso' | 'top' | 'side'
+export type CameraPreset = 'iso' | 'top' | 'front'
 
 /**
  * What the canvas, the toolbar and the keyboard can ask of the 3D scene. The
@@ -23,39 +22,23 @@ export type CameraPreset = 'iso' | 'top' | 'side'
  * behind it, so nothing else may reach into it directly.
  */
 export interface View3DCommands {
-  /** Brings the whole stack into view. */
+  /** Brings the whole diagram into view. */
   frame(): void
   view(preset: CameraPreset): void
   /** Moves the camera in (`< 1`) or out (`> 1`) by a factor of its distance. */
   zoom(factor: number): void
-  /** Flies to one plane of the stack. */
-  focusPlane(id: string): void
   /** The current frame as a PNG. */
   snapshot(): Promise<Blob | null>
-  /** `G`: the selection follows the pointer until it is put down. Whether there was anything to grab. */
-  grab(): boolean
-  /** Frames the selection, or everything with nothing selected. */
-  frameSelection(): void
-  /** Looks straight along an axis, from its `sign` end. */
-  viewAxis(axis: Axis, sign: 1 | -1): void
-  /** Turns the camera by radians: around the stack, and up or down. */
-  orbit(azimuth: number, polar: number): void
 }
 
 export interface View3DState {
   active: Ref<boolean>
-  /** How far apart the planes stand: `0` lays them flat on each other, `1` is the default. */
-  spread: Ref<number>
   /** A slow turntable, for leaving a diagram on screen while talking over it. */
   autoRotate: Ref<boolean>
-  /** Whether connection labels are drawn. Off thins out a busy stack. */
+  /** Whether connection labels are drawn. Off thins out a busy diagram. */
   labels: Ref<boolean>
   /** The one flow drawn at full strength, everything else dimmed. `null` shows them all. */
   spotlight: Ref<string | null>
-  /** Planes taken out of the view — not out of the diagram. */
-  hiddenPlanes: Ref<string[]>
-  /** Whether the move gizmo stands on the selection. */
-  gizmo: Ref<boolean>
   commands: ShallowRef<View3DCommands | null>
 }
 
@@ -66,12 +49,9 @@ export function view3DOf(documentId: string): View3DState {
   if (!state) {
     state = {
       active: ref(false),
-      spread: ref(1),
       autoRotate: ref(false),
       labels: ref(true),
       spotlight: ref(null),
-      hiddenPlanes: ref([]),
-      gizmo: ref(true),
       commands: shallowRef(null),
     }
     states.set(documentId, state)

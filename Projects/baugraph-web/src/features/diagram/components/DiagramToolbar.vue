@@ -200,8 +200,9 @@ async function copyAiSkills() {
     </Tooltip>
 
     <!--
-      The diagram stood up by plane. A way of looking, not an edit: the file
-      does not change, and it opens flat again next time.
+      The diagram stood up in 3D, its messages arcing from node to node. A way
+      of looking, not an edit: the file does not change, and it opens flat again
+      next time.
     -->
     <Tooltip>
       <TooltipTrigger as-child>
@@ -215,7 +216,7 @@ async function copyAiSkills() {
           3D
         </Toggle>
       </TooltipTrigger>
-      <TooltipContent>3D view (3) — the diagram stacked by plane</TooltipContent>
+      <TooltipContent>3D view (3) — the diagram stood up, its messages in flight</TooltipContent>
     </Tooltip>
 
     <!--

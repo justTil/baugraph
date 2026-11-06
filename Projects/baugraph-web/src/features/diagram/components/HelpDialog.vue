@@ -31,28 +31,20 @@ const SHORTCUTS: [string, string][] = [
   ['⇧⌘S', 'save to a different file'],
   ['⌫', 'delete selection'],
   ['arrows', 'nudge (⇧ = ×5)'],
-  ['3', '3D view — the diagram stacked by plane'],
+  ['3', '3D view — the diagram stood up, its messages in flight'],
 ]
 
-/** Keys that mean something else while the 3D view is up. */
+/** Keys that mean something else while the 3D view is up. It is for looking: nothing is edited there. */
 const SHORTCUTS_3D: [string, string][] = [
   ['drag or middle-drag', 'orbit the camera'],
   ['right-drag or ⇧ middle-drag', 'pan the camera'],
   ['scroll', 'zoom'],
-  ['click / ⇧-click', 'select / add to the selection'],
-  ['double-click', 'fly to a node (empty space: fit everything)'],
-  ['G', 'grab the selection — it follows the pointer until a click or ↵ places it'],
-  ['while moving: X Y Z', 'lock to that axis (⇧ + axis: to the plane of the other two)'],
-  ['while moving: digits', 'type an exact distance; ⇧ fine, Ctrl snap, Esc / right-click cancels'],
-  ['drag a selected node', 'move it across its plane (or drag the gizmo’s arrows)'],
-  ['Alt G', 'put the selection back where the canvas has it'],
-  ['numpad 1 / 3 / 7', 'look from the front / the right / above (Ctrl: the other side)'],
-  ['numpad 2 4 6 8', 'turn the view in steps'],
-  ['numpad . / Home', 'frame the selection / everything'],
-  ['↑ / ↓', 'move the selection one plane up / down'],
+  ['click', 'fly to a node'],
+  ['double-click empty space', 'fit everything'],
   ['← / →', 'spotlight the previous / next message flow'],
-  ['F', 'fit the stack'],
+  ['F', 'fit everything'],
   ['R', 'turntable — a slow spin, for leaving it on screen'],
+  ['3', 'back to 2D'],
 ]
 </script>
 
@@ -190,40 +182,25 @@ const SHORTCUTS_3D: [string, string][] = [
           </h3>
           <p>
             Press <kbd class="bg-muted rounded px-1 font-mono">3</kbd> (or <em>3D</em> in the
-            toolbar) and the diagram stands up in layers. Height means what you decide it means:
-            add <em>planes</em> — a DMZ, an application tier, a data tier; dev, test and prod —
-            and put nodes on them. Every node starts where it is on the canvas, lifted onto its
-            plane, so a connection that crosses a boundary becomes a vertical cable and stands out
-            from any angle.
+            toolbar) and the diagram stands up. It is the same layout as on the canvas — every
+            node exactly where it is there, standing as the solid its shape stands for: a
+            database a drum, a queue a tube, a circle a ball. Look from straight above and they
+            lie back down into the 2D diagram.
           </p>
           <p>
-            From there, arrange it in 3D the way a 3D editor does:
-            <kbd class="bg-muted rounded px-1 font-mono">G</kbd> grabs the selection,
-            <kbd class="bg-muted rounded px-1 font-mono">X</kbd>
-            <kbd class="bg-muted rounded px-1 font-mono">Y</kbd>
-            <kbd class="bg-muted rounded px-1 font-mono">Z</kbd> lock it to an axis, and the gizmo's
-            arrows drag it along one. A move in 3D only ever changes the 3D view — the canvas keeps
-            every node where it was — and a zone takes what it holds along.
-            <kbd class="bg-muted rounded px-1 font-mono">Alt G</kbd> puts the selection back where
-            the canvas has it.
-          </p>
-          <p>
-            Planes are built on the canvas: the <em>Planes</em> tab of the layers panel on its left
-            edge adds and names them, takes nodes dragged onto them, and fades the canvas down to
-            one plane when you point at it. Right-click a node for its <em>Plane</em>, or open its
-            <em>3D</em> section in the inspector, which also picks its height — <em>Tall</em> or
-            <em>Tower</em> raise what carries the most or matters the most on a post, and
-            <em>Flat</em> lays a node on its back. A node that names no plane
-            follows its zone, so putting a zone on a plane takes everything in it along. All of it
-            is optional: the 2D canvas and every export ignore it, and a diagram without planes
-            opens exactly as before.
-          </p>
-          <p>
-            Message flows run through the stack too. Step through them with
+            Every connection is an arc from the top of one node to the top of the next, so a
+            node that talks to many reads as a hub, and the message flows travel along the arcs
+            as parcels, letters and beads of light. Step through them with
             <kbd class="bg-muted rounded px-1 font-mono">←</kbd>
             <kbd class="bg-muted rounded px-1 font-mono">→</kbd>: each one in turn is drawn at full
-            strength while everything it does not touch fades back — which works in presentation
-            mode as well, where a click on a node flies to it.
+            strength while everything it does not touch fades back.
+          </p>
+          <p>
+            The 3D view is for looking: nothing is moved or edited there, and a click on a node
+            flies to it. The one thing to set for it is a node's <em>3D height</em> in the
+            inspector — <em>Tall</em> or <em>Tower</em> raise what carries the most or matters the
+            most on a post, and <em>Flat</em> lays a node on its back. The 2D canvas and every
+            export ignore it.
           </p>
           <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
             <template v-for="[keys, description] in SHORTCUTS_3D" :key="keys">

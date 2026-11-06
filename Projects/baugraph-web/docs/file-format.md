@@ -148,27 +148,13 @@ All in service of readable diffs:
   export carries it as a `<title>`, so SVG viewers do the same). Newlines are
   kept. An edge without it writes no `labelInfo` key, so every file written
   before it existed stays exactly as it was.
-- **3D is optional and on top.** `planes` lists the levels of the
-  [3D view](./3d-view), ground first; a node's `plane` names the one it
-  stands on and `extrusion` (`flat`, `low`, `regular`, `tall`, `tower`) how
-  it stands — on the floor, raised on a post for `tall` and `tower`, or lying
-  on its back for `flat`. The 2D canvas and every export ignore all three, nodes keep
-  their 2D `position`, and a file without them is written exactly as before.
-  A node without `plane` follows its zone, and one with no zone stands on the
-  first plane — so a whole zone moves with one line. `planes` is the one
-  array besides `meta.authors` that is never sorted, because its order is the
-  stacking; each plane stays on one line, and a `plane` naming one the file
-  does not define is rejected on open, the same as a dangling `parent`.
-- **A node moved in the 3D view gets a `position3d`.** `{ "x", "y", "z" }`,
-  on one line: `x` and `y` in canvas units and `z` the height above the
-  node's plane. It is written only once a node has been
-  [moved in 3D](./3d-view#moving-nodes-in-3d), and the 2D canvas never reads
-  it — `position` stays what the canvas says. Unlike `position` it is
-  absolute rather than relative to the zone, so regrouping or resizing on the
-  canvas never moves a node that was placed in 3D. A node without it stands
-  in 3D where the canvas has it — within its zone, wherever that zone stands
-  in 3D, so a zone moved in 3D is one line in the diff and what it holds
-  follows.
+- **3D is optional and on top.** A node's `extrusion` (`flat`, `low`,
+  `regular`, `tall`, `tower`) says how it stands in the [3D view](./3d-view) —
+  on the floor, raised on a post for `tall` and `tower`, or lying on its back
+  for `flat`. It is the only 3D key: the 3D view stands every node where its
+  `position` puts it, and the 2D canvas and every export ignore `extrusion`.
+  Omitted means `regular`, so a file that never set it is written exactly as
+  before.
 - **An edge routes itself unless `waypoints` says otherwise.** Every
   connection is auto-routed around obstacles by default, the only behavior
   this format had before manual routing existed. Giving an edge one or more

@@ -37,8 +37,6 @@ import SegmentedField from '@/features/diagram/components/SegmentedField.vue'
 import EdgeFlowSection from '@/features/diagram/components/EdgeFlowSection.vue'
 import AuthorsSection from '@/features/diagram/components/AuthorsSection.vue'
 import NodeSpatialSection from '@/features/diagram/components/NodeSpatialSection.vue'
-import PlanesSection from '@/features/diagram/components/PlanesSection.vue'
-import { useView3D } from '@/features/diagram/composables/useView3D'
 import type { PortSide, Side, Vec2 } from '@/model'
 import { MAX_PORTS, PORT_SIDES, SHAPE_KEYS, nodePorts } from '@/model'
 import { NODE_TYPE_GROUPS, nodeType } from '@/features/diagram/data/node-types'
@@ -89,7 +87,6 @@ const {
 } = useDiagram()
 
 const { collapsed } = useInspectorPanel()
-const { active: view3d } = useView3D()
 
 const node = computed(() =>
   selectedNodes.value.length === 1 && selectedEdges.value.length === 0
@@ -389,12 +386,6 @@ function setRouting(
     <div v-show="!collapsed" class="min-h-0 flex-1 overflow-y-auto">
       <!-- ------------------------------------------------------------ node -->
       <template v-if="node">
-        <!--
-          Where the node stands in 3D. Optional on top of everything below, so it
-          comes last — except in the 3D view, where it is what a click is for.
-        -->
-        <NodeSpatialSection v-if="view3d" :ids="[node.id]" />
-
         <section class="space-y-3 border-b p-3">
           <div class="space-y-1.5">
             <Label class="text-xs">Label</Label>
@@ -668,7 +659,8 @@ function setRouting(
           </Button>
         </section>
 
-        <NodeSpatialSection v-if="!view3d" :ids="[node.id]" />
+        <!-- How tall it stands in 3D: optional on top of everything above, so it comes last. -->
+        <NodeSpatialSection :ids="[node.id]" />
       </template>
 
       <!-- ------------------------------------------------------------ edge -->
@@ -982,8 +974,6 @@ function setRouting(
         </section>
 
         <AuthorsSection />
-
-        <PlanesSection />
 
         <section v-if="lockedCount" class="space-y-2 border-b p-3">
           <Label class="text-xs">Locked</Label>

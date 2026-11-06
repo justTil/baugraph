@@ -289,7 +289,12 @@ function renderZone(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePa
   return out
 }
 
-function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodePaint>): string {
+function renderShape(
+  node: DiagramNode,
+  box: Box,
+  paint: ReturnType<typeof nodePaint>,
+  withBody = true,
+): string {
   const parts: string[] = []
 
   // A weightless outline is left off entirely rather than written as `0`, so a
@@ -298,7 +303,8 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
     ? ` stroke="${paint.stroke}" stroke-width="${paint.strokeWidth}" stroke-linejoin="round"`
     : ''
 
-  for (const element of shapeElements(node.shape, box.width, box.height, paint.strokeWidth)) {
+  const body = withBody ? shapeElements(node.shape, box.width, box.height, paint.strokeWidth) : []
+  for (const element of body) {
     // Trim — a cylinder's rim, a queue's ticks — is stroke only, so without one
     // there is nothing to draw.
     if (element.role === 'detail' && !outline) continue
@@ -318,7 +324,9 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
 
   const hasIcon = !!node.icon && !!iconInnerMarkup(node.icon)
   const centered = CENTERED_SHAPES.has(node.shape) || !hasIcon
-  const inset = contentInset(node.shape, box.height)
+  // Without its body, a drum's top is not drawn and takes no room: the text
+  // goes in the middle, where a 3D drum's side has it.
+  const inset = withBody ? contentInset(node.shape, box.height) : { ...contentInset(node.shape, box.height), top: 0 }
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2 + inset.top / 2
   const iconBlock = hasIcon ? ICON_SIZE + ICON_GAP : 0
@@ -374,11 +382,21 @@ function renderShape(node: DiagramNode, box: Box, paint: ReturnType<typeof nodeP
  * canvas and in an export: the same outline, icon and caption, from the same
  * code.
  */
-export function nodeFaceSvg(node: DiagramNode, theme: DiagramTheme): string {
+export function nodeFaceSvg(
+  node: DiagramNode,
+  theme: DiagramTheme,
+  /**
+   * `false` leaves the shape itself out — fill, outline, trim — and keeps only
+   * what is written on it: the icon, the name, the caption, on a transparent
+   * ground. What the 3D view lays on a node that is a solid of its own, where a
+   * drawn outline would only be a picture of the edge already there.
+   */
+  { body: withBody = true }: { body?: boolean } = {},
+): string {
   const { width, height } = node.size
   const box: Box = { x: 0, y: 0, width, height }
   const paint = nodePaint(node, theme)
-  const body = node.kind === 'zone' ? renderZone(node, box, paint) : renderShape(node, box, paint)
+  const body = node.kind === 'zone' ? renderZone(node, box, paint) : renderShape(node, box, paint, withBody)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
     `viewBox="0 0 ${width} ${height}"><style>text{font-family:${SANS}}</style>${body}</svg>`

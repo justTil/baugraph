@@ -35,7 +35,6 @@ import {
   Group,
   Hash,
   Layers,
-  Layers3,
   Lock,
   LockOpen,
   Magnet,
@@ -99,8 +98,6 @@ const emit = defineEmits<{
   (e: 'rename', target: { kind: 'node' | 'edge'; id: string }): void
   (e: 'add', payload: { item: PaletteItem; at: Vec2 }): void
   (e: 'export'): void
-  /** Name a new plane and put these nodes on it — the planes tab does the naming. */
-  (e: 'newPlane', ids: string[]): void
 }>()
 
 const {
@@ -139,10 +136,6 @@ const {
   addFlow,
   edgesWithin,
   edgesDownstream,
-  planes,
-  canAddPlane,
-  planeOfNode,
-  moveNodesToPlane,
 } = useDiagram()
 
 const { fitView, addSelectedNodes, addSelectedEdges, getNodes, getEdges } = useCanvas()
@@ -279,27 +272,6 @@ function borderNodes(border: string) {
     const targets = mode.value === 'node' && node.value ? [node.value] : selectedNodes.value
     targets.forEach((n) => updateNodeData(n.id, { border: border as never }))
   })
-}
-
-/** The nodes a plane picked here goes to: the one right-clicked, or the whole selection. */
-const planeTargets = computed(() =>
-  mode.value === 'node' && node.value ? [node.value.id] : selectedNodes.value.map((n) => n.id),
-)
-
-/** Top of the stack first, the way the planes tab and the 3D legend list them. */
-const stackedPlanes = computed(() =>
-  [...planes.value].reverse().map((p) => ({ id: p.id, name: p.label || p.id, hex: COLOR_HEX[p.color ?? 'slate'] })),
-)
-
-/** The plane the targets share, or nothing ticked when they stand on different ones. */
-const targetPlane = computed(() => {
-  const on = new Set(planeTargets.value.map((id) => planeOfNode(id)))
-  return on.size === 1 ? ([...on][0] ?? '') : ''
-})
-
-function requestNewPlane() {
-  keepFocus.value = true
-  emit('newPlane', planeTargets.value)
 }
 
 /** Stamps one technology across a whole selection — "these five are Java". */
@@ -541,33 +513,6 @@ function copySelectionIds() {
               {{ SHAPE_LABELS[shape] }}
             </ContextMenuRadioItem>
           </ContextMenuRadioGroup>
-        </ContextMenuSubContent>
-      </ContextMenuSub>
-
-      <ContextMenuSub>
-        <ContextMenuSubTrigger>
-          <Layers3 />
-          Plane
-        </ContextMenuSubTrigger>
-        <ContextMenuSubContent class="max-h-80">
-          <template v-if="planes.length">
-            <ContextMenuRadioGroup :model-value="targetPlane">
-              <ContextMenuRadioItem
-                v-for="plane in stackedPlanes"
-                :key="plane.id"
-                :value="plane.id"
-                @select="act(() => moveNodesToPlane(planeTargets, plane.id))"
-              >
-                <span class="size-3 rounded-sm border border-black/20 dark:border-white/20" :style="{ background: plane.hex }" />
-                {{ plane.name }}
-              </ContextMenuRadioItem>
-            </ContextMenuRadioGroup>
-            <ContextMenuSeparator />
-          </template>
-          <ContextMenuItem :disabled="!canAddPlane" @select="requestNewPlane()">
-            <Plus />
-            New plane…
-          </ContextMenuItem>
         </ContextMenuSubContent>
       </ContextMenuSub>
 
@@ -886,33 +831,6 @@ function copySelectionIds() {
           >
             <component :is="entry.icon" />
             {{ entry.label }}
-          </ContextMenuItem>
-        </ContextMenuSubContent>
-      </ContextMenuSub>
-
-      <ContextMenuSub v-if="selectedNodes.length">
-        <ContextMenuSubTrigger>
-          <Layers3 />
-          Plane
-        </ContextMenuSubTrigger>
-        <ContextMenuSubContent class="max-h-80">
-          <template v-if="planes.length">
-            <ContextMenuRadioGroup :model-value="targetPlane">
-              <ContextMenuRadioItem
-                v-for="plane in stackedPlanes"
-                :key="plane.id"
-                :value="plane.id"
-                @select="act(() => moveNodesToPlane(planeTargets, plane.id))"
-              >
-                <span class="size-3 rounded-sm border border-black/20 dark:border-white/20" :style="{ background: plane.hex }" />
-                {{ plane.name }}
-              </ContextMenuRadioItem>
-            </ContextMenuRadioGroup>
-            <ContextMenuSeparator />
-          </template>
-          <ContextMenuItem :disabled="!canAddPlane" @select="requestNewPlane()">
-            <Plus />
-            New plane…
           </ContextMenuItem>
         </ContextMenuSubContent>
       </ContextMenuSub>

@@ -6,14 +6,11 @@ export {
   nodeSchema,
   edgeSchema,
   flowSchema,
-  planeSchema,
   canvasSchema,
   metaSchema,
   authorSchema,
 } from '@/model/schema'
 export { migrate } from '@/model/migrate'
-export type { SpaceNode } from '@/model/space'
-export { moveInSpace, pinInSpace, resetInSpace, spacePositions } from '@/model/space'
 export {
   sortDocument,
   sortEdges,

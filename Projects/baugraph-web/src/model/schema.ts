@@ -10,7 +10,6 @@ import {
   FORMAT_VERSION,
   LINE_STYLES,
   LINE_WIDTHS,
-  MAX_PLANES,
   MAX_PORTS,
   ROUTES,
   SHAPE_KEYS,
@@ -22,7 +21,6 @@ import {
   EDGE_DEFAULTS,
   FLOW_DEFAULTS,
   NODE_DEFAULTS,
-  PLANE_DEFAULTS,
 } from '@/model/defaults'
 
 /**
@@ -45,12 +43,6 @@ const idSchema = z
 const vec2Schema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),
-})
-
-const position3dSchema = z.object({
-  x: z.number().finite(),
-  y: z.number().finite(),
-  z: z.number().finite(),
 })
 
 const sizeSchema = z.object({
@@ -105,12 +97,7 @@ export const nodeSchema = z.object({
   ports: portsSchema.optional(),
   parent: idSchema.nullable().default(NODE_DEFAULTS.parent),
   // 3D only, and defaulted like everything else on a node: a file written before
-  // the 3D view existed parses to a node that stands on the ground plane at the
-  // regular height, which is exactly how the 3D view draws one with no planes.
-  plane: idSchema.nullable().default(NODE_DEFAULTS.plane),
-  // Absent until a node is moved in the 3D view, and then never relative to its
-  // zone — see `DiagramNode.position3d`.
-  position3d: position3dSchema.nullable().default(NODE_DEFAULTS.position3d),
+  // the 3D view existed parses to a node that stands at the regular height.
   extrusion: z.enum(EXTRUSIONS).default(NODE_DEFAULTS.extrusion),
   locked: z.boolean().default(NODE_DEFAULTS.locked),
   data: metadataSchema.optional(),
@@ -169,13 +156,6 @@ export const flowSchema = z.object({
   data: metadataSchema.optional(),
 })
 
-/** One level of the 3D view's stack. See `DiagramPlane`. */
-export const planeSchema = z.object({
-  id: idSchema,
-  label: z.string().default(PLANE_DEFAULTS.label),
-  color: z.enum(COLOR_KEYS).default(PLANE_DEFAULTS.color),
-})
-
 export const canvasSchema = z.object({
   theme: z.enum(['light', 'dark']).default(DEFAULT_CANVAS.theme),
   grid: z.boolean().default(DEFAULT_CANVAS.grid),
@@ -225,10 +205,6 @@ export const documentSchema = z
     baugraph: z.string().default(FORMAT_VERSION),
     meta: metaSchema.default({ title: 'Untitled diagram' }),
     canvas: canvasSchema.default(DEFAULT_CANVAS),
-    // Optional, never defaulted to `[]`: a diagram without planes is a 2D
-    // diagram, and parsing one must give back exactly what it did before the 3D
-    // view existed — the same reasoning as `meta.authors`.
-    planes: z.array(planeSchema).max(MAX_PLANES).optional(),
     nodes: z.array(nodeSchema).default([]),
     edges: z.array(edgeSchema).default([]),
     flows: z.array(flowSchema).default([]),
@@ -244,29 +220,6 @@ export const documentSchema = z
         })
       }
       ids.add(node.id)
-    })
-
-    const planeIds = new Set<string>()
-    doc.planes?.forEach((plane, i) => {
-      if (planeIds.has(plane.id)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['planes', i, 'id'],
-          message: `duplicate plane id "${plane.id}"`,
-        })
-      }
-      planeIds.add(plane.id)
-    })
-
-    // A node standing on a plane the file never defines would have nowhere to be
-    // drawn — the same failure as a dangling `parent`, and reported the same way.
-    doc.nodes.forEach((node, i) => {
-      if (node.plane == null || planeIds.has(node.plane)) return
-      ctx.addIssue({
-        code: 'custom',
-        path: ['nodes', i, 'plane'],
-        message: `plane "${node.plane}" does not exist`,
-      })
     })
 
     doc.nodes.forEach((node, i) => {

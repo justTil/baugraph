@@ -12,7 +12,6 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
-  useId,
   watch,
 } from 'vue'
 import type {
@@ -47,7 +46,6 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppTheme } from '@/composables/useAppTheme'
-import type { NodeData } from '@/features/diagram/composables/useDiagram'
 import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { isStartupSample } from '@/features/diagram/composables/useEditorTabs'
 import { useFlows } from '@/features/diagram/composables/useFlows'
@@ -111,10 +109,6 @@ const {
   updateNodeData,
   updateEdgeData,
   nudgeSelection,
-  shiftNodesPlane,
-  resetNodes3D,
-  planeOfNode,
-  planes,
   flows,
   fitRequest,
   toDocument,
@@ -278,111 +272,13 @@ watch(view3d, (on) => {
 /** Flows the 3D spotlight can step through: the ones that move. */
 const playableFlows = computed(() => flows.value.filter((f) => f.enabled).map((f) => f.id))
 
-/** One numpad step of the 3D camera, as a 3D editor turns its view. */
-const ORBIT_STEP = Math.PI / 12
-
 /**
- * The numpad drives the 3D camera the way a 3D editor's does: 1, 3 and 7 look
- * from the front, the right and above (with Ctrl, from the opposite side), 2,
- * 4, 6 and 8 turn the view in steps, `.` frames the selection and `+`/`−`
- * zoom. Matched on `code`, so the top row's digits — `3` is the 3D switch —
- * keep their meaning. Camera only, so it works while presenting too.
- */
-function onNumpad3D(event: KeyboardEvent): boolean {
-  const commands = view3dCommands.value
-  if (!commands || !event.code.startsWith('Numpad')) return false
-  const opposite = event.ctrlKey || event.metaKey ? -1 : 1
-  switch (event.code) {
-    case 'Numpad1':
-      commands.viewAxis('y', opposite)
-      break
-    case 'Numpad3':
-      commands.viewAxis('x', opposite)
-      break
-    case 'Numpad7':
-      commands.viewAxis('z', 1)
-      break
-    case 'Numpad4':
-      commands.orbit(-ORBIT_STEP, 0)
-      break
-    case 'Numpad6':
-      commands.orbit(ORBIT_STEP, 0)
-      break
-    case 'Numpad8':
-      commands.orbit(0, -ORBIT_STEP)
-      break
-    case 'Numpad2':
-      commands.orbit(0, ORBIT_STEP)
-      break
-    case 'NumpadDecimal':
-      commands.frameSelection()
-      break
-    case 'NumpadAdd':
-      commands.zoom(0.8)
-      break
-    case 'NumpadSubtract':
-      commands.zoom(1.25)
-      break
-    default:
-      return false
-  }
-  event.preventDefault()
-  return true
-}
-
-/**
- * Keys that mean something different in 3D. Arrow keys there do not nudge —
- * moving in 3D is `G`'s, and never touches the canvas — they move the
- * selection up and down the stack, and step the spotlight through the flows.
- * Returns whether the key was taken.
+ * The keys of the 3D view, which is for looking: `F` fits, `R` spins the
+ * turntable, `←`/`→` step the spotlight through the flows. Returns whether the
+ * key was taken.
  */
 function onKey3D(event: KeyboardEvent): boolean {
-  if (onNumpad3D(event)) return true
-  if (event.key === 'Home') {
-    event.preventDefault()
-    view3dCommands.value?.frame()
-    return true
-  }
-  // By physical key: ⌥G types "©" on a Mac keyboard.
-  if (event.code === 'KeyG' && !event.metaKey && !event.ctrlKey) {
-    if (presenting.value || !selectedNodes.value.length) return true
-    event.preventDefault()
-    if (event.altKey) {
-      // Alt+G: back to where the canvas has them — the 3D editor's "clear location".
-      const ids = selectedNodes.value.map((n) => n.id)
-      if (!ids.some((id) => (nodes.value.find((n) => n.id === id)?.data as NodeData | undefined)?.position3d)) {
-        return true
-      }
-      commit()
-      endCoalesce()
-      resetNodes3D(ids)
-    } else {
-      view3dCommands.value?.grab()
-    }
-    return true
-  }
   switch (event.key) {
-    case 'ArrowUp':
-    case 'ArrowDown': {
-      if (presenting.value || !selectedNodes.value.length) return false
-      event.preventDefault()
-      const by = event.key === 'ArrowUp' ? 1 : -1
-      // Checked before the undo step is taken, so pressing ↑ at the top of the
-      // stack — or with no planes at all — leaves no empty step and no edit behind.
-      const order = planes.value.map((p) => p.id)
-      const movable = selectedNodes.value.some((n) => {
-        const at = order.indexOf(planeOfNode(n.id) ?? '')
-        return at >= 0 && at + by >= 0 && at + by < order.length
-      })
-      if (!movable) return true
-      commit()
-      endCoalesce()
-      shiftNodesPlane(
-        selectedNodes.value.map((n) => n.id),
-        by,
-      )
-      return true
-    }
     case 'ArrowLeft':
     case 'ArrowRight':
       event.preventDefault()
@@ -394,14 +290,13 @@ function onKey3D(event: KeyboardEvent): boolean {
       return true
     case 'f':
     case 'F':
+    case 'Home':
+      event.preventDefault()
       view3dCommands.value?.frame()
       return true
     case 'r':
     case 'R':
       autoRotate.value = !autoRotate.value
-      return true
-    case 'Enter':
-      // The inline rename editor sits over the 2D canvas, which is hidden.
       return true
   }
   return false
@@ -585,38 +480,6 @@ function onMenuAdd({ item, at }: { item: PaletteItem; at: { x: number; y: number
   lastItem.value = item
   place(item, at)
 }
-
-/* ----------------------------------------------------------------- planes */
-
-const layersPanel = ref<InstanceType<typeof LayersPanel> | null>(null)
-
-/** "New plane…" from the menu: the planes tab names it, then puts the nodes on it. */
-async function onMenuNewPlane(ids: string[]) {
-  layersOpen.value = true
-  await nextTick()
-  layersPanel.value?.startNewPlane(ids)
-}
-
-/** The nodes of the plane pointed at in the planes tab. Everything else fades back. */
-const planePeek = ref<string[] | null>(null)
-/** Scopes the rule below to this canvas: other documents' canvases stay mounted, hidden. */
-const peekScope = useId()
-
-/**
- * A stylesheet rather than a prop on every node and edge: it lasts only while
- * the pointer is on a plane, and Vue Flow's own wrappers already carry the ids.
- */
-const peekCss = computed(() => {
-  const ids = planePeek.value
-  if (!ids) return ''
-  const on = new Set(ids)
-  const match = (list: string[]) => list.map((id) => `[data-id="${CSS.escape(id)}"]`).join(',')
-  const within = edges.value.filter((e) => on.has(e.source) && on.has(e.target)).map((e) => e.id)
-  const scope = `[data-peek="${peekScope}"]`
-  const nodes = ids.length ? `:not(${match(ids)})` : ''
-  const lines = within.length ? `:not(${match(within)})` : ''
-  return `${scope} .vue-flow__node${nodes}, ${scope} .vue-flow__edge${lines} { opacity: 0.16; }`
-})
 
 function selectAll() {
   addSelectedNodes(getNodes.value.filter((n) => n.selectable !== false))
@@ -857,7 +720,7 @@ function onKeyDown(event: KeyboardEvent) {
   // that drive the presentation itself (and, unusually, still work with the
   // rest of the canvas locked down) do anything below.
   if (presenting.value) {
-    if (view3d.value && viewMode.value === 'diagram' && onKey3D(event)) return
+    if (in3D() && onKey3D(event)) return
     switch (event.key) {
       case '3':
         view3d.value = !view3d.value
@@ -880,6 +743,23 @@ function onKeyDown(event: KeyboardEvent) {
   }
 
   const meta = event.metaKey || event.ctrlKey
+
+  // Nothing is edited in the 3D view: there is no selection there to act on, so
+  // the editing shortcuts would only reach a selection nobody can see. Undo and
+  // redo still work, for an edit made in the inspector beside it.
+  if (in3D()) {
+    const key = event.key.toLowerCase()
+    if (meta && (key === 'z' || key === 'y')) {
+      event.preventDefault()
+      if (key === 'y' || event.shiftKey) redo()
+      else undo()
+    } else if (!meta && event.key === '3' && !event.altKey) {
+      view3d.value = false
+    } else if (!meta && !onKey3D(event)) {
+      onSharedKey(event)
+    }
+    return
+  }
 
   if (meta) {
     const key = event.key.toLowerCase()
@@ -927,12 +807,11 @@ function onKeyDown(event: KeyboardEvent) {
     return
   }
 
-  // The numpad's 3 is a camera view while the 3D view is up; see `onNumpad3D`.
-  if (event.key === '3' && !event.altKey && !(view3d.value && event.code === 'Numpad3')) {
+  if (event.key === '3' && !event.altKey) {
     view3d.value = !view3d.value
     return
   }
-  if (view3d.value && viewMode.value === 'diagram' && onKey3D(event)) return
+  if (onSharedKey(event)) return
 
   switch (event.key) {
     case 'Backspace':
@@ -952,31 +831,11 @@ function onKeyDown(event: KeyboardEvent) {
     case 'F':
       fitView({ padding: 0.2 })
       break
-    case 'l':
-    case 'L':
-      // The presentation laser pointer — no modifier, since it is reached for
-      // mid-talk rather than mid-edit.
-      laserActive.value = !laserActive.value
-      break
-    case 'p':
-    case 'P':
-      // Presentation mode, same reasoning as the laser pointer above.
-      void togglePresentation()
-      break
     case 'b':
     case 'B':
       // "Browse": everything the palette can add, laid out at once.
       event.preventDefault()
       paletteOverviewOpen.value = true
-      break
-    case 'Escape':
-      if (laserActive.value) {
-        event.preventDefault()
-        laserActive.value = false
-      } else if (presenting.value) {
-        event.preventDefault()
-        void exitPresentation()
-      }
       break
     case 'Enter': {
       const node = selectedNodes.value[0]
@@ -1000,6 +859,33 @@ function onKeyDown(event: KeyboardEvent) {
       break
     }
   }
+}
+
+/** Whether the 3D view is what is on screen. */
+const in3D = () => view3d.value && viewMode.value === 'diagram'
+
+/**
+ * Keys that mean the same in 2D and in 3D: the laser pointer and presentation
+ * mode — no modifier, since they are reached for mid-talk rather than mid-edit
+ * — and `Esc` to put the laser away. Returns whether the key was taken.
+ */
+function onSharedKey(event: KeyboardEvent): boolean {
+  switch (event.key) {
+    case 'l':
+    case 'L':
+      laserActive.value = !laserActive.value
+      return true
+    case 'p':
+    case 'P':
+      void togglePresentation()
+      return true
+    case 'Escape':
+      if (!laserActive.value) return false
+      event.preventDefault()
+      laserActive.value = false
+      return true
+  }
+  return false
 }
 
 /** ⌥ can go down and up mid-drag, so its state is tracked rather than sampled. */
@@ -1147,16 +1033,14 @@ watch(view3d, (on) => {
     >
     <ContextMenuTrigger as-child>
       <!--
-        Hidden rather than unmounted in 3D: Vue Flow is still what holds the
-        selection, and the 3D view selects through it.
+        Hidden rather than unmounted in 3D, so the canvas comes back exactly as
+        it was left: viewport, selection and all.
       -->
       <div
         v-show="viewMode === 'diagram' && !view3d"
         class="absolute inset-0"
-        :data-peek="peekScope"
         @contextmenu.capture="onContextMenuCapture"
       >
-        <component :is="'style'" v-if="peekCss">{{ peekCss }}</component>
         <!--
           `elevate-nodes-on-select` is off on purpose: Vue Flow would otherwise lift
           a selected node 1000 layers up, so selecting a zone made it jump in front
@@ -1401,15 +1285,11 @@ watch(view3d, (on) => {
       </div>
     </ContextMenuTrigger>
 
-    <!-- The diagram stood up by plane. Outside the context-menu trigger: right-drag pans the camera. -->
+    <!-- The diagram stood up in 3D. Outside the context-menu trigger: right-drag pans the camera. -->
     <DiagramView3D v-if="viewMode === 'diagram' && view3d" :visible="isVisible" />
 
-    <!-- Every node in the diagram, by zone or by plane; folds away to a tab on the left edge. -->
-    <LayersPanel
-      v-if="!presenting && viewMode === 'diagram' && !view3d"
-      ref="layersPanel"
-      @peek="planePeek = $event"
-    />
+    <!-- Every node in the diagram, nested by zone; folds away to a tab on the left edge. -->
+    <LayersPanel v-if="!presenting && viewMode === 'diagram' && !view3d" />
 
     <!-- The diagram's document as editable text — the way in for JSON pasted from an AI assistant. -->
     <div
@@ -1481,7 +1361,7 @@ watch(view3d, (on) => {
         @update:model-value="setShownView"
       >
         <ToggleGroupItem value="diagram" class="h-7 px-2.5 text-xs" title="The diagram">Diagram</ToggleGroupItem>
-        <ToggleGroupItem value="3d" class="h-7 px-2.5 text-xs" title="The diagram stacked by plane (3)">
+        <ToggleGroupItem value="3d" class="h-7 px-2.5 text-xs" title="The diagram in 3D, to look at (3)">
           3D
         </ToggleGroupItem>
         <ToggleGroupItem value="json" class="h-7 px-2.5 text-xs" title="The file, as text">JSON</ToggleGroupItem>
@@ -1596,7 +1476,6 @@ watch(view3d, (on) => {
       :target="menuTarget"
       @rename="openEditorFor"
       @add="onMenuAdd"
-      @new-plane="onMenuNewPlane"
       @export="emit('export')"
     />
   </ContextMenu>

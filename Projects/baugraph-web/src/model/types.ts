@@ -90,9 +90,9 @@ export const ARROW_MODES = ['target', 'both', 'none'] as const
 export type ArrowMode = (typeof ARROW_MODES)[number]
 
 /**
- * How a node stands in the 3D view, where every node is stood up off its back:
- * `low` and `regular` on the floor, `tall` and `tower` raised on a post above
- * the rest, and `flat` not at all — it lies on its back. Semantic, the same as
+ * How a node stands in the 3D view, where every node stands up where the canvas
+ * has it: `low` and `regular` on the floor, `tall` and `tower` raised on a post
+ * above the rest, and `flat` not at all — it lies on its back. Semantic, the same as
  * a border or a line weight: the file says `tall` — this one matters more,
  * carries more, is the one to look at — and the renderer decides what that is
  * worth. The 2D canvas and every export ignore it.
@@ -100,23 +100,9 @@ export type ArrowMode = (typeof ARROW_MODES)[number]
 export const EXTRUSIONS = ['flat', 'low', 'regular', 'tall', 'tower'] as const
 export type Extrusion = (typeof EXTRUSIONS)[number]
 
-/** Most planes a diagram may stack. Far more than reads well; a bound, not a target. */
-export const MAX_PLANES = 32
-
 export interface Vec2 {
   x: number
   y: number
-}
-
-/**
- * A point in the 3D view. `x` and `y` are the canvas's own axes — the same
- * numbers a node's `position` uses, so a node's 3D place starts out as its 2D
- * one — and `z` is height, up off the plane the node stands on.
- */
-export interface Position3D {
-  x: number
-  y: number
-  z: number
 }
 
 export interface Size {
@@ -192,27 +178,6 @@ export interface DiagramNode {
    * omitted, and so is the whole key when no side was added to.
    */
   ports?: Partial<NodePorts>
-  /**
-   * Id of the plane this node sits on in the 3D view (see `DiagramPlane`).
-   * Omitted means "where its zone is": a node follows its parent zone's plane,
-   * and one with no zone stands on the ground plane — so putting a zone on a
-   * plane takes everything inside it along. 3D only: the 2D canvas and every
-   * export ignore it.
-   */
-  plane?: string | null
-  /**
-   * Where the node stands in the 3D view, once it has been moved there. Omitted
-   * means "where the canvas has it": the node stands at its 2D place, lifted
-   * onto its plane — or, inside a zone that has been moved in 3D, at its place
-   * within that zone, so moving a zone takes everything inside it along.
-   *
-   * Unlike `position`, this is never relative to the zone: `x` and `y` are
-   * absolute canvas units and `z` is the height above the node's plane. That
-   * is what keeps a node put where it was placed whatever happens on the 2D
-   * canvas — regrouping, resizing a zone, moving it. 3D only: the 2D canvas
-   * and every export ignore it, and nothing in 3D ever touches `position`.
-   */
-  position3d?: Position3D | null
   /** How tall the node stands in the 3D view. Omitted means `regular`. 3D only. */
   extrusion?: Extrusion
   /**
@@ -395,38 +360,11 @@ export interface DiagramMeta {
   updatedAt?: string
 }
 
-/**
- * One storey of the 3D view.
- *
- * The 3D view is the 2D diagram with a height axis added, and a plane is what
- * gives that axis a meaning: a trust zone (DMZ, application tier, data tier), an
- * environment, an OSI layer. Nodes keep their 2D positions and are lifted onto
- * the plane they belong to, so a connection that crosses a boundary becomes a
- * vertical line and stands out. Nothing here moves a node — a plane only says
- * how high it stands.
- */
-export interface DiagramPlane {
-  /** Stable identifier, derived from the label. Referenced by `DiagramNode.plane`. */
-  id: string
-  /** What this level of the stack means. Drawn beside its plate in the 3D view. */
-  label: string
-  /** Tints the plate, resolved by the active theme. Omitted means `slate`. */
-  color?: ColorKey
-}
-
 export interface DiagramDocument {
   /** Format version of this file. */
   baugraph: string
   meta: DiagramMeta
   canvas: CanvasSettings
-  /**
-   * The planes of the 3D view, ground first: the first one listed is the bottom
-   * of the stack, and every node that names no plane stands on it. Optional and
-   * omitted when empty — a diagram without planes is a 2D diagram, which is
-   * every file written before the 3D view existed — and never sorted on write,
-   * because the order *is* the stacking.
-   */
-  planes?: DiagramPlane[]
   nodes: DiagramNode[]
   edges: DiagramEdge[]
   /** Message flows drawn over the connections above. */

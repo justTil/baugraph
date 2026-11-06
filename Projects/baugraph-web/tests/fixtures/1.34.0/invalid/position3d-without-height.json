@@ -1,8 +1,0 @@
-{
-  "baugraph": "1.0",
-  "meta": { "title": "A 3D place with no height" },
-  "nodes": [
-    { "id": "db", "label": "DB", "position": { "x": 0, "y": 0 }, "size": { "width": 190, "height": 62 }, "position3d": { "x": 40, "y": 80 } }
-  ],
-  "edges": []
-}

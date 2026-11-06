@@ -4,17 +4,10 @@ import type {
   DiagramEdge,
   DiagramMeta,
   DiagramNode,
-  DiagramPlane,
   MessageFlow,
 } from '@/model/types'
 import { FORMAT_VERSION, PORT_SIDES } from '@/model/types'
-import {
-  EDGE_DEFAULTS,
-  FLOW_DEFAULTS,
-  NODE_DEFAULTS,
-  PLANE_DEFAULTS,
-  blankDocument,
-} from '@/model/defaults'
+import { EDGE_DEFAULTS, FLOW_DEFAULTS, NODE_DEFAULTS, blankDocument } from '@/model/defaults'
 import { documentSchema } from '@/model/schema'
 import { migrate } from '@/model/migrate'
 import { sortDocument } from '@/model/sort'
@@ -105,14 +98,10 @@ const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
   'size',
   'ports',
   'parent',
-  'plane',
-  'position3d',
   'extrusion',
   'locked',
   'data',
 ]
-
-const PLANE_KEY_ORDER: (keyof DiagramPlane)[] = ['id', 'label', 'color']
 
 const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
   'id',
@@ -172,9 +161,6 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
         ...node,
         position: { x: round(node.position.x), y: round(node.position.y) },
         size: { width: round(node.size.width), height: round(node.size.height) },
-        position3d: node.position3d
-          ? { x: round(node.position3d.x), y: round(node.position3d.y), z: round(node.position3d.z) }
-          : null,
       },
       NODE_DEFAULTS,
     )
@@ -228,10 +214,6 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
     return ordered(trimmed as MessageFlow, FLOW_KEY_ORDER)
   })
 
-  const planes = (doc.planes ?? []).map((plane) =>
-    ordered(omitDefaults({ ...plane }, PLANE_DEFAULTS) as DiagramPlane, PLANE_KEY_ORDER),
-  )
-
   return {
     $schema: SCHEMA_URL,
     baugraph: doc.baugraph || FORMAT_VERSION,
@@ -243,10 +225,6 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
       'updatedAt',
     ]),
     canvas: ordered({ ...doc.canvas }, ['theme', 'grid', 'snap', 'snapSize']),
-    // Ahead of the nodes that name them, the way nodes come ahead of the edges
-    // that name those — and, like `flows`, not written at all until there is one,
-    // so every 2D diagram stays byte-for-byte the file it was.
-    ...(planes.length ? { planes } : {}),
     nodes,
     edges,
     // A diagram with no flows says nothing about them: an empty array would show
@@ -260,7 +238,7 @@ export function toFileObject(input: DiagramDocument): Record<string, unknown> {
  * `{ "x": 300, "y": 60 }` over four, turning "moved a node" into a four-line
  * diff — the single most common change a diagram ever sees.
  */
-const INLINE_KEYS = new Set(['position', 'position3d', 'size', 'ports'])
+const INLINE_KEYS = new Set(['position', 'size', 'ports'])
 
 /**
  * Keys whose *children* are each one line. A flow's per-connection overrides are
@@ -268,9 +246,9 @@ const INLINE_KEYS = new Set(['position', 'position3d', 'size', 'ports'])
  * one small idea ("this one is red") and reads as one line. An edge's manual
  * bend points are a list rather than a map, but the same idea applies: moving
  * one point should touch one line, not four. An author is one person, so adding
- * or removing a credit is one line as well, and so is a plane of the 3D view.
+ * or removing a credit is one line as well.
  */
-const INLINE_CHILD_KEYS = new Set(['style', 'waypoints', 'authors', 'planes'])
+const INLINE_CHILD_KEYS = new Set(['style', 'waypoints', 'authors'])
 
 function format(value: unknown, indent: string, key?: string, inline = false): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)

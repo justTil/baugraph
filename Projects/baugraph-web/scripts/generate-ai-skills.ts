@@ -27,7 +27,6 @@ import {
   FORMAT_VERSION,
   LINE_STYLES,
   LINE_WIDTHS,
-  MAX_PLANES,
   MAX_PORTS,
   ROUTES,
   SHAPE_KEYS,
@@ -218,19 +217,11 @@ writing it in another order is still valid and will simply be re-sorted.
   more than the one every node starts with: \`{ "right": 4 }\`. Up to ${MAX_PORTS} a
   side. Omit entirely unless a fan-out actually needs more than one point on a
   side.
-- \`plane\` — 3D only, optional: the id of the plane this node stands on in the
-  3D view (see "Planes" below). Omit it and the node follows its zone's plane,
-  or stands on the ground plane if it has no zone — so set it on a zone and
-  leave its children alone. The 2D canvas and every export ignore it.
 - \`extrusion\` — 3D only, optional: how the node stands in the 3D view, one of
-  ${enumList(EXTRUSIONS)}. Omit for \`regular\`. Every node stands up there;
-  \`tall\`/\`tower\` raise it on a post — use them for what carries the most
-  traffic or matters the most, sparingly — and \`flat\` lays it on its back.
-- \`position3d\` — 3D only, optional: \`{ "x": number, "y": number, "z": number }\`,
-  where a person moved the node in the 3D view — absolute canvas units (never
-  relative to the zone) and \`z\` the height above its plane. Never write one
-  yourself: omit it and the node stands in 3D where \`position\` puts it. Keep
-  any that an existing file has, unchanged.
+  ${enumList(EXTRUSIONS)}. Omit for \`regular\`. The 3D view stands every node
+  up exactly where \`position\` puts it; \`tall\`/\`tower\` raise it on a post —
+  use them for what carries the most traffic or matters the most, sparingly —
+  and \`flat\` lays it on its back. The 2D canvas and every export ignore it.
 - \`locked\` — editor-only convenience; omit.
 - \`data\` — free-form object for anything else.
 
@@ -314,34 +305,6 @@ connections, nothing more.
   object of any of \`color\`/\`token\`/\`speed\` — for the one connection that should
   not read the same as the rest, like a failure path drawn red and slow:
   \`{ "order-created--dead-letter-queue": { "color": "red", "token": "packet", "speed": 110 } }\`.
-
-## Planes (3D view) — optional
-
-The editor can show a diagram in 3D, stacked in layers. \`planes\` says what
-the layers are; leave it out entirely for a plain 2D diagram (the default, and
-the right choice unless the user asks for layers or the architecture has an
-obvious height axis).
-
-\`\`\`json
-"planes": [
-  { "id": "data", "label": "Data tier", "color": "green" },
-  { "id": "application", "label": "Application tier", "color": "blue" },
-  { "id": "dmz", "label": "DMZ", "color": "amber" }
-]
-\`\`\`
-
-- Listed **ground first**: the first plane is the bottom of the stack, and a
-  node with no \`plane\` (and no zone that has one) stands on it. The order is
-  the stacking, so it is never sorted. Up to ${MAX_PLANES}.
-- \`id\` — referenced by a node's \`plane\`; every reference must resolve.
-  \`label\` names what the level means; \`color\` (default \`slate\`) tints its plate.
-- Give height a real meaning: trust zones (external → DMZ → application →
-  data), tiers, environments (dev → test → prod), OSI-style layers. A
-  connection between two planes is drawn as a vertical cable, so a flow that
-  crosses a boundary stands out.
-- Nodes start in 3D where their 2D \`position\` puts them, stood up and lifted
-  onto their plane, so lay the diagram out for 2D as usual. Prefer putting a whole zone on a
-  plane over setting \`plane\` on each node inside it.
 
 ## Layout and placement
 

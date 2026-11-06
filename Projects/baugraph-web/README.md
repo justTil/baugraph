@@ -212,40 +212,26 @@ connections they travel instead.
 
 ### The 3D view
 
-Press `3` and the diagram stands up in layers — the same diagram, with a height
-axis added. Nodes start exactly where they are on the canvas, lifted onto the
-*plane* they belong to, and stand up off their backs, facing the front, so they
-read the way they do on the canvas; seen from straight above they lie back down. The height means whatever the planes say it means: trust
-zones (DMZ, application, data), tiers, environments. A connection that crosses
-from one plane to another becomes a vertical cable, which is what makes a
-boundary crossing stand out from any angle.
+Press `3` and the diagram stands up — exactly the layout of the canvas, every
+node where it is there, standing up facing the front as the solid its shape
+stands for: a database a drum, a queue a tube, a circle a ball, a box a block,
+with its name and icon on the front. Seen from straight above they lie back down
+into the 2D diagram.
 
-From there the stack can be arranged in 3D the way Blender moves objects: `G`
-grabs the selection, `X`/`Y`/`Z` lock it to an axis, a typed number moves it
-exactly, a selected node drags across its floor, and the selection carries a move
-gizmo. `Alt G` puts it back. Those moves only ever touch the 3D view — the 2D
-canvas keeps every node where it was — and a zone takes what it holds along. The
-numpad drives the camera as in Blender, and middle-drag orbits.
+Every connection is an arc from the top of one node to the top of the next, so
+a node that talks to many reads as a hub, and the message flows travel along
+the arcs on the same timing as on the canvas — parcels, letters and beads of
+light that land on the node they were sent to with a ripple. `←`/`→` step a
+spotlight through them: one flow at full strength, everything it does not touch
+faded back. That works in presentation mode too, along with a turntable (`R`),
+for walking a room through where the messages go.
 
-Planes are built on the 2D canvas: the layers panel's **Planes** tab lists the stack
-with the nodes on each plane, takes nodes dragged onto a plane, and fades the canvas
-down to one plane when you point at it. Right-click a node or a selection to pick a
-plane, or **New plane…** to name one and put them on it. A
-node's **3D** section picks its plane — *Auto* follows its zone, so putting a zone
-on a plane takes everything in it along — and its height, *Flat* to *Tower*, for
-what carries the most or matters the most: *Tall* and *Tower* stand on a post over
-the rest, *Flat* lies on its back. In the 3D view, `↑`/`↓` move the
-selection a plane up or down.
-
-Message flows run through the stack on the same timing as on the canvas, and
-`←`/`→` step a spotlight through them: one flow at full strength, everything it
-does not touch faded back. That works in presentation mode too, along with a
-turntable (`R`), for walking a room through where the messages go.
-
-All of it is optional and on top. A diagram without planes is a 2D diagram and its
-file does not change; the 2D canvas and every export ignore the 3D settings — a
-node moved in 3D only gains a `position3d`, which the canvas never reads; and
-the view itself is never saved, so a diagram always opens flat. three.js is only
+The 3D view is for looking: drag to orbit, right-drag to pan, scroll to zoom,
+click a node to fly to it. Nothing is moved or edited there. The one thing a
+node carries for it is its **3D height** in the inspector — *Tall* and *Tower*
+stand what carries the most or matters the most on a post over the rest, *Flat*
+lays it on its back — which the 2D canvas and every export ignore. The view
+itself is never saved, so a diagram always opens flat, and three.js is only
 downloaded the first time the 3D view is opened.
 
 The current diagram autosaves to `localStorage`, so a reload never loses work. That
