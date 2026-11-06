@@ -67,6 +67,34 @@ All notable changes to this project will be documented in this file.
   and every export ignore it. The JSON Schema and the AI skills are
   regenerated to match. Opening a file that uses it in an older Baugraph drops
   it on the next save, as with any newer field.
+- **Labels can be moved.** Drag a connection's label along its line, towards
+  either end, or off the line altogether. It is kept as a place along the line
+  plus how far off it, so it stays with its connection — at the same end, on
+  the same side — when the nodes move, and the export puts it in the same
+  place, with the image grown to fit a label dragged out past every node.
+  While the connection is selected, a dotted thread runs from a label pulled
+  off the line back to the point it belongs to. Dropped back on the line it
+  sits on the line; dropped on the middle it is back where it started.
+  Double-click it, or use **Recentre label** in the right-click menu or
+  **Recentre** in the inspector, to put it back. `⌥` places it freely.
+- **Connection points can be moved.** `⇧`-drag a node's dot to slide it along
+  its side, and its connections go with it. It snaps to the grid, to the
+  middle of the side, and to its own even slot — where it goes back to
+  spreading itself evenly — and `⌥` places it freely. A moved point keeps its
+  place relative to the side as the node is resized; the points that were
+  not moved keep spreading themselves evenly around it. **Respread connection
+  points**, in the inspector or a node's right-click menu, puts them all back.
+- **Three optional keys in the file format for them**: `labelPosition` (`0`
+  at the source, `1` at the target) and `labelOffset` on an edge, and
+  `portPositions` on a node, listing only the points that were moved. None is
+  written for a label or a point that was never moved, so no existing file
+  changes. The JSON Schema and the AI skills are regenerated to match.
+
+### Fixed
+
+- **Reversing a manually routed connection** now walks its bend points the
+  other way too. It used to keep them in their old order, so the reversed line
+  zig-zagged back through them from the wrong end.
 
 ## [1.33.0]
 

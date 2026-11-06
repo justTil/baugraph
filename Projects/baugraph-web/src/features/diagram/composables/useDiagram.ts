@@ -18,6 +18,7 @@ import type {
   MessageFlow,
   Metadata,
   NodePorts,
+  PortPositions,
   PortSide,
   Route,
   ShapeKey,
@@ -33,6 +34,7 @@ import {
   FORMAT_VERSION,
   MAX_PORTS,
   nodePorts,
+  prunePortPositions,
   edgeId as makeEdgeId,
   flowId as makeFlowId,
   nodeId as makeNodeId,
@@ -70,6 +72,8 @@ export interface NodeData {
    * every side whatever it says.
    */
   ports: NodePorts
+  /** See `DiagramNode.portPositions`. Absent when no point was moved. */
+  portPositions?: PortPositions
   /** How tall the node stands in the 3D view. */
   extrusion: Extrusion
   /** Mirrors `DiagramNode.locked`; the Vue Flow interaction flags follow it. */
@@ -82,6 +86,10 @@ export interface EdgeData {
   label: string
   /** See `DiagramEdge.labelInfo`. Empty means none. */
   labelInfo: string
+  /** See `DiagramEdge.labelPosition`. Absent means the middle of the line. */
+  labelPosition?: number
+  /** See `DiagramEdge.labelOffset`. Absent means on the line. */
+  labelOffset?: Vec2
   sourceSide: Side
   targetSide: Side
   /** Which connection point on each side, 1-based. See `DiagramEdge.sourcePort`. */
@@ -377,6 +385,7 @@ function createDiagramStore(documentId: string) {
         border: node.border ?? 'regular',
         icon: node.icon ?? '',
         ports: nodePorts(node.ports),
+        portPositions: prunePortPositions(node.portPositions, node.ports),
         extrusion: node.extrusion ?? 'regular',
         locked,
         meta: node.data,
@@ -397,6 +406,8 @@ function createDiagramStore(documentId: string) {
       data: {
         label: edge.label ?? '',
         labelInfo: edge.labelInfo ?? '',
+        labelPosition: edge.labelPosition,
+        labelOffset: edge.labelOffset ? { ...edge.labelOffset } : undefined,
         sourceSide: edge.sourceSide,
         targetSide: edge.targetSide,
         sourcePort: edge.sourcePort ?? 1,
@@ -446,6 +457,7 @@ function createDiagramStore(documentId: string) {
       position: { x: node.position.x, y: node.position.y },
       size: sizeOf(node),
       ports: nodePorts(node.data?.ports),
+      portPositions: prunePortPositions(node.data?.portPositions, node.data?.ports),
       parent: node.parentNode ?? null,
       extrusion: node.data?.extrusion ?? 'regular',
       locked: node.data?.locked ?? false,
@@ -464,6 +476,8 @@ function createDiagramStore(documentId: string) {
       targetPort: edge.data?.targetPort ?? 1,
       label: edge.data?.label ?? '',
       labelInfo: edge.data?.labelInfo ?? '',
+      labelPosition: edge.data?.labelPosition,
+      labelOffset: edge.data?.labelOffset ? { ...edge.data.labelOffset } : undefined,
       route: edge.data?.route ?? 'orthogonal',
       line: edge.data?.line ?? 'solid',
       width: edge.data?.width ?? 'regular',
@@ -1531,7 +1545,13 @@ function createDiagramStore(documentId: string) {
     const next = Math.min(MAX_PORTS, Math.max(1, Math.round(count)))
     if (ports[side] === next) return
 
-    updateNodeData(id, { ports: { ...ports, [side]: next } })
+    const nextPorts = { ...ports, [side]: next }
+    updateNodeData(id, {
+      ports: nextPorts,
+      // A point taken away takes the place it was moved to with it; the points
+      // that remain keep theirs.
+      portPositions: prunePortPositions((node.data as NodeData).portPositions, nextPorts),
+    })
 
     edges.value = edges.value.map((e) => {
       const data = e.data as EdgeData
@@ -1544,6 +1564,39 @@ function createDiagramStore(documentId: string) {
       }
       return Object.keys(patch).length ? { ...e, data: { ...data, ...patch } } : e
     })
+  }
+
+  /**
+   * Slides one connection point along its side to `at` — a fraction of the
+   * side's length — or, with `null`, sends it back to its evenly spread slot.
+   * Every connection on that point follows it, since a connection names its
+   * point by number, not by where it sits.
+   */
+  function setPortPosition(id: string, side: PortSide, port: number, at: number | null) {
+    const node = nodes.value.find((n) => n.id === id)
+    if (!node) return
+    const data = node.data as NodeData
+    const slots = { ...(data.portPositions?.[side] ?? {}) }
+    if (at === null) delete slots[String(port)]
+    else slots[String(port)] = Math.min(1, Math.max(0, at))
+    updateNodeData(id, {
+      portPositions: prunePortPositions({ ...data.portPositions, [side]: slots }, data.ports),
+    })
+  }
+
+  /** Sends every moved connection point on a node — or on one side of it — back to its evenly spread slot. */
+  function resetPortPositions(id: string, side?: PortSide) {
+    const node = nodes.value.find((n) => n.id === id)
+    if (!node) return
+    const data = node.data as NodeData
+    if (!data.portPositions) return
+    const next = side ? { ...data.portPositions, [side]: undefined } : undefined
+    updateNodeData(id, { portPositions: prunePortPositions(next, data.ports) })
+  }
+
+  /** Puts a connection's label back on the middle of its line. */
+  function resetLabelPosition(id: string) {
+    updateEdgeData(id, { labelPosition: undefined, labelOffset: undefined })
   }
 
   /**
@@ -1715,23 +1768,38 @@ function createDiagramStore(documentId: string) {
     )
   }
 
+  /**
+   * Turns a connection round. Only which way it points changes: bend points are
+   * walked in the new direction and a moved label is measured from the new
+   * source, so the line and its label stay exactly where they were drawn.
+   */
   function reverseEdge(id: string) {
-    edges.value = edges.value.map((e) =>
-      e.id === id
-        ? {
-            ...e,
-            source: e.target,
-            target: e.source,
-            data: {
-              ...(e.data as EdgeData),
-              sourceSide: (e.data as EdgeData).targetSide,
-              targetSide: (e.data as EdgeData).sourceSide,
-              sourcePort: (e.data as EdgeData).targetPort,
-              targetPort: (e.data as EdgeData).sourcePort,
-            },
-          }
-        : e,
-    )
+    const count = (edges.value.find((e) => e.id === id)?.data as EdgeData | undefined)?.waypoints
+      ?.length
+    // Selected bend points are held by index, and reversing renumbers them.
+    if (count) {
+      selectedWaypoints.value = selectedWaypoints.value.map((w) =>
+        w.edgeId === id ? { ...w, index: count - 1 - w.index } : w,
+      )
+    }
+    edges.value = edges.value.map((e) => {
+      if (e.id !== id) return e
+      const data = e.data as EdgeData
+      return {
+        ...e,
+        source: e.target,
+        target: e.source,
+        data: {
+          ...data,
+          sourceSide: data.targetSide,
+          targetSide: data.sourceSide,
+          sourcePort: data.targetPort,
+          targetPort: data.sourcePort,
+          waypoints: data.waypoints ? [...data.waypoints].reverse() : undefined,
+          labelPosition: data.labelPosition === undefined ? undefined : 1 - data.labelPosition,
+        },
+      }
+    })
   }
 
   /** Moves a node to the front or back within its own layer. */
@@ -1936,6 +2004,9 @@ function createDiagramStore(documentId: string) {
     updateNodeData,
     updateNodeSize,
     setNodePorts,
+    setPortPosition,
+    resetPortPositions,
+    resetLabelPosition,
     autoSizeNodes,
     autoSizeSelection,
     fitSizeOf,

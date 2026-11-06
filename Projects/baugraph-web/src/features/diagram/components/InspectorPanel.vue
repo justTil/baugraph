@@ -13,6 +13,7 @@ import {
   LockOpen,
   PanelRightClose,
   PanelRightOpen,
+  RotateCcw,
   Scaling,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -69,6 +70,8 @@ const {
   updateNodeData,
   updateNodeSize,
   setNodePorts,
+  resetPortPositions,
+  resetLabelPosition,
   autoSizeNodes,
   minSizeOf,
   setNodeType,
@@ -224,6 +227,14 @@ const SIDE_LABELS: Record<PortSide, string> = {
 
 /** The selected node's connection points, one count per side. */
 const ports = computed(() => nodePorts(node.value?.data.ports))
+
+/** Whether any of the selected node's connection points was slid away from its even slot. */
+const portsMoved = computed(() => !!node.value?.data.portPositions)
+
+/** Whether the selected connection's label was dragged away from the middle of its line. */
+const labelMoved = computed(
+  () => edge.value?.data?.labelPosition !== undefined || !!edge.value?.data?.labelOffset,
+)
 
 /**
  * How many connection points the node at one end of the selected connection
@@ -531,8 +542,19 @@ function setRouting(
             </div>
           </div>
           <p class="text-muted-foreground text-[11px] leading-snug">
-            Up to {{ MAX_PORTS }} a side, spread evenly along it. Drag from any dot to connect.
+            Up to {{ MAX_PORTS }} a side, spread evenly along it. Drag from any dot to connect;
+            ⇧-drag a dot to slide it along its side.
           </p>
+          <Button
+            v-if="portsMoved"
+            variant="outline"
+            size="sm"
+            class="w-full"
+            @click="withCommit(() => resetPortPositions(node!.id))"
+          >
+            <RotateCcw />
+            Respread connection points
+          </Button>
         </section>
 
         <section class="space-y-3 border-b p-3">
@@ -673,7 +695,20 @@ function setRouting(
 
         <section class="space-y-3 border-b p-3">
           <div class="space-y-1.5">
-            <Label class="text-xs">Label</Label>
+            <div class="flex items-center justify-between">
+              <Label class="text-xs">Label</Label>
+              <Button
+                v-if="labelMoved"
+                variant="ghost"
+                size="sm"
+                class="text-muted-foreground -my-1 h-6 px-1.5 text-xs"
+                title="Put the label back in the middle of the line (or double-click it)"
+                @click="withCommit(() => resetLabelPosition(edge!.id))"
+              >
+                <RotateCcw />
+                Recentre
+              </Button>
+            </div>
             <Input
               :model-value="edge.data!.label"
               class="h-8 text-sm"
@@ -681,6 +716,12 @@ function setRouting(
               @update:model-value="editEdgeText(edge.id, 'label', String($event))"
               @blur="endCoalesce()"
             />
+            <p
+              v-if="edge.data!.label || edge.data!.labelInfo"
+              class="text-muted-foreground text-[11px] leading-snug"
+            >
+              Drag the label on the canvas to move it along the line, or off it.
+            </p>
           </div>
           <!--
             Too much to draw on the line: the label carries an info icon instead,

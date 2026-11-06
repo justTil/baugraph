@@ -3,6 +3,9 @@
 | Shortcut | Action |
 | --- | --- |
 | `Shift` + drag | Rubber-band select |
+| `⌥` + drag | Ignore the grid and the alignment guides |
+| `Shift` + drag a connection dot | Slide it along its side |
+| Drag a connection's label | Move it along the line, or off it (double-click to put it back) |
 | Scroll / pinch | Pan / zoom |
 | `F` | Fit the view to the diagram |
 | `B` | Open or close the palette overview — every node type and technology at once |

@@ -13,6 +13,8 @@ const open = defineModel<boolean>('open', { required: true })
 const SHORTCUTS: [string, string][] = [
   ['Shift + drag', 'rubber-band select'],
   ['⌥ + drag', 'ignore the grid and the alignment guides'],
+  ['⇧ + drag a dot', 'slide a connection point along its side'],
+  ['drag a label', 'move a connection’s label (double-click to put it back)'],
   ['Space / middle-drag', 'pan the canvas'],
   ['⌘ + scroll, pinch', 'zoom (plain scroll pans)'],
   ['F', 'fit diagram to window'],
@@ -75,7 +77,12 @@ const SHORTCUTS_3D: [string, string][] = [
           <p>
             A side carries one dot until you give it more: up to six a side, set per side under
             <em>Connection points</em> in a node's inspector, and spread evenly along it. A
-            connection can be moved between them from its own inspector.
+            connection can be moved between them from its own inspector. ⇧-drag a dot to slide
+            it along its side — its connections go with it.
+          </p>
+          <p>
+            Drag a connection's label to move it along the line or off it; it stays with the
+            connection when nodes move. Double-click a moved label to put it back in the middle.
           </p>
           <p>
             Double-click a node to rename it inline. Icon, colour, shape, routing, arrowheads and

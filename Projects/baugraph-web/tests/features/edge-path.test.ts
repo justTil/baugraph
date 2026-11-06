@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Box, Vec } from '@/features/diagram/lib/edge-path'
-import { edgeGeometry } from '@/features/diagram/lib/edge-path'
+import { edgeGeometry, labelAnchor, pointAlong, projectOnto } from '@/features/diagram/lib/edge-path'
 
 /** Two nodes stacked one above the other, with a gap of 60..140 between them. */
 const start: Box = { x: 0, y: 0, width: 150, height: 60 }
@@ -81,5 +81,149 @@ describe('edgeGeometry detours', () => {
     const points = route(a, b, 'right', 'left')
     // Turns halfway between the two nodes, as it always has.
     expect(points.filter((p) => p.x === 150)).toHaveLength(2)
+  })
+})
+
+describe('connection points slid along their side', () => {
+  const a: Box = { x: 0, y: 0, width: 100, height: 100 }
+  const b: Box = { x: 300, y: 0, width: 100, height: 100 }
+
+  it('anchors on the evenly spread slot when nothing was moved', () => {
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      sourcePorts: { right: 3 },
+      sourcePort: 1,
+      route: 'straight',
+    })
+    // Point 1 of 3: a quarter of the way down, 2px clear of the side.
+    expect(g.start).toEqual({ x: 102, y: 25 })
+  })
+
+  it('anchors where a moved point was slid to', () => {
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      sourcePorts: { right: 3 },
+      sourcePortPositions: { right: { '1': 0.9 } },
+      sourcePort: 1,
+      route: 'straight',
+    })
+    expect(g.start).toEqual({ x: 102, y: 90 })
+  })
+
+  it('leaves the points that were not moved in their own slots', () => {
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      sourcePorts: { right: 3 },
+      sourcePortPositions: { right: { '1': 0.9 } },
+      sourcePort: 2,
+      route: 'straight',
+    })
+    expect(g.start).toEqual({ x: 102, y: 50 })
+  })
+
+  it('does not pull a moved single point back into line with the other end', () => {
+    // 20px off the target's middle is inside the tolerance that straightens an
+    // unmoved pair — but this one was put there on purpose.
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      sourcePortPositions: { right: { '1': 0.7 } },
+      route: 'orthogonal',
+    })
+    expect(g.start.y).toBe(70)
+    expect(g.end.y).toBe(50)
+  })
+
+  it('still straightens an unmoved pair that is nearly in line', () => {
+    const lower: Box = { x: 300, y: 20, width: 100, height: 100 }
+    const g = edgeGeometry(a, lower, { sourceSide: 'right', targetSide: 'left', route: 'orthogonal' })
+    expect(g.start.y).toBe(g.end.y)
+  })
+
+  it('lets an auto end pick the point that now sits nearest', () => {
+    const below: Box = { x: 300, y: 400, width: 100, height: 100 }
+    // Three points on the right; point 1 has been slid to the very bottom, so
+    // it — not point 3 — is now the one facing a node far below.
+    const g = edgeGeometry(a, below, {
+      sourceSide: 'auto',
+      targetSide: 'auto',
+      sourcePorts: { bottom: 3 },
+      sourcePortPositions: { bottom: { '1': 0.95 } },
+      route: 'straight',
+    })
+    expect(g.start.x).toBe(95)
+  })
+})
+
+describe('measuring along a connection', () => {
+  const a: Box = { x: 0, y: 0, width: 100, height: 100 }
+  const b: Box = { x: 300, y: 0, width: 100, height: 100 }
+  const straight = edgeGeometry(a, b, { sourceSide: 'right', targetSide: 'left', route: 'straight' })
+
+  it('walks a straight line by length', () => {
+    // 102 → 298 along y = 50.
+    expect(pointAlong(straight, 0)).toEqual({ x: 102, y: 50 })
+    expect(pointAlong(straight, 0.25)).toEqual({ x: 151, y: 50 })
+    expect(pointAlong(straight, 1)).toEqual({ x: 298, y: 50 })
+  })
+
+  it('clamps anything past either end', () => {
+    expect(pointAlong(straight, -1)).toEqual(pointAlong(straight, 0))
+    expect(pointAlong(straight, 2)).toEqual(pointAlong(straight, 1))
+  })
+
+  it('walks a polyline round its corners', () => {
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      route: 'orthogonal',
+      waypoints: [{ x: 200, y: 50 }, { x: 200, y: 250 }],
+    })
+    // 98 across, 200 down, 98 back up-and-across: the middle is on the down leg.
+    const p = pointAlong(g, 0.5)
+    expect(p.x).toBeCloseTo(200)
+    expect(p.y).toBeGreaterThan(50)
+    expect(p.y).toBeLessThan(250)
+  })
+
+  it('finds where a point projects onto the line, as the inverse of pointAlong', () => {
+    const { t, point } = projectOnto(straight, { x: 151, y: 10 })
+    expect(t).toBeCloseTo(0.25)
+    expect(point).toEqual({ x: 151, y: 50 })
+    for (const at of [0, 0.1, 0.5, 0.83, 1]) {
+      expect(projectOnto(straight, pointAlong(straight, at)).t).toBeCloseTo(at)
+    }
+  })
+
+  it('follows a curve rather than its chord', () => {
+    const below: Box = { x: 300, y: 300, width: 100, height: 100 }
+    const g = edgeGeometry(a, below, { sourceSide: 'right', targetSide: 'top', route: 'curved' })
+    expect(g.curve).toBeDefined()
+    for (const at of [0.2, 0.5, 0.8]) {
+      expect(projectOnto(g, pointAlong(g, at)).t).toBeCloseTo(at, 2)
+    }
+  })
+
+  it('puts a label that was never moved exactly where labels always sat', () => {
+    for (const route of ['straight', 'orthogonal', 'curved'] as const) {
+      const g = edgeGeometry(a, { x: 300, y: 200, width: 100, height: 100 }, {
+        sourceSide: 'auto',
+        targetSide: 'auto',
+        route,
+      })
+      expect(labelAnchor(g)).toEqual(g.mid)
+    }
+  })
+
+  it('puts a moved label along the line, then off it', () => {
+    expect(labelAnchor(straight, 0.25)).toEqual({ x: 151, y: 50 })
+    expect(labelAnchor(straight, 0.25, { x: 0, y: -20 })).toEqual({ x: 151, y: 30 })
+    expect(labelAnchor(straight, undefined, { x: 10, y: 0 })).toEqual({
+      x: straight.mid.x + 10,
+      y: straight.mid.y,
+    })
   })
 })

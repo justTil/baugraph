@@ -80,6 +80,28 @@ const portsSchema = z.object({
   left: portCountSchema.optional(),
 })
 
+/** A place along a line or a side: `0` at its start, `1` at its end. */
+const fractionSchema = z.number().finite().min(0).max(1)
+
+/**
+ * Connection points slid along their side, keyed by the point's number on that
+ * side. Only moved points are listed, so a side keeps no entry at all for a
+ * point that still sits in its evenly spread slot. A number the side does not
+ * offer is accepted and ignored — the same leniency an edge's `sourcePort` gets
+ * — rather than refusing to open a diagram over a side that was narrowed.
+ */
+const portSlotsSchema = z.record(
+  z.string().regex(new RegExp(`^[1-${MAX_PORTS}]$`), `connection points are numbered 1–${MAX_PORTS}`),
+  fractionSchema,
+)
+
+const portPositionsSchema = z.object({
+  top: portSlotsSchema.optional(),
+  right: portSlotsSchema.optional(),
+  bottom: portSlotsSchema.optional(),
+  left: portSlotsSchema.optional(),
+})
+
 export const nodeSchema = z.object({
   id: idSchema,
   kind: z.enum(['shape', 'zone', 'annotation']).default(NODE_DEFAULTS.kind),
@@ -95,6 +117,9 @@ export const nodeSchema = z.object({
   position: vec2Schema,
   size: sizeSchema,
   ports: portsSchema.optional(),
+  // Optional and never defaulted: a node whose points were never moved says
+  // nothing about them, which is what every file written before this did.
+  portPositions: portPositionsSchema.optional(),
   parent: idSchema.nullable().default(NODE_DEFAULTS.parent),
   // 3D only, and defaulted like everything else on a node: a file written before
   // the 3D view existed parses to a node that stands at the regular height.
@@ -118,6 +143,10 @@ export const edgeSchema = z.object({
   // Optional, and empty when a file written before it existed is opened, so every
   // older diagram reads — and writes back — exactly as it did.
   labelInfo: z.string().default(EDGE_DEFAULTS.labelInfo),
+  // Both optional and never defaulted: a label that was never moved sits where
+  // labels always have — the middle of the line — and its file says nothing.
+  labelPosition: fractionSchema.optional(),
+  labelOffset: vec2Schema.optional(),
   route: z.enum(ROUTES).default(EDGE_DEFAULTS.route),
   line: z.enum(LINE_STYLES).default(EDGE_DEFAULTS.line),
   width: z.enum(LINE_WIDTHS).default(EDGE_DEFAULTS.width),

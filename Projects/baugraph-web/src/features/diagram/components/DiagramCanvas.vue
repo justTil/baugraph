@@ -1531,6 +1531,19 @@ watch(view3d, (on) => {
 }
 
 /*
+ * Vue Flow's own reconnect anchors stay out of the pointer's way. A connection
+ * is reconnected by dragging the drawn line near either tip (see `DiagramEdge`),
+ * and Vue Flow — which does not route these connections and so cannot know
+ * where they really meet a node — puts its invisible anchors on each node's
+ * first dot instead: the middle of its top, for every connection the node has.
+ * Left live, they sat over whatever was drawn just above a node, a dragged
+ * label included, and took the press for a reconnect of some other line.
+ */
+.vue-flow__edgeupdater {
+  pointer-events: none;
+}
+
+/*
  * Resizing is the gesture a diagram gets dragged into shape with, and Vue Flow's
  * 1px line is a poor target for it. Each side becomes a 12px strip lying just
  * outside the node, with its hairline border on the node's own edge — so the

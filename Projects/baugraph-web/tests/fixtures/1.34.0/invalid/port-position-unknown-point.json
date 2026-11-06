@@ -1,0 +1,8 @@
+{
+  "baugraph": "1.0",
+  "meta": { "title": "A side can carry at most six connection points, so there is no seventh to move" },
+  "nodes": [
+    { "id": "a", "label": "A", "position": { "x": 0, "y": 0 }, "size": { "width": 190, "height": 62 }, "portPositions": { "right": { "7": 0.5 } } }
+  ],
+  "edges": []
+}

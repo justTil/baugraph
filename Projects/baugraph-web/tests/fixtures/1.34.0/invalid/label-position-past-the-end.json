@@ -1,0 +1,11 @@
+{
+  "baugraph": "1.0",
+  "meta": { "title": "A label sits further along the line than the line goes" },
+  "nodes": [
+    { "id": "a", "label": "A", "position": { "x": 0, "y": 0 }, "size": { "width": 190, "height": 62 } },
+    { "id": "b", "label": "B", "position": { "x": 300, "y": 0 }, "size": { "width": 190, "height": 62 } }
+  ],
+  "edges": [
+    { "id": "a--b", "source": "a", "target": "b", "label": "HTTP", "labelPosition": 1.4 }
+  ]
+}

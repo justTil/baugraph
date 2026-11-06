@@ -3,7 +3,8 @@ import type { DiagramDocument, DiagramNode, MessageFlow } from '@/model'
 import { iconComponent } from '@/features/diagram/data/icons'
 import { CENTERED_SHAPES, contentInset, roundedRect, shapeElements } from '@/features/diagram/lib/shapes'
 import type { EdgeGeometry } from '@/features/diagram/lib/edge-path'
-import { arrowHeadPath, dashArray, edgeGeometry } from '@/features/diagram/lib/edge-path'
+import { arrowHeadPath, dashArray, edgeGeometry, labelAnchor } from '@/features/diagram/lib/edge-path'
+import type { EdgeLabelBox } from '@/features/diagram/lib/edge-label'
 import { EDGE_LABEL_FONT, EDGE_LABEL_INFO_ICON, edgeLabelBox } from '@/features/diagram/lib/edge-label'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, fadeOf, flowPlan, tokenAt } from '@/features/diagram/lib/flow-graph'
@@ -114,9 +115,19 @@ export function absoluteBoxes(doc: DiagramDocument): Map<string, Box> {
   return boxes
 }
 
-export function contentBounds(doc: DiagramDocument, padding = EXPORT_PADDING): Box {
-  const boxes = [...absoluteBoxes(doc).values()]
-  if (!boxes.length) return { x: -200, y: -150, width: 400, height: 300 }
+/**
+ * The canvas area an export covers: every node, plus anything else in `extra`
+ * that has to be in the picture — a label dragged out past the outermost node
+ * would otherwise be cut in half by the edge of the image.
+ */
+export function contentBounds(
+  doc: DiagramDocument,
+  padding = EXPORT_PADDING,
+  extra: Box[] = [],
+): Box {
+  const nodes = [...absoluteBoxes(doc).values()]
+  if (!nodes.length) return { x: -200, y: -150, width: 400, height: 300 }
+  const boxes = [...nodes, ...extra]
   const x1 = Math.min(...boxes.map((b) => b.x)) - padding
   const y1 = Math.min(...boxes.map((b) => b.y)) - padding
   const x2 = Math.max(...boxes.map((b) => b.x + b.width)) + padding
@@ -811,7 +822,6 @@ export interface DocumentFrames {
 
 export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): DocumentFrames {
   const theme = diagramTheme(doc.canvas.theme)
-  const bounds = contentBounds(doc, options.padding ?? EXPORT_PADDING)
   const boxes = absoluteBoxes(doc)
 
   const zones = doc.nodes
@@ -843,6 +853,8 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
         targetSide: edge.targetSide,
         sourcePorts: byId.get(edge.source)?.ports,
         targetPorts: byId.get(edge.target)?.ports,
+        sourcePortPositions: byId.get(edge.source)?.portPositions,
+        targetPortPositions: byId.get(edge.target)?.portPositions,
         sourcePort: edge.sourcePort,
         targetPort: edge.targetPort,
         route: edge.route,
@@ -851,6 +863,28 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
       }),
     )
   }
+
+  // Each label's chip, laid out once: drawn from below, and — for a label that
+  // was moved, and so may sit well clear of every node — counted into the
+  // bounds. A label nobody moved stays out of them, so an export of a diagram
+  // that never moved one comes out exactly the size it always did.
+  const labels = new Map<string, EdgeLabelBox>()
+  const movedLabels: Box[] = []
+  for (const edge of doc.edges) {
+    const geometry = geometries.get(edge.id)
+    if (!geometry) continue
+    const label = edgeLabelBox(
+      edge.label,
+      edge.labelInfo,
+      labelAnchor(geometry, edge.labelPosition, edge.labelOffset),
+      measureText,
+    )
+    if (!label) continue
+    labels.set(edge.id, label)
+    if (edge.labelPosition !== undefined || edge.labelOffset) movedLabels.push(label)
+  }
+
+  const bounds = contentBounds(doc, options.padding ?? EXPORT_PADDING, movedLabels)
 
   const edges = doc.edges
     .map((edge) => {
@@ -874,7 +908,9 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
         out += `<path d="${arrowHeadPath(geometry.start, geometry.startDir, stroke)}" fill="${color}"/>`
       }
 
-      const label = edgeLabelBox(edge.label, edge.labelInfo, geometry.mid, measureText)
+      // Wherever the label was dragged to on the canvas — the same anchor the
+      // canvas computes, from the same geometry, so the two cannot drift apart.
+      const label = labels.get(edge.id)
       if (label) {
         let chip =
           `<rect x="${label.x}" y="${label.y}" width="${label.width}" ` +
