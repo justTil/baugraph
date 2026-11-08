@@ -5,6 +5,7 @@ import type { ColorKey, MessageFlow } from '@/model'
 import type { FlowEdge, FlowPlan } from '@/features/diagram/lib/flow-graph'
 import { edgeStyle, flowPlan, flowSteps, tokenAt } from '@/features/diagram/lib/flow-graph'
 import { diagramStore, useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useInspectorPanel } from '@/features/diagram/composables/useInspectorPanel'
 
 /**
  * The message-flow animation runtime.
@@ -183,6 +184,29 @@ function createFlowRuntime(documentId: string) {
    * component carried on reading it.
    */
   const scope = effectScope(true)
+
+  /**
+   * The flow editor takes the bottom of the screen, so opening it folds the
+   * inspector away to give the canvas back some width. Closing it unfolds the
+   * inspector again — but only if opening it was what folded it, and only if
+   * the user hasn't since unfolded it themselves.
+   */
+  scope.run(() => {
+    const { collapsed: inspectorCollapsed } = useInspectorPanel()
+    let foldedByEditor = false
+    watch(editorOpen, (open) => {
+      if (open) {
+        foldedByEditor = !inspectorCollapsed.value
+        inspectorCollapsed.value = true
+      } else {
+        if (foldedByEditor && inspectorCollapsed.value) inspectorCollapsed.value = false
+        foldedByEditor = false
+      }
+    })
+    watch(inspectorCollapsed, (folded) => {
+      if (!folded) foldedByEditor = false
+    })
+  })
 
   function flowState(): ComputedRef<FlowState> {
     if (shared) return shared
