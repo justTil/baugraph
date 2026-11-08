@@ -46,6 +46,12 @@ All notable changes to this project will be documented in this file.
 
 - The flow editor's *When one node feeds several* setting is now the *Fan
   out* / *One by one* choice of the **Order** switch.
+- **Baugraph is now licensed under the Apache License 2.0** instead of MIT.
+  You can still use, modify and redistribute it freely, but the new licence
+  does not cover the Baugraph name or logo. A new `NOTICE` file explains that
+  forks need a name of their own, and the license page in the app shows it.
+- Opening the message flow editor collapses the inspector to give the canvas
+  more room, and closing it opens the inspector again.
 
 ## [1.34.0]
 

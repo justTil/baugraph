@@ -52,9 +52,9 @@ async function copy(style: CitationStyle, text: string) {
       </CardHeader>
       <CardContent class="text-muted-foreground space-y-3 text-sm">
         <p>
-          A diagram you draw is your own work. Baugraph is MIT-licensed, so an exported image
-          needs no attribution. Many universities still ask you to name the software behind a
-          figure, though. Put <span class="text-foreground">"own illustration, created with
+          A diagram you draw is your own work. The Apache 2.0 licence covers Baugraph's code, not
+          what you draw with it, so an exported image needs no attribution. Many universities
+          still ask you to name the software behind a figure, though. Put <span class="text-foreground">"own illustration, created with
           Baugraph"</span> in the caption and the full reference in your bibliography.
         </p>
         <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">

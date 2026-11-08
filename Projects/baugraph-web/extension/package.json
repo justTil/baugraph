@@ -5,7 +5,7 @@
   "version": "1.30.0",
   "publisher": "justtil",
   "icon": "images/icon.png",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "repository": {
     "type": "git",

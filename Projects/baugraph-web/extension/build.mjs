@@ -36,6 +36,7 @@ async function copyShared() {
     resolve(here, 'schema/baugraph-v1.schema.json'),
   )
   await copyFile(resolve(repo, 'LICENSE'), resolve(here, 'LICENSE'))
+  await copyFile(resolve(repo, 'NOTICE'), resolve(here, 'NOTICE'))
 }
 
 await copyShared()

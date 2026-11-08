@@ -3,4 +3,5 @@ dist/
 media/
 schema/
 LICENSE
+NOTICE
 *.vsix
