@@ -85,6 +85,13 @@ const SHORTCUTS_3D: [string, string][] = [
             connection when nodes move. Double-click a moved label to put it back in the middle.
           </p>
           <p>
+            Select a connection to reroute it: drag the bar on any leg of an orthogonal line to
+            move that leg sideways, or the dashed dot on a straight or curved one to pull out a
+            bend. ⇧-drag the line to add a bend exactly where you grab it. Press
+            <kbd class="bg-muted rounded px-1 font-mono">⌥⇧R</kbd> (or <em>Reset to automatic
+            route</em> in the inspector or right-click menu) to hand it back to the router.
+          </p>
+          <p>
             Double-click a node to rename it inline. Icon, colour, shape, routing, arrowheads and
             line style live in the inspector on the right.
           </p>

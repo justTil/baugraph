@@ -63,6 +63,36 @@ it is back where it started. Double-click a moved label — or use
 **Recentre label** in the right-click menu, or **Recentre** in the inspector —
 to put it back. `⌥` while dragging places it freely, without either pull.
 
+### Rerouting a connection
+
+Every connection routes itself around the nodes in its way until you take
+over. Select one and handles appear on it — drag them to reshape the line;
+there is no mode to switch on first.
+
+- **Orthogonal lines** carry a small bar in the middle of each leg. Drag it
+  and the leg moves sideways, taking the corners at both of its ends with
+  it, so the line stays right-angled. Drag the leg that leaves a node and the
+  end slides along that side of the node to follow; past the end of the
+  side — or on a round outline, which has no straight side to slide along —
+  a short jog is put in next to the node instead. Snaps to the grid when the
+  grid is on; `⌥` places it freely. Drop a leg in line with its neighbour
+  and the two merge.
+- **Straight and curved lines** carry a dashed dot in the middle of each
+  stretch. Drag it to pull a new bend point out of the line there.
+- **Anywhere:** `⇧`-drag the line itself to drop a bend point exactly where
+  you grabbed it. Drag a bend point to move it, double-click (or
+  right-click) it to remove it, `⇧`-click several to align them.
+
+The first drag turns the route into bend points starting from the line
+exactly as it was drawn, so nothing jumps. From then on the connection is
+*manual*: it goes where you put it and no longer detours around nodes.
+
+To hand a connection back to the router, use **Reset to automatic route** in
+its inspector or its right-click menu, or press `⌥⇧R`. With several things
+selected, `⌥⇧R` and **Reset routing** reset every selected connection and
+every connection between selected nodes; **Reset every connection's route**
+on the empty canvas's menu resets the whole diagram. All of it can be undone.
+
 ## What a node is, and what it runs on
 
 Every node carries two things beyond its name, and both are drawn on it:

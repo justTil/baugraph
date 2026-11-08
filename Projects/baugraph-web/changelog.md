@@ -42,8 +42,26 @@ All notable changes to this project will be documented in this file.
   changes. Exported SVGs and the 3D view play a custom order exactly as the
   canvas does. The JSON Schema and the AI skills are regenerated to match.
 
+- **Connections can be rerouted by hand.** Select
+  a connection and handles appear on it: a bar on each leg of an orthogonal
+  line, to drag that leg sideways while the line stays right-angled, and a
+  dashed dot on each stretch of a straight or curved line, to pull a bend
+  out of it. No *Manual* switch is needed first — the first drag takes over
+  the route exactly as it was drawn. An end slides along its node to follow
+  the leg that leaves it, and a jog is put in next to the node where it
+  cannot. `⇧`-dragging the line now adds a bend point on automatic
+  connections too.
+- **Resetting a route.** *Reset to automatic route* in a connection's
+  inspector and right-click menu, `⌥⇧R` for every selected connection (and
+  those between selected nodes), and *Reset every connection's route* on the
+  canvas menu hand connections back to the router.
+
 ### Changed
 
+- **Manually routed orthogonal connections are always drawn right-angled.**
+  Bend points that do not line up used to be joined by a diagonal; a corner
+  is now drawn in between, in the SVG export too. Straight and curved
+  connections are unchanged.
 - The flow editor's *When one node feeds several* setting is now the *Fan
   out* / *One by one* choice of the **Order** switch.
 - **Baugraph is now licensed under the Apache License 2.0** instead of MIT.

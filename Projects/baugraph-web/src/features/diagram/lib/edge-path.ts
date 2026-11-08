@@ -1,6 +1,7 @@
-import type { NodePorts, PortPositions, PortSide, Route, Side } from '@/model'
+import type { NodePorts, PortPositions, PortSide, Route, ShapeKey, Side } from '@/model'
 import { nodePorts, portFraction, PORT_SIDES } from '@/model'
 import { EDGE_PX } from '@/features/diagram/lib/theme'
+import { cylinderCap } from '@/features/diagram/lib/shapes'
 
 /**
  * Edge routing.
@@ -48,6 +49,30 @@ export interface EdgeGeometry {
   /** Unit vectors pointing outwards at each end, for arrowheads. */
   startDir: Vec
   endDir: Vec
+  /**
+   * How far each end of an orthogonal connector may slide along the side it
+   * leaves from to meet its first (or last) bend head-on — see `SlideRange`.
+   * Absent where the end is held in place: on a side carrying several points,
+   * on a point slid there by hand, and on any connector that is not orthogonal.
+   */
+  startSlide?: SlideRange
+  endSlide?: SlideRange
+}
+
+/**
+ * The stretch of a side a connector's end can travel along, on one axis.
+ *
+ * A manually routed orthogonal connector stays square by letting the end that
+ * has only one place to be — a side with a single, unmoved point — slide along
+ * its side to line up with the bend next to it, the way an end that is free to
+ * float does in any diagramming tool. Dragging the first leg of a line up or
+ * down then moves the line, not just the leg, until the side runs out.
+ */
+export interface SlideRange {
+  /** `y` for a left or right side, `x` for a top or bottom one. */
+  axis: 'x' | 'y'
+  lo: number
+  hi: number
 }
 
 /**
@@ -947,10 +972,180 @@ export interface EdgeRouteOptions {
    * from the router, not asked it for a second opinion.
    */
   waypoints?: Vec[]
+  /**
+   * What each end's node is drawn as. Only a manual orthogonal line reads it:
+   * an end slides along its side only as far as the outline really runs along
+   * that side — see `flatInset`. Omitted is a plain rectangle, and a zone,
+   * which draws its own frame, is one.
+   */
+  sourceShape?: ShapeKey
+  targetShape?: ShapeKey
 }
 
 /** A single point, as the zero-size `Box` `autoSide`/`autoPort` can face. */
 const pointBox = (p: Vec): Box => ({ x: p.x, y: p.y, width: 0, height: 0 })
+
+/** How close to a corner a sliding end may come, so a line never leaves from the corner itself. */
+const SLIDE_MARGIN = 8
+
+/**
+ * How far in from each end `side` of a `shape` the outline runs straight along
+ * the box — or `null` where it never does. An end slid off the straight part
+ * would leave a gap between the line and a node that curves or slants away
+ * underneath it: the round ends of a pill, a cylinder's caps, every side of a
+ * circle or a diamond.
+ */
+function flatInset(shape: ShapeKey | undefined, side: PortSide, box: Box): number | null {
+  const across = side === 'top' || side === 'bottom'
+  switch (shape) {
+    case 'circle':
+    case 'diamond':
+      return null
+    case 'pill':
+      return across ? box.height / 2 : null
+    case 'hexagon':
+      return across ? Math.min(22, box.width * 0.16) : null
+    case 'cylinder':
+      return across ? null : cylinderCap(box.height)
+    case 'round':
+      return 16
+    case 'queue':
+      return 6
+    default:
+      return 0
+  }
+}
+
+/** See `SlideRange`. `undefined` where the side has no straight stretch to slide along. */
+function slideRange(box: Box, side: PortSide, shape: ShapeKey | undefined): SlideRange | undefined {
+  const inset = flatInset(shape, side, box)
+  if (inset === null) return undefined
+  const vertical = side === 'left' || side === 'right'
+  const from = vertical ? box.y : box.x
+  const span = vertical ? box.height : box.width
+  const margin = Math.max(inset, Math.min(SLIDE_MARGIN, span / 4))
+  if (span - 2 * margin < 1) return undefined
+  return { axis: vertical ? 'y' : 'x', lo: from + margin, hi: from + span - margin }
+}
+
+/** Slides `a` along its side to meet `p` head-on, when the side reaches that far. */
+function slideOnto(a: Anchor, range: SlideRange | undefined, p: Vec | undefined): void {
+  if (!range || !p) return
+  const at = p[range.axis]
+  if (at >= range.lo && at <= range.hi) a.point[range.axis] = at
+}
+
+/**
+ * How long the short leg is that a manual orthogonal connector leaves a node
+ * along before it is allowed to turn — the same stub the router itself uses.
+ */
+const MANUAL_STUB = 22
+
+/**
+ * Keeps a manually routed orthogonal connector square.
+ *
+ * Bend points placed by hand rarely line up on their own, and an orthogonal
+ * line drawn straight between two that do not would come out diagonal. Each
+ * such leg is broken into two at a right angle instead. The corner is chosen
+ * so the line keeps going the way it already was before it turns — leaving a
+ * node along the node's own normal — except on the last leg, which turns
+ * early enough to arrive at the target along the target's normal.
+ */
+function orthogonalize(points: Vec[], startHorizontal: boolean, endHorizontal: boolean): Vec[] {
+  const out: Vec[] = [points[0]!]
+  /** Axis of the leg that just arrived — at the start, the source side's own normal. */
+  let horizontal = startHorizontal
+  const last = points.length - 1
+  for (let i = 1; i <= last; i++) {
+    const a = out.at(-1)!
+    const b = points[i]!
+    const dx = Math.abs(b.x - a.x)
+    const dy = Math.abs(b.y - a.y)
+    if (dx > 0.5 && dy > 0.5) {
+      const first = i === last ? !endHorizontal : horizontal
+      out.push(first ? { x: b.x, y: a.y } : { x: a.x, y: b.y })
+      horizontal = !first
+    } else if (dx > 0.5) {
+      horizontal = true
+    } else if (dy > 0.5) {
+      horizontal = false
+    }
+    out.push(b)
+  }
+  return out
+}
+
+/**
+ * Bend points for an orthogonal connector with one of its legs dragged
+ * sideways.
+ *
+ * `points` is the connector as drawn, ends included; `index` is the leg being
+ * moved (from `points[index]` to `points[index + 1]`), and `value` where it now
+ * sits across its own direction: a new `y` for a leg that runs across, a new
+ * `x` for one that runs up or down. Both of its corners move with it, which
+ * keeps the legs either side of it square.
+ *
+ * A leg that ends at a node cannot take the node with it. That end slides
+ * along its side to follow, as far as `slides` says it can; past that, a
+ * short jog is put in next to the node so the moved leg still meets it.
+ *
+ * Always computed from the same `points`, the ones the drag started with, so
+ * every frame of a drag is an absolute placement rather than a correction of
+ * the last one — and dragging back to where it started puts the line back.
+ */
+export function moveSegment(
+  points: Vec[],
+  index: number,
+  value: number,
+  slides: { start?: SlideRange; end?: SlideRange } = {},
+): Vec[] {
+  const lastIndex = points.length - 1
+  const a = points[index]!
+  const b = points[index + 1]!
+  const axis: 'x' | 'y' = Math.abs(a.y - b.y) < 0.5 ? 'y' : 'x'
+  const along: 'x' | 'y' = axis === 'y' ? 'x' : 'y'
+  const at = (alongValue: number, axisValue: number): Vec =>
+    axis === 'y' ? { x: alongValue, y: axisValue } : { x: axisValue, y: alongValue }
+
+  const middle = points.slice(1, -1).map((p, k) => {
+    const i = k + 1
+    if (i !== index && i !== index + 1) return { x: p.x, y: p.y }
+    return axis === 'y' ? { x: p.x, y: value } : { x: value, y: p.y }
+  })
+
+  /** The two corners of a jog next to the node at `end`, or none when `end` can just slide there. */
+  const jog = (end: Vec, toward: Vec, slide?: SlideRange): Vec[] => {
+    const slides = slide?.axis === axis
+    if (slides && value >= slide.lo && value <= slide.hi) return []
+    const fixed = slides ? clamp(value, slide.lo, slide.hi) : end[axis]
+    const span = toward[along] - end[along]
+    const foot = end[along] + Math.sign(span || 1) * Math.min(MANUAL_STUB, Math.abs(span) / 2)
+    return [at(foot, fixed), at(foot, value)]
+  }
+  const head = index === 0 ? jog(a, b, slides.start) : []
+  const tail = index + 1 === lastIndex ? jog(b, a, slides.end).reverse() : []
+
+  const out = [...head, ...middle, ...tail]
+  // A single leg straight from one node to the other, with both ends free to
+  // slide, has no corner of its own to move: one point on it holds the line
+  // where it was put, rather than an empty list handing it back to the router.
+  if (!out.length) out.push(at((a[along] + b[along]) / 2, value))
+  return out
+}
+
+/**
+ * Drops the bend points a drag has made redundant — two that landed on top of
+ * each other, or one sitting partway along a straight run — so lining a leg up
+ * with its neighbour merges the two rather than leaving a corner nobody can
+ * see. `start` and `end` are the drawn ends, there only to be measured against.
+ * At least one point is always kept: an empty list would mean automatic, and
+ * the line the user just placed would jump.
+ */
+export function tidyWaypoints(start: Vec, waypoints: Vec[], end: Vec): Vec[] {
+  const inner = simplify([start, ...waypoints, end]).slice(1, -1)
+  if (inner.length) return inner
+  return waypoints.length ? [waypoints[Math.floor(waypoints.length / 2)]!] : []
+}
 
 export function edgeGeometry(
   source: Box,
@@ -967,6 +1162,8 @@ export function edgeGeometry(
     route,
     obstacles,
     waypoints,
+    sourceShape,
+    targetShape,
   }: EdgeRouteOptions,
 ): EdgeGeometry {
   const manual = !!waypoints?.length
@@ -1013,11 +1210,29 @@ export function edgeGeometry(
     align(source, target, sa, ta)
   }
 
+  // Worked out for an automatic orthogonal line as well as a manual one: the
+  // first drag of one of its legs is what turns it manual, and that drag needs
+  // to know how far the ends will follow before it starts.
+  const orthogonal = route === 'orthogonal'
+  const startSlide =
+    orthogonal && sCount === 1 && !sPinned ? slideRange(source, sSide, sourceShape) : undefined
+  const endSlide =
+    orthogonal && tCount === 1 && !tPinned ? slideRange(target, tSide, targetShape) : undefined
+  if (manual && orthogonal) {
+    slideOnto(sa, startSlide, waypoints![0])
+    slideOnto(ta, endSlide, waypoints!.at(-1))
+  }
+
   const gap = 2
   const s: Vec = { x: sa.point.x + sa.normal.x * gap, y: sa.point.y + sa.normal.y * gap }
   const t: Vec = { x: ta.point.x + ta.normal.x * gap, y: ta.point.y + ta.normal.y * gap }
 
-  if (manual) return fromPolyline([s, ...waypoints!, t], DETOUR_RADIUS[route])
+  if (manual) {
+    const through = [s, ...waypoints!, t]
+    if (!orthogonal) return fromPolyline(through, DETOUR_RADIUS[route])
+    const square = orthogonalize(through, sa.normal.x !== 0, ta.normal.x !== 0)
+    return { ...fromPolyline(square, DETOUR_RADIUS.orthogonal), startSlide, endSlide }
+  }
 
   // A box sitting on top of an endpoint is not something a detour can help
   // with — there is no way out of it — so it is not treated as one.
@@ -1079,9 +1294,9 @@ export function edgeGeometry(
   const points = orthogonalPoints(s, t, sa, ta)
   if (polylineBlocked(points, walls) || reversesDirection(points)) {
     const around = detourRoute(s, t, sa, ta, others, [source, target])
-    if (around) return fromPolyline(around, DETOUR_RADIUS.orthogonal)
+    if (around) return { ...fromPolyline(around, DETOUR_RADIUS.orthogonal), startSlide, endSlide }
   }
-  return fromPolyline(points, DETOUR_RADIUS.orthogonal)
+  return { ...fromPolyline(points, DETOUR_RADIUS.orthogonal), startSlide, endSlide }
 }
 
 /* --------------------------------------------------- measuring along a line */

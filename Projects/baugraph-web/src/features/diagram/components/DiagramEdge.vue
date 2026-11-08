@@ -10,7 +10,7 @@ import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
-import type { Vec } from '@/features/diagram/lib/edge-path'
+import type { SlideRange, Vec } from '@/features/diagram/lib/edge-path'
 import {
   arrowHeadPath,
   dashArray,
@@ -18,8 +18,10 @@ import {
   endpointOf,
   labelAnchor,
   labelFoot as footOfLabel,
+  moveSegment,
   nearestSegmentIndex,
   projectOnto,
+  tidyWaypoints,
 } from '@/features/diagram/lib/edge-path'
 import { COLOR_HEX, diagramTheme, edgeColor, edgeStrokeWidth, mix } from '@/features/diagram/lib/theme'
 import { useAppTheme } from '@/composables/useAppTheme'
@@ -41,6 +43,7 @@ const {
   shiftWaypointSelectionForInsert,
   shiftWaypointSelectionForRemove,
   resetLabelPosition,
+  snap,
 } = useDiagram()
 const { getNodes, screenToFlowCoordinate, findEdge, viewport } = useVueFlow()
 const { presenting } = usePresentation()
@@ -86,6 +89,9 @@ const portsOf = (node: EdgeProps['sourceNode']) => (node.data as NodeData | unde
 /** Where a node's connection points were slid to by hand, if any were. */
 const portPositionsOf = (node: EdgeProps['sourceNode']) =>
   (node.data as NodeData | undefined)?.portPositions
+/** What a node is drawn as; a zone draws its own square-sided frame. */
+const shapeOf = (node: EdgeProps['sourceNode']) =>
+  node.type === 'zone' ? undefined : (node.data as NodeData | undefined)?.shape
 
 const geometry = computed(() =>
   edgeGeometry(boxOf(props.sourceNode), boxOf(props.targetNode), {
@@ -100,6 +106,8 @@ const geometry = computed(() =>
     route: props.data.route,
     obstacles: obstacles.value,
     waypoints: props.data.waypoints,
+    sourceShape: shapeOf(props.sourceNode),
+    targetShape: shapeOf(props.targetNode),
   }),
 )
 
@@ -438,29 +446,59 @@ function removeWaypoint(index: number) {
 }
 
 /**
+ * The bend points that draw this connection exactly as it is on screen now —
+ * what the first drag on an automatic connection turns it into, so taking
+ * over from the router never makes the line jump. A manual straight or curved
+ * line is its own bend points; an orthogonal one also picks up the corners
+ * drawn in to keep it square (see `orthogonalize` in `edge-path`), so a leg
+ * can be grabbed by either of its real ends. A curve the router drew as a
+ * single sweep has no corners at all, and comes out as none.
+ */
+const bends = computed<Vec[]>(() => {
+  if (waypoints.value.length && props.data.route !== 'orthogonal') {
+    return waypoints.value.map((p) => ({ x: p.x, y: p.y }))
+  }
+  const g = geometry.value
+  return (g.points ?? []).slice(1, -1).map((p) => ({ x: p.x, y: p.y }))
+})
+
+/** The connection as a polyline, both ends included, in the terms of `bends`. */
+const routePoints = computed<Vec[]>(() => [geometry.value.start, ...bends.value, geometry.value.end])
+
+/**
+ * Drops this connection's bend points from the point selection. Taking over
+ * an automatic route, or squaring a manual one, renumbers the points, and a
+ * selection held by index would quietly start pointing at different ones.
+ */
+function forgetWaypointSelection() {
+  if (!selectedWaypoints.value.some((w) => w.edgeId === props.id)) return
+  selectedWaypoints.value = selectedWaypoints.value.filter((w) => w.edgeId !== props.id)
+}
+
+/**
  * Shift-dragging the line itself, anywhere along its middle stretch, drops a
- * new bend point right there and picks it straight up for dragging — the
- * literal "move the connection" gesture this feature is for.
+ * new bend point right there and picks it straight up for dragging — a bend
+ * exactly where the hand is, rather than at one of the handles.
  *
- * Only on a connection already switched to manual routing (from the inspector,
- * or by having placed a point before), and only with shift held: a plain click
- * on a connection selects it and nothing more. Adding a bend point is a
- * deliberate act, not something an ordinary click should trigger by accident.
+ * Only with shift held: a plain click on a connection selects it and nothing
+ * more. An automatic connection is taken over first (see `bends`), so the
+ * point lands on the line as it is drawn.
  */
 function startAddWaypoint(event: PointerEvent) {
-  if (event.button !== 0 || !event.shiftKey || !waypoints.value.length) return
+  if (event.button !== 0 || !event.shiftKey) return
   event.stopPropagation()
   commit()
   endCoalesce()
   hoverPoint.value = null
   const point = closestPointOnPath(flowPoint(event))
-  const points = [geometry.value.start, ...waypoints.value, geometry.value.end]
-  const index = nearestSegmentIndex(points, point)
-  shiftWaypointSelectionForInsert(props.id, index)
+  const base = bends.value
+  const index = nearestSegmentIndex(routePoints.value, point)
+  if (base.length === waypoints.value.length) shiftWaypointSelectionForInsert(props.id, index)
+  else forgetWaypointSelection()
   // Sole-selected, not added to any running selection: shift is the add-point
   // modifier here, so it is always down and cannot also mean "extend selection".
   selectWaypoint(props.id, index, false)
-  const next = [...waypoints.value]
+  const next = [...base]
   next.splice(index, 0, point)
   updateEdgeData(props.id, { waypoints: next })
   beginDraggingWaypoint(index, event, [{ edgeId: props.id, index, from: point }])
@@ -470,14 +508,13 @@ function startAddWaypoint(event: PointerEvent) {
  * Where a new bend point would land if shift-clicked right now — the point on
  * the line nearest the cursor, the same value `startAddWaypoint` would use, so
  * the dot slides along the connection instead of floating beside it. Only
- * tracked while shift is held over a connection that is already manually
- * routed: without shift a click just selects, so previewing a point it would
- * not place would be a lie.
+ * tracked while shift is held: without it a click just selects, so previewing
+ * a point it would not place would be a lie.
  */
 const hoverPoint = ref<Vec | null>(null)
 
 function onHoverAddWaypoint(event: PointerEvent) {
-  if (draggingWaypoint.value !== null || !waypoints.value.length || !event.shiftKey) {
+  if (draggingWaypoint.value !== null || !event.shiftKey) {
     hoverPoint.value = null
     return
   }
@@ -489,6 +526,165 @@ function clearHoverPoint() {
 }
 
 onBeforeUnmount(stopDraggingWaypoint)
+
+/* --------------------------------------------------------- route handles */
+
+/**
+ * Reshaping a line by hand: select it, and handles sit on it to be
+ * dragged — no mode to switch on first, and no modifier to hold.
+ *
+ *   - `segment`, on an orthogonal line: the middle of each leg. Dragged, the
+ *     leg moves sideways, square to the way it runs, and takes the corners at
+ *     both of its ends along — so the line stays right-angled throughout.
+ *   - `bend`, on a straight or curved line: the middle of each stretch between
+ *     two points. Dragged, it becomes a new bend point right there.
+ *
+ * Either one turns an automatic connection manual on the first drag, starting
+ * from the route exactly as drawn. *Reset routing* hands it back.
+ */
+interface RouteHandle {
+  kind: 'segment' | 'bend'
+  /** The leg it sits on, from `routePoints[index]` to `routePoints[index + 1]`. */
+  index: number
+  at: Vec
+  /** Whether the leg runs up and down — and so moves left and right. */
+  vertical: boolean
+}
+
+/** Legs shorter than this on screen get no handle: it would sit on top of the corners. */
+const MIN_HANDLE_LEG = 18
+/** How far the pointer has to travel before a press on a handle counts as a drag. */
+const ROUTE_DRAG_THRESHOLD = 3
+
+/** Set for the length of a handle drag, which hides the handles while their legs move under them. */
+const routeDragActive = ref(false)
+
+const routeHandles = computed<RouteHandle[]>(() => {
+  if (
+    !props.selected ||
+    dragging.value ||
+    presenting.value ||
+    routeDragActive.value ||
+    draggingWaypoint.value !== null ||
+    props.source === props.target
+  ) {
+    return []
+  }
+  const g = geometry.value
+  const zoom = viewport.value.zoom || 1
+  // A curve the router drew as one sweep has no legs: its one handle is the
+  // middle of the curve, not the middle of the chord under it.
+  if (!g.points) return [{ kind: 'bend', index: 0, at: g.mid, vertical: false }]
+
+  const orthogonal = props.data.route === 'orthogonal'
+  const points = routePoints.value
+  const lastLeg = points.length - 2
+  const out: RouteHandle[] = []
+  for (let i = 0; i <= lastLeg; i++) {
+    const a = points[i]!
+    const b = points[i + 1]!
+    const length = Math.hypot(b.x - a.x, b.y - a.y)
+    if (length * zoom < MIN_HANDLE_LEG) continue
+    // A leg that meets a node keeps its handle clear of the reconnect grab at
+    // that end, or picking the line up there would reroute it instead.
+    if ((i === 0 || i === lastLeg) && length / 2 < GRAB_LENGTH + 6) continue
+    const vertical = Math.abs(a.x - b.x) < 0.5
+    if (orthogonal && !vertical && Math.abs(a.y - b.y) >= 0.5) continue
+    out.push({
+      kind: orthogonal ? 'segment' : 'bend',
+      index: i,
+      at: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      vertical,
+    })
+  }
+  return out
+})
+
+interface RouteDrag {
+  handle: RouteHandle
+  origin: Vec
+  /** `routePoints` as the drag found them — every frame is placed from these. */
+  points: Vec[]
+  /** How far each end of the line will slide along its node to follow — see `SlideRange`. */
+  slides: { start?: SlideRange; end?: SlideRange }
+  started: boolean
+}
+
+let routeDrag: RouteDrag | null = null
+
+function startRouteHandle(event: PointerEvent, handle: RouteHandle) {
+  if (event.button !== 0) return
+  event.stopPropagation()
+  routeDrag = {
+    handle,
+    origin: flowPoint(event),
+    points: routePoints.value.map((p) => ({ x: p.x, y: p.y })),
+    slides: { start: geometry.value.startSlide, end: geometry.value.endSlide },
+    started: false,
+  }
+  window.addEventListener('pointermove', onRouteHandleMove)
+  window.addEventListener('pointerup', stopRouteHandle, { once: true })
+}
+
+/**
+ * Nothing is written — and no undo step taken — until the pointer has really
+ * moved, so a click on a handle leaves an automatic line automatic.
+ */
+function onRouteHandleMove(event: PointerEvent) {
+  const drag = routeDrag
+  if (!drag) return
+  const now = flowPoint(event)
+  const dx = now.x - drag.origin.x
+  const dy = now.y - drag.origin.y
+  if (!drag.started) {
+    if (Math.hypot(dx, dy) * (viewport.value.zoom || 1) < ROUTE_DRAG_THRESHOLD) return
+    drag.started = true
+    routeDragActive.value = true
+    commit()
+    endCoalesce()
+    forgetWaypointSelection()
+  }
+
+  const { handle } = drag
+  if (handle.kind === 'bend') {
+    // From here on it is an ordinary bend point being dragged: hand over to
+    // that drag, with the point already where the pointer has got to.
+    const point = { x: handle.at.x + dx, y: handle.at.y + dy }
+    const next = drag.points.slice(1, -1)
+    next.splice(handle.index, 0, point)
+    updateEdgeData(props.id, { waypoints: next })
+    selectWaypoint(props.id, handle.index, false)
+    endRouteDrag()
+    beginDraggingWaypoint(handle.index, event, [{ edgeId: props.id, index: handle.index, from: point }])
+    return
+  }
+
+  // On the grid when snapping is on, so a moved leg lines up with the nodes
+  // around it; ⌥ lets go of the grid, the same as it does for a node's drag.
+  const raw = handle.vertical ? handle.at.x + dx : handle.at.y + dy
+  const value = event.altKey ? raw : snap(raw)
+  updateEdgeData(props.id, {
+    waypoints: moveSegment(drag.points, handle.index, value, drag.slides),
+  })
+}
+
+function stopRouteHandle() {
+  const drag = routeDrag
+  endRouteDrag()
+  if (!drag?.started || drag.handle.kind !== 'segment') return
+  // A leg dropped in line with its neighbour merges into it.
+  const g = geometry.value
+  updateEdgeData(props.id, { waypoints: tidyWaypoints(g.start, waypoints.value, g.end) })
+}
+
+function endRouteDrag() {
+  routeDrag = null
+  routeDragActive.value = false
+  window.removeEventListener('pointermove', onRouteHandleMove)
+  window.removeEventListener('pointerup', stopRouteHandle)
+}
+
+onBeforeUnmount(endRouteDrag)
 
 /**
  * Lit while the inspector points at a flow that runs over this connection. The
@@ -678,8 +874,8 @@ function openPausedFlow() {
 <template>
   <!--
     Paint order, bottom to top: the line and what travels it, the bend-point
-    strip, the reconnect zones at each end, the label, and the bend points
-    themselves. The label sits above the reconnect zones because it can be
+    strip, the reconnect zones at each end, the label, the route handles, and
+    the bend points themselves. The label sits above the reconnect zones because it can be
     dragged right up to an end, where the zone would otherwise swallow the
     grab; the bend points sit above everything, since a dot is aimed at.
   -->
@@ -735,14 +931,13 @@ function openPausedFlow() {
   </template>
 
   <!--
-    Manual routing: only while the connection is selected, and only once it has
-    been switched to manual routing (from the inspector, or by already carrying
-    a bend point), so an automatic connection stays free of editing chrome.
-    Shift-dragging the line itself drops a new bend point and starts dragging
-    it; the dots are the bend points already placed, draggable to move and
-    double-clickable to remove.
+    Manual routing: only while the connection is selected, so a connection
+    nobody is working on stays free of editing chrome. Shift-dragging the line
+    itself drops a new bend point and starts dragging it — on an automatic
+    connection too, which it takes over first; the dots further down are the
+    bend points already placed, draggable to move and double-clickable to remove.
   -->
-  <template v-if="props.selected && !dragging && waypoints.length">
+  <template v-if="props.selected && !dragging && !presenting">
     <!--
       Its own colour, distinct from the blue reconnect zones below: this drags
       a bend point into being, not an endpoint onto a different node, and the
@@ -967,6 +1162,68 @@ function openPausedFlow() {
     </Tooltip>
   </template>
 
+  <!--
+    Route handles — see `RouteHandle`. A bar across the middle of each leg of
+    an orthogonal line, lying along it, to push that leg sideways; a dashed
+    dot in the middle of each stretch of any other line, to pull a bend out of
+    it. Under the bend-point dots, which are aimed at more precisely still.
+  -->
+  <g
+    v-for="handle in routeHandles"
+    :key="`${handle.kind}:${handle.index}`"
+    class="bg-edge__route-handle"
+    :class="
+      handle.kind === 'bend'
+        ? 'bg-edge__route-handle--bend'
+        : handle.vertical
+          ? 'bg-edge__route-handle--x'
+          : 'bg-edge__route-handle--y'
+    "
+    @pointerdown="startRouteHandle($event, handle)"
+    @dblclick.stop
+  >
+    <template v-if="handle.kind === 'segment'">
+      <rect
+        :x="handle.at.x - (handle.vertical ? 7 : 12)"
+        :y="handle.at.y - (handle.vertical ? 12 : 7)"
+        :width="handle.vertical ? 14 : 24"
+        :height="handle.vertical ? 24 : 14"
+        fill="transparent"
+        class="bg-edge__route-hit"
+      />
+      <rect
+        :x="handle.at.x - (handle.vertical ? 3 : 8)"
+        :y="handle.at.y - (handle.vertical ? 8 : 3)"
+        :width="handle.vertical ? 6 : 16"
+        :height="handle.vertical ? 16 : 6"
+        rx="3"
+        :fill="theme.bg"
+        :stroke="theme.waypoint"
+        stroke-width="1.5"
+        class="bg-edge__route-mark pointer-events-none"
+      />
+    </template>
+    <template v-else>
+      <circle
+        :cx="handle.at.x"
+        :cy="handle.at.y"
+        r="9"
+        fill="transparent"
+        class="bg-edge__route-hit"
+      />
+      <circle
+        :cx="handle.at.x"
+        :cy="handle.at.y"
+        r="4.5"
+        :fill="theme.bg"
+        :stroke="theme.waypoint"
+        stroke-width="1.5"
+        stroke-dasharray="2.2 1.6"
+        class="bg-edge__route-mark pointer-events-none"
+      />
+    </template>
+  </g>
+
   <template v-if="props.selected && !dragging && waypoints.length">
     <template v-for="(point, index) in waypoints" :key="index">
       <!--
@@ -1071,6 +1328,32 @@ function openPausedFlow() {
 
 .bg-edge__label--dragging {
   cursor: grabbing;
+}
+
+/*
+ * A route handle's cursor says which way it moves: a leg that runs across can
+ * only go up or down, one that runs up and down only sideways. Same paint
+ * trick as the bend points' hit circle below — a transparent fill takes no
+ * pointer without `pointer-events: all`.
+ */
+.bg-edge__route-hit {
+  pointer-events: all;
+}
+
+.bg-edge__route-handle--y {
+  cursor: ns-resize;
+}
+
+.bg-edge__route-handle--x {
+  cursor: ew-resize;
+}
+
+.bg-edge__route-handle--bend {
+  cursor: move;
+}
+
+.bg-edge__route-handle:hover .bg-edge__route-mark {
+  fill: var(--bg-waypoint);
 }
 
 .bg-edge__waypoint-hit {

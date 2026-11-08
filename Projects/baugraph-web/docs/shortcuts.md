@@ -6,6 +6,9 @@
 | `⌥` + drag | Ignore the grid and the alignment guides |
 | `Shift` + drag a connection dot | Slide it along its side |
 | Drag a connection's label | Move it along the line, or off it (double-click to put it back) |
+| Drag a handle on a selected connection | Reroute it — move a leg, or pull out a bend ([more](./editor#rerouting-a-connection)) |
+| `Shift` + drag a selected connection | Add a bend point where you grabbed it |
+| `⌥⇧R` | Reset the selected connections to the automatic route |
 | Scroll / pinch | Pan / zoom |
 | `F` | Fit the view to the diagram |
 | `B` | Open or close the palette overview — every node type and technology at once |

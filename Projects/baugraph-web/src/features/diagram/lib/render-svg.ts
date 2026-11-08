@@ -855,6 +855,8 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
   // are excluded too: they are not part of the architecture, just drawn over it.
   const solids = doc.nodes.filter((n) => n.kind !== 'zone' && n.kind !== 'annotation')
   const byId = new Map(doc.nodes.map((n) => [n.id, n]))
+  // A zone draws its own frame, whatever `shape` it carries: square-sided.
+  const shapeOf = (n: DiagramNode | undefined) => (n && n.kind !== 'zone' ? n.shape : undefined)
   for (const edge of doc.edges) {
     const source = boxes.get(edge.source)
     const target = boxes.get(edge.target)
@@ -876,6 +878,8 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
         route: edge.route,
         obstacles,
         waypoints: edge.waypoints,
+        sourceShape: shapeOf(byId.get(edge.source)),
+        targetShape: shapeOf(byId.get(edge.target)),
       }),
     )
   }

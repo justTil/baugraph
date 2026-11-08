@@ -808,9 +808,25 @@ function setRouting(
                 )
               "
             />
-            <p v-if="edge.data!.waypoints?.length" class="text-muted-foreground text-[11px]">
-              Drag a solid point to move it, a dashed one to add a new bend.
+            <p class="text-muted-foreground text-[11px] leading-snug">
+              <template v-if="edge.data!.route === 'orthogonal'">
+                Drag a bar on the selected line to move that segment.
+              </template>
+              <template v-else>Drag a dashed dot on the selected line to bend it there.</template>
+              <template v-if="edge.data!.waypoints?.length">
+                Drag a bend point to move it; double-click it to remove it.
+              </template>
             </p>
+            <Button
+              v-if="edge.data!.waypoints?.length"
+              variant="outline"
+              size="sm"
+              class="w-full"
+              @click="withCommit(() => updateEdgeData(edge!.id, { waypoints: undefined }))"
+            >
+              <RotateCcw />
+              Reset to automatic route
+            </Button>
           </div>
           <div class="space-y-1.5">
             <Label class="text-xs">Line</Label>

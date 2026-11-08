@@ -4,8 +4,10 @@ import {
   edgeGeometry,
   labelAnchor,
   labelFoot,
+  moveSegment,
   pointAlong,
   projectOnto,
+  tidyWaypoints,
 } from '@/features/diagram/lib/edge-path'
 
 /** Two nodes stacked one above the other, with a gap of 60..140 between them. */
@@ -182,13 +184,14 @@ describe('measuring along a connection', () => {
   })
 
   it('walks a polyline round its corners', () => {
-    const g = edgeGeometry(a, b, {
+    const lower: Box = { x: 300, y: 200, width: 100, height: 100 }
+    const g = edgeGeometry(a, lower, {
       sourceSide: 'right',
       targetSide: 'left',
       route: 'orthogonal',
       waypoints: [{ x: 200, y: 50 }, { x: 200, y: 250 }],
     })
-    // 98 across, 200 down, 98 back up-and-across: the middle is on the down leg.
+    // 98 across, 200 down, 98 across: the middle is on the down leg.
     const p = pointAlong(g, 0.5)
     expect(p.x).toBeCloseTo(200)
     expect(p.y).toBeGreaterThan(50)
@@ -239,5 +242,193 @@ describe('measuring along a connection', () => {
     expect(labelFoot(straight, 0.25)).toBeNull()
     expect(labelFoot(straight, 0.25, { x: 0, y: 0 })).toBeNull()
     expect(labelFoot(straight)).toBeNull()
+  })
+})
+
+describe('manual orthogonal routing', () => {
+  const a: Box = { x: 0, y: 0, width: 100, height: 100 }
+  const b: Box = { x: 300, y: 200, width: 100, height: 100 }
+  const square = (points: Vec[]) =>
+    points.every(
+      (p, i) =>
+        i === 0 || Math.abs(p.x - points[i - 1]!.x) < 0.5 || Math.abs(p.y - points[i - 1]!.y) < 0.5,
+    )
+
+  it('never draws a diagonal, however the bend points sit', () => {
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      route: 'orthogonal',
+      waypoints: [{ x: 180, y: 140 }],
+    })
+    expect(square(g.points!)).toBe(true)
+    // Leaves along the source's normal, arrives along the target's.
+    expect(g.points![1]!.y).toBe(g.start.y)
+    expect(g.points!.at(-2)!.y).toBe(g.end.y)
+  })
+
+  it('leaves straight and manual straight and curved lines exactly as placed', () => {
+    for (const route of ['straight', 'curved'] as const) {
+      const g = edgeGeometry(a, b, {
+        sourceSide: 'right',
+        targetSide: 'left',
+        route,
+        waypoints: [{ x: 180, y: 140 }],
+      })
+      expect(g.points).toHaveLength(3)
+    }
+  })
+
+  it('slides a free end along its side to meet the first bend head-on', () => {
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      route: 'orthogonal',
+      waypoints: [{ x: 200, y: 30 }, { x: 200, y: 260 }],
+    })
+    expect(g.start.y).toBe(30)
+    expect(g.end.y).toBe(260)
+    expect(g.startSlide).toEqual({ axis: 'y', lo: 8, hi: 92 })
+  })
+
+  it('holds an end that sits on one of several points', () => {
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      sourcePorts: { right: 3 },
+      sourcePort: 2,
+      route: 'orthogonal',
+      waypoints: [{ x: 200, y: 30 }, { x: 200, y: 250 }],
+    })
+    expect(g.startSlide).toBeUndefined()
+    expect(g.start.y).toBe(50)
+    expect(square(g.points!)).toBe(true)
+  })
+
+  it('slides only along the straight part of an outline', () => {
+    const route = (sourceShape: 'circle' | 'pill' | 'round' | 'cylinder') =>
+      edgeGeometry(a, b, {
+        sourceSide: 'right',
+        targetSide: 'left',
+        sourceShape,
+        route: 'orthogonal',
+        waypoints: [{ x: 200, y: 30 }, { x: 200, y: 250 }],
+      })
+    // A circle and a pill's round end curve away from the box: the end stays
+    // where the outline meets it, and the line jogs out to the bend instead.
+    for (const shape of ['circle', 'pill'] as const) {
+      const g = route(shape)
+      expect(g.startSlide).toBeUndefined()
+      expect(g.start.y).toBe(50)
+    }
+    // A rounded box is straight between its corners; a cylinder down its sides.
+    expect(route('round').startSlide).toEqual({ axis: 'y', lo: 16, hi: 84 })
+    expect(route('round').start.y).toBe(30)
+    expect(route('cylinder').startSlide).toBeDefined()
+  })
+
+  it('offers no slide on a line that is not orthogonal', () => {
+    const g = edgeGeometry(a, b, { sourceSide: 'right', targetSide: 'left', route: 'straight' })
+    expect(g.startSlide).toBeUndefined()
+  })
+})
+
+describe('moving a segment', () => {
+  // s → across → down → across → t, the shape the router draws between two
+  // nodes that are offset from each other.
+  const points: Vec[] = [
+    { x: 102, y: 50 },
+    { x: 200, y: 50 },
+    { x: 200, y: 250 },
+    { x: 298, y: 250 },
+  ]
+  const start = { axis: 'y' as const, lo: 8, hi: 92 }
+  const end = { axis: 'y' as const, lo: 208, hi: 292 }
+
+  it('moves a middle leg sideways, taking both corners with it', () => {
+    expect(moveSegment(points, 1, 240, { start, end })).toEqual([
+      { x: 240, y: 50 },
+      { x: 240, y: 250 },
+    ])
+  })
+
+  it('lets a free end slide to follow a leg that leaves from it', () => {
+    // Still on the side: only the corner moves; the end slides at render time.
+    expect(moveSegment(points, 0, 70, { start, end })).toEqual([
+      { x: 200, y: 70 },
+      { x: 200, y: 250 },
+    ])
+  })
+
+  it('puts a jog in by the node once the side runs out', () => {
+    const next = moveSegment(points, 0, -40, { start, end })
+    // Out from the end along the leg, over to the moved line, then on as before.
+    expect(next).toEqual([
+      { x: 124, y: 8 },
+      { x: 124, y: -40 },
+      { x: 200, y: -40 },
+      { x: 200, y: 250 },
+    ])
+  })
+
+  it('jogs straight away at an end that cannot slide', () => {
+    const next = moveSegment(points, 2, 230, {})
+    expect(next).toEqual([
+      { x: 200, y: 50 },
+      { x: 200, y: 230 },
+      { x: 276, y: 230 },
+      { x: 276, y: 250 },
+    ])
+  })
+
+  it('keeps a single straight leg manual when both ends just slide', () => {
+    const line: Vec[] = [
+      { x: 102, y: 50 },
+      { x: 298, y: 50 },
+    ]
+    const both = { axis: 'y' as const, lo: 8, hi: 92 }
+    expect(moveSegment(line, 0, 60, { start: both, end: both })).toEqual([{ x: 200, y: 60 }])
+  })
+
+  it('stays square end to end once drawn', () => {
+    const a: Box = { x: 0, y: 0, width: 100, height: 100 }
+    const b: Box = { x: 300, y: 200, width: 100, height: 100 }
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      route: 'orthogonal',
+      waypoints: moveSegment(points, 0, -40, { start, end }),
+    })
+    for (let i = 1; i < g.points!.length; i++) {
+      const p = g.points![i]!
+      const q = g.points![i - 1]!
+      expect(Math.abs(p.x - q.x) < 0.5 || Math.abs(p.y - q.y) < 0.5).toBe(true)
+    }
+    expect(g.start.y).toBe(8)
+  })
+})
+
+describe('tidying bend points', () => {
+  it('merges a leg dropped in line with its neighbour', () => {
+    const s = { x: 102, y: 50 }
+    const t = { x: 298, y: 50 }
+    const bends: Vec[] = [
+      { x: 150, y: 50 },
+      { x: 150, y: 50 },
+      { x: 250, y: 50 },
+      { x: 250, y: 120 },
+      { x: 260, y: 120 },
+    ]
+    expect(tidyWaypoints(s, bends, t)).toEqual([
+      { x: 250, y: 50 },
+      { x: 250, y: 120 },
+      { x: 260, y: 120 },
+    ])
+  })
+
+  it('never empties the list, which would hand the line back to the router', () => {
+    const s = { x: 102, y: 50 }
+    const t = { x: 298, y: 50 }
+    expect(tidyWaypoints(s, [{ x: 200, y: 50 }], t)).toEqual([{ x: 200, y: 50 }])
   })
 })

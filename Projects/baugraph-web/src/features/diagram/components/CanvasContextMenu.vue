@@ -129,6 +129,9 @@ const {
   setNodeTech,
   updateEdgeData,
   reverseEdge,
+  resetRouting,
+  selectionEdgeIds,
+  isManuallyRouted,
   resetLabelPosition,
   resetPortPositions,
   reorderNode,
@@ -204,6 +207,13 @@ function act(fn: () => void) {
   endCoalesce()
   fn()
 }
+
+/** Connections in the selection that were routed by hand — what *Reset routing* would touch. */
+const manualInSelection = computed(() => selectionEdgeIds().filter(isManuallyRouted))
+/** Every connection on the canvas that was routed by hand. */
+const manualEverywhere = computed(() =>
+  edges.value.map((e) => e.id).filter(isManuallyRouted),
+)
 
 const SHAPE_LABELS: Record<string, string> = {
   rect: 'Rectangle',
@@ -623,10 +633,11 @@ function copySelectionIds() {
       </ContextMenuItem>
       <ContextMenuItem
         :disabled="!edge.data?.waypoints?.length"
-        @select="act(() => updateEdgeData(edge!.id, { waypoints: undefined }))"
+        @select="act(() => resetRouting([edge!.id]))"
       >
         <RotateCcw />
-        Reset routing
+        Reset to automatic route
+        <ContextMenuShortcut>⌥⇧R</ContextMenuShortcut>
       </ContextMenuItem>
       <ContextMenuItem
         v-if="edge.data?.label || edge.data?.labelInfo"
@@ -901,6 +912,14 @@ function copySelectionIds() {
         <Waypoints />
         Animate message through selection
       </ContextMenuItem>
+      <ContextMenuItem
+        :disabled="!manualInSelection.length"
+        @select="act(() => resetRouting(manualInSelection))"
+      >
+        <RotateCcw />
+        Reset routing{{ manualInSelection.length ? ` (${manualInSelection.length})` : '' }}
+        <ContextMenuShortcut>⌥⇧R</ContextMenuShortcut>
+      </ContextMenuItem>
 
       <ContextMenuSeparator />
 
@@ -1046,6 +1065,13 @@ function copySelectionIds() {
         <Scaling />
         Resize every node to fit
         <ContextMenuShortcut>⇧⌘F</ContextMenuShortcut>
+      </ContextMenuItem>
+      <ContextMenuItem
+        :disabled="!manualEverywhere.length"
+        @select="act(() => resetRouting(manualEverywhere))"
+      >
+        <RotateCcw />
+        Reset every connection's route
       </ContextMenuItem>
 
       <ContextMenuSeparator />

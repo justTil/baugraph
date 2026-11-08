@@ -91,6 +91,9 @@ const {
   alignWaypoints,
   clearWaypointSelection,
   removeSelectedWaypoints,
+  selectionEdgeIds,
+  isManuallyRouted,
+  resetRouting,
   selectedNodes,
   selectedEdges,
   commit,
@@ -177,16 +180,19 @@ const resizingNode = computed(() => {
 const canAlignWaypoints = computed(() => selectedWaypoints.value.length >= 2)
 
 /**
- * Shown while a single manually-routed connection is selected: adding a bend
- * point is a shift-click, and nothing on the canvas says so on its own. Held
- * back while an end is being dragged loose — that gesture has its own indicator
- * and the hint would only crowd it.
+ * Shown while a single connection is selected: the handles on it say they can
+ * be dragged, but not that a shift-click adds a bend anywhere, or how to undo
+ * the whole thing. Held back while an end is being dragged loose — that
+ * gesture has its own indicator and the hint would only crowd it.
  */
 const showWaypointHint = computed(
+  () => !reconnectingEdge.value && !presenting.value && selectedEdges.value.length === 1,
+)
+
+/** Whether the connection the hint is about has been routed by hand. */
+const hintManual = computed(
   () =>
-    !reconnectingEdge.value &&
-    selectedEdges.value.length === 1 &&
-    !!(selectedEdges.value[0]!.data as { waypoints?: unknown[] } | undefined)?.waypoints?.length,
+    !!(selectedEdges.value[0]?.data as { waypoints?: unknown[] } | undefined)?.waypoints?.length,
 )
 
 /** The last palette item used, repeated by a double-click on empty canvas. */
@@ -807,6 +813,18 @@ function onKeyDown(event: KeyboardEvent) {
     return
   }
 
+  // ⌥⇧R hands the selected connections — and the ones between selected nodes
+  // — back to the router. Matched by `code`: on a Mac, ⌥ turns the key itself
+  // into a different character.
+  if (event.altKey && event.shiftKey && event.code === 'KeyR') {
+    const ids = selectionEdgeIds().filter(isManuallyRouted)
+    if (!ids.length) return
+    event.preventDefault()
+    commit()
+    endCoalesce()
+    resetRouting(ids)
+    return
+  }
   if (event.key === '3' && !event.altKey) {
     view3d.value = !view3d.value
     return
@@ -1162,15 +1180,23 @@ watch(view3d, (on) => {
         >
           <div
             v-if="showWaypointHint"
-            class="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2"
+            class="pointer-events-none absolute bottom-16 left-1/2 z-30 -translate-x-1/2"
           >
             <div
               class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-lg"
               :style="{ background: theme.bg, borderColor: theme.selection, color: theme.ink }"
             >
               <Waypoints :size="14" :style="{ color: theme.selection }" />
-              Hold <kbd class="rounded border px-1 font-sans text-[11px]">Shift</kbd> and click the line to
-              add a bend point
+              <template v-if="hintManual">
+                Drag the handles to reroute ·
+                <kbd class="rounded border px-1 font-sans text-[11px]">⌥⇧R</kbd> resets to the
+                automatic route
+              </template>
+              <template v-else>
+                Drag a handle on the line to reroute it ·
+                <kbd class="rounded border px-1 font-sans text-[11px]">Shift</kbd>-click to add a
+                bend
+              </template>
             </div>
           </div>
         </Transition>

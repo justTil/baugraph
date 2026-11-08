@@ -185,7 +185,10 @@ All in service of readable diffs:
   this format had before manual routing existed. Giving an edge one or more
   `waypoints` switches it to manual: the line is drawn straight through them,
   source to target, with no obstacle avoidance at all — the file is stating
-  a route, not asking for one. Omitting the key, or writing `[]`, means
+  a route, not asking for one. An `orthogonal` edge stays right-angled: where
+  two of its points do not line up, a corner is drawn in between, and an end
+  on a side with a single connection point slides along the side's straight
+  part to meet the first or last point head-on. Omitting the key, or writing `[]`, means
   automatic. Each point stays on its own line, the same reasoning as
   `position` and `size`: reshaping a connection should touch one line, not
   four.

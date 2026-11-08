@@ -1829,6 +1829,43 @@ function createDiagramStore(documentId: string) {
     )
   }
 
+  /** Whether a connection has been routed by hand — carries bend points of its own. */
+  function isManuallyRouted(id: string): boolean {
+    return !!(edges.value.find((e) => e.id === id)?.data as EdgeData | undefined)?.waypoints?.length
+  }
+
+  /**
+   * The connections a "reset routing" on the current selection is about: the
+   * ones selected, and the ones running between selected nodes — a rubber band
+   * over part of a diagram picks up its nodes, and the lines between them are
+   * what the user is looking at.
+   */
+  function selectionEdgeIds(): string[] {
+    const ids = new Set(selectedEdges.value.map((e) => e.id))
+    for (const id of edgesWithin(selectedNodes.value.map((n) => n.id))) ids.add(id)
+    return [...ids]
+  }
+
+  /**
+   * Hands connections back to the router: their bend points are dropped and
+   * they are routed around everything again, exactly as a connection that was
+   * never touched. Connections already routed automatically are left alone, so
+   * nothing changes — and nothing is marked edited — when there is nothing to
+   * reset. Returns how many were reset. Like every other mutation here, the
+   * caller takes the undo step.
+   */
+  function resetRouting(ids: Iterable<string>): number {
+    const targets = new Set(ids)
+    let count = 0
+    const next = edges.value.map((e) => {
+      if (!targets.has(e.id) || !(e.data as EdgeData | undefined)?.waypoints?.length) return e
+      count++
+      return { ...e, data: { ...(e.data as EdgeData), waypoints: undefined } }
+    })
+    if (count) edges.value = next
+    return count
+  }
+
   /**
    * Turns a connection round. Only which way it points changes: bend points are
    * walked in the new direction and a moved label is measured from the new
@@ -2040,6 +2077,9 @@ function createDiagramStore(documentId: string) {
     shiftWaypointSelectionForRemove,
     alignWaypoints,
     removeSelectedWaypoints,
+    isManuallyRouted,
+    selectionEdgeIds,
+    resetRouting,
     // actions
     markSaved,
     commit,
