@@ -28,6 +28,25 @@ where a document broke — `baugraph 1.28.0 > valid fixtures > … — parses`.
 - **invalid** — every file must fail `safeParse`. Give it a filename that says
   what makes it invalid.
 
+## Route goldens
+
+A file that still *parses* can still be *drawn* differently. `tests/golden/`
+holds what each release's connection router drew for every diagram here (and
+the sample diagrams): `routes-<release>.json`, recorded from that release's
+own `edge-path.ts` straight out of git:
+
+```
+npx vite-node tests/golden/generate-routes.ts <git-ref> <release>
+npx vite-node tests/golden/generate-routes.ts 0a3c8e3 1.34.0
+```
+
+`tests/golden/routes.test.ts` holds today's router to it: automatic lines,
+and manual straight and curved ones, must come out the same to the character;
+manual orthogonal lines must stay square, run through every stored bend
+point and keep their sides. Record a golden once a release ships, and never
+regenerate an existing one to make a failing test pass — a failure there is a
+diagram on someone's disk that moved.
+
 ## Adding the current release
 
 ```

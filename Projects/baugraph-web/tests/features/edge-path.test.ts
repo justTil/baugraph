@@ -267,6 +267,30 @@ describe('manual orthogonal routing', () => {
     expect(g.points!.at(-2)!.y).toBe(g.end.y)
   })
 
+  it('turns at a corner rather than doubling back on itself', () => {
+    // Up to the first point, then down to the second: carrying straight on
+    // up first would have to come straight back down over the same line.
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      route: 'orthogonal',
+      waypoints: [{ x: 180, y: 20 }, { x: 240, y: 260 }],
+    })
+    expect(square(g.points!)).toBe(true)
+    const ys = g.points!.slice(1, 4).map((p) => p.y)
+    expect(ys).toEqual([20, 20, 260])
+  })
+
+  it('reads sub-pixel drift as lined up, without a corner too small to see', () => {
+    const g = edgeGeometry(a, b, {
+      sourceSide: 'right',
+      targetSide: 'left',
+      route: 'orthogonal',
+      waypoints: [{ x: 200, y: 50 }, { x: 200.6, y: 250.4 }],
+    })
+    expect(g.points).toHaveLength(4)
+  })
+
   it('leaves straight and manual straight and curved lines exactly as placed', () => {
     for (const route of ['straight', 'curved'] as const) {
       const g = edgeGeometry(a, b, {

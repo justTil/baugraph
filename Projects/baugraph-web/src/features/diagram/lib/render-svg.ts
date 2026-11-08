@@ -836,23 +836,24 @@ export interface DocumentFrames {
   dispose(): void
 }
 
-export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): DocumentFrames {
-  const theme = diagramTheme(doc.canvas.theme)
-  const boxes = absoluteBoxes(doc)
-
-  const zones = doc.nodes
-    .filter((n) => n.kind === 'zone')
-    .map((n) => renderZone(n, boxes.get(n.id)!, nodePaint(n, theme)))
-    .join('')
-
-  // Routed once and kept: the connections are drawn from these, and so are the
-  // messages that travel them, which is what stops the two disagreeing.
+/**
+ * Every connection of `doc`, routed the way the export draws it.
+ *
+ * Connections route around the nodes, so the same obstacle set the canvas
+ * works from is handed over here — an export that re-drew a line straight
+ * through a box would not match what was on screen. Zones are excluded: they
+ * are containers the connections legitimately run in and out of. Annotations
+ * are excluded too: they are not part of the architecture, just drawn over it.
+ *
+ * `router` is only ever swapped by the routing compatibility tests, which run
+ * a released router over the very same inputs (see `tests/golden`).
+ */
+export function routeEdges(
+  doc: DiagramDocument,
+  boxes: Map<string, Box> = absoluteBoxes(doc),
+  router: typeof edgeGeometry = edgeGeometry,
+): Map<string, EdgeGeometry> {
   const geometries = new Map<string, EdgeGeometry>()
-  // Connections route around the nodes, so the same obstacle set the canvas
-  // works from is handed over here — an export that re-drew a line straight
-  // through a box would not match what was on screen. Zones are excluded: they
-  // are containers the connections legitimately run in and out of. Annotations
-  // are excluded too: they are not part of the architecture, just drawn over it.
   const solids = doc.nodes.filter((n) => n.kind !== 'zone' && n.kind !== 'annotation')
   const byId = new Map(doc.nodes.map((n) => [n.id, n]))
   // A zone draws its own frame, whatever `shape` it carries: square-sided.
@@ -866,7 +867,7 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
       .map((n) => boxes.get(n.id)!)
     geometries.set(
       edge.id,
-      edgeGeometry(source, target, {
+      router(source, target, {
         sourceSide: edge.sourceSide,
         targetSide: edge.targetSide,
         sourcePorts: byId.get(edge.source)?.ports,
@@ -883,6 +884,21 @@ export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): 
       }),
     )
   }
+  return geometries
+}
+
+export function documentFrames(doc: DiagramDocument, options: SvgOptions = {}): DocumentFrames {
+  const theme = diagramTheme(doc.canvas.theme)
+  const boxes = absoluteBoxes(doc)
+
+  const zones = doc.nodes
+    .filter((n) => n.kind === 'zone')
+    .map((n) => renderZone(n, boxes.get(n.id)!, nodePaint(n, theme)))
+    .join('')
+
+  // Routed once and kept: the connections are drawn from these, and so are the
+  // messages that travel them, which is what stops the two disagreeing.
+  const geometries = routeEdges(doc, boxes)
 
   // Each label's chip, laid out once: drawn from below, and — for a label that
   // was moved, and so may sit well clear of every node — counted into the

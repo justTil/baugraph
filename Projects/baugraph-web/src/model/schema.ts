@@ -11,6 +11,7 @@ import {
   LINE_STYLES,
   LINE_WIDTHS,
   MAX_PORTS,
+  MAX_WAYPOINTS,
   ROUTES,
   SHAPE_KEYS,
   SIDES,
@@ -154,7 +155,7 @@ export const edgeSchema = z.object({
   color: z.enum(COLOR_KEYS).nullable().default(EDGE_DEFAULTS.color),
   // No `.min(1)`: a hand-written `[]` is harmless and means the same as
   // omitting the key entirely — automatic routing.
-  waypoints: z.array(vec2Schema).max(20).optional(),
+  waypoints: z.array(vec2Schema).max(MAX_WAYPOINTS).optional(),
   data: metadataSchema.optional(),
 })
 

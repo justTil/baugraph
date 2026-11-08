@@ -60,8 +60,11 @@ All notable changes to this project will be documented in this file.
 
 - **Manually routed orthogonal connections are always drawn right-angled.**
   Bend points that do not line up used to be joined by a diagonal; a corner
-  is now drawn in between, in the SVG export too. Straight and curved
-  connections are unchanged.
+  is now drawn in between, in the SVG export too, turning rather than
+  doubling back. Points out of line by less than a pixel — the drift a
+  hand-dragged point picks up — count as lined up, so a file from an earlier
+  version gains no corners too small to see. Automatic connections, and
+  straight and curved ones, are drawn exactly as before.
 - The flow editor's *When one node feeds several* setting is now the *Fan
   out* / *One by one* choice of the **Order** switch.
 - **Baugraph is now licensed under the Apache License 2.0** instead of MIT.

@@ -68,6 +68,12 @@ export type PortSide = (typeof PORT_SIDES)[number]
 /** Most connection points one side of a node may carry. */
 export const MAX_PORTS = 6
 
+/**
+ * Most bend points one connection may carry. A file over it does not open, so
+ * the editor refuses any reroute that would go past it rather than save one.
+ */
+export const MAX_WAYPOINTS = 20
+
 /** How many connection points each side of a node offers. */
 export type NodePorts = Record<PortSide, number>
 

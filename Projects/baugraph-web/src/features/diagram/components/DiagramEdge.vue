@@ -10,6 +10,7 @@ import { useDiagram } from '@/features/diagram/composables/useDiagram'
 import { useFlows } from '@/features/diagram/composables/useFlows'
 import FlowTokens from '@/features/diagram/components/FlowTokens.vue'
 import { usePresentation } from '@/features/workspace/composables/usePresentation'
+import { MAX_WAYPOINTS } from '@/model'
 import type { SlideRange, Vec } from '@/features/diagram/lib/edge-path'
 import {
   arrowHeadPath,
@@ -485,7 +486,8 @@ function forgetWaypointSelection() {
  * point lands on the line as it is drawn.
  */
 function startAddWaypoint(event: PointerEvent) {
-  if (event.button !== 0 || !event.shiftKey) return
+  // One more point would make a file that no longer opens (see `MAX_WAYPOINTS`).
+  if (event.button !== 0 || !event.shiftKey || bends.value.length >= MAX_WAYPOINTS) return
   event.stopPropagation()
   commit()
   endCoalesce()
@@ -572,11 +574,15 @@ const routeHandles = computed<RouteHandle[]>(() => {
   }
   const g = geometry.value
   const zoom = viewport.value.zoom || 1
+  // A route that would need more bend points than a file may hold cannot be
+  // taken over, and one already at the limit has no room for another bend.
+  const room = MAX_WAYPOINTS - bends.value.length
+  const orthogonal = props.data.route === 'orthogonal'
+  if (room < 0 || (room === 0 && !orthogonal)) return []
   // A curve the router drew as one sweep has no legs: its one handle is the
   // middle of the curve, not the middle of the chord under it.
   if (!g.points) return [{ kind: 'bend', index: 0, at: g.mid, vertical: false }]
 
-  const orthogonal = props.data.route === 'orthogonal'
   const points = routePoints.value
   const lastLeg = points.length - 2
   const out: RouteHandle[] = []
@@ -663,9 +669,11 @@ function onRouteHandleMove(event: PointerEvent) {
   // around it; ⌥ lets go of the grid, the same as it does for a node's drag.
   const raw = handle.vertical ? handle.at.x + dx : handle.at.y + dy
   const value = event.altKey ? raw : snap(raw)
-  updateEdgeData(props.id, {
-    waypoints: moveSegment(drag.points, handle.index, value, drag.slides),
-  })
+  const next = moveSegment(drag.points, handle.index, value, drag.slides)
+  // A jog by the node adds corners; past the limit a file would no longer
+  // open, so the leg stays at the last place that still fits.
+  if (next.length > MAX_WAYPOINTS) return
+  updateEdgeData(props.id, { waypoints: next })
 }
 
 function stopRouteHandle() {

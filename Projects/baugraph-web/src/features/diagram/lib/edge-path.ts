@@ -1042,33 +1042,49 @@ function slideOnto(a: Anchor, range: SlideRange | undefined, p: Vec | undefined)
 const MANUAL_STUB = 22
 
 /**
+ * How far apart two bend points may sit across a leg and still count as lined
+ * up. Points dragged by hand drift by a fraction of a pixel — files written
+ * before connectors were kept square are full of them — and squaring that
+ * drift off would only put in a corner too small to see.
+ */
+const ALIGNED = 1
+
+/**
  * Keeps a manually routed orthogonal connector square.
  *
  * Bend points placed by hand rarely line up on their own, and an orthogonal
  * line drawn straight between two that do not would come out diagonal. Each
  * such leg is broken into two at a right angle instead. The corner is chosen
  * so the line keeps going the way it already was before it turns — leaving a
- * node along the node's own normal — except on the last leg, which turns
- * early enough to arrive at the target along the target's normal.
+ * node along the node's own normal — unless that would send it back the way
+ * it came, when it turns first. The last leg turns early enough to arrive at
+ * the target along the target's normal.
  */
-function orthogonalize(points: Vec[], startHorizontal: boolean, endHorizontal: boolean): Vec[] {
+function orthogonalize(points: Vec[], startNormal: Vec, endNormal: Vec): Vec[] {
   const out: Vec[] = [points[0]!]
-  /** Axis of the leg that just arrived — at the start, the source side's own normal. */
-  let horizontal = startHorizontal
+  /** Direction of the leg that just arrived — at the start, straight out of the node. */
+  let dir: Vec = { x: startNormal.x, y: startNormal.y }
   const last = points.length - 1
   for (let i = 1; i <= last; i++) {
     const a = out.at(-1)!
     const b = points[i]!
-    const dx = Math.abs(b.x - a.x)
-    const dy = Math.abs(b.y - a.y)
-    if (dx > 0.5 && dy > 0.5) {
-      const first = i === last ? !endHorizontal : horizontal
-      out.push(first ? { x: b.x, y: a.y } : { x: a.x, y: b.y })
-      horizontal = !first
-    } else if (dx > 0.5) {
-      horizontal = true
-    } else if (dy > 0.5) {
-      horizontal = false
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    if (Math.abs(dx) >= ALIGNED && Math.abs(dy) >= ALIGNED) {
+      let acrossFirst: boolean
+      if (i === last) {
+        acrossFirst = endNormal.x === 0
+      } else {
+        const alongX = dir.x !== 0
+        const back = alongX ? Math.sign(dx) === -Math.sign(dir.x) : Math.sign(dy) === -Math.sign(dir.y)
+        acrossFirst = alongX !== back
+      }
+      out.push(acrossFirst ? { x: b.x, y: a.y } : { x: a.x, y: b.y })
+      dir = acrossFirst ? { x: 0, y: Math.sign(dy) } : { x: Math.sign(dx), y: 0 }
+    } else if (Math.abs(dx) >= ALIGNED) {
+      dir = { x: Math.sign(dx), y: 0 }
+    } else if (Math.abs(dy) >= ALIGNED) {
+      dir = { x: 0, y: Math.sign(dy) }
     }
     out.push(b)
   }
@@ -1230,7 +1246,7 @@ export function edgeGeometry(
   if (manual) {
     const through = [s, ...waypoints!, t]
     if (!orthogonal) return fromPolyline(through, DETOUR_RADIUS[route])
-    const square = orthogonalize(through, sa.normal.x !== 0, ta.normal.x !== 0)
+    const square = orthogonalize(through, sa.normal, ta.normal)
     return { ...fromPolyline(square, DETOUR_RADIUS.orthogonal), startSlide, endSlide }
   }
 
