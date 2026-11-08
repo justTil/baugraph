@@ -1,0 +1,249 @@
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn-vue/tailwind.css";
+
+/*
+ * Geist and Geist Mono, valsom's typefaces (SIL OFL 1.1, see
+ * src/assets/fonts/OFL.txt). Served from our own origin rather than Google
+ * Fonts, so no visitor's IP leaves for a typeface and the VS Code webview has
+ * them offline. One variable file per family covers every weight.
+ */
+@font-face {
+    font-family: 'Geist';
+    src: url('./assets/fonts/Geist-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('./assets/fonts/GeistMono-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    /* Geist leads here and in `SANS` (src/features/diagram/lib/text.ts), which the canvas measures and exports with. */
+    --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-heading: var(--font-sans);
+    --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --color-brand: var(--brand);
+    --color-brand-strong: var(--brand-strong);
+    --color-brand-foreground: var(--brand-foreground);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-success: var(--success);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+ * The chrome is neutral; valsom orange is the one accent and has one job: it
+ * marks the brand (the BG tile) and what is current or selected — the focused
+ * tab, the latest release, a chosen swatch, a drop target. Buttons, switches
+ * and focus rings stay neutral, so orange is never confused with the red of an
+ * error, and there is never much of it on screen.
+ *
+ * `--brand` is for fills and strokes (3.4:1 on white, enough for shapes and
+ * large text); `--brand-strong` is for small orange text (5.0:1 on white).
+ */
+:root {
+    --brand: #ff4622;
+    --brand-strong: #d1320f;
+    --brand-foreground: #ffffff;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --success: oklch(0.596 0.145 163.225);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: var(--brand);
+    --sidebar-primary-foreground: var(--brand-foreground);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    /* On the dark ground the accent itself is legible at any size (5.8:1). */
+    --brand-strong: var(--brand);
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --success: oklch(0.723 0.153 163.225);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: var(--brand);
+    --sidebar-primary-foreground: var(--brand-foreground);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    @apply font-sans;
+    }
+}
+/*
+ * Dockview, wired to the shadcn tokens above rather than one of its bundled
+ * palettes, so the workspace follows `.dark` along with everything else.
+ * `src/features/workspace/lib/theme.ts` points dockview at this class name.
+ */
+.dockview-theme-baugraph {
+    --dv-group-view-background-color: var(--background);
+    --dv-tabs-and-actions-container-background-color: var(--muted);
+    --dv-tabs-and-actions-container-height: 34px;
+    --dv-tabs-and-actions-container-font-size: 13px;
+    --dv-tab-font-size: 13px;
+    --dv-tabs-container-scrollbar-color: var(--border);
+
+    --dv-activegroup-visiblepanel-tab-background-color: var(--background);
+    --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+    --dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
+    --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+    --dv-activegroup-visiblepanel-tab-color: var(--foreground);
+    --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+    --dv-inactivegroup-visiblepanel-tab-color: var(--muted-foreground);
+    --dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+    --dv-tab-divider-color: transparent;
+
+    --dv-separator-border: var(--border);
+    --dv-sash-color: transparent;
+    --dv-active-sash-color: var(--ring);
+    --dv-paneview-active-outline-color: var(--ring);
+    --dv-paneview-header-border-color: var(--border);
+    --dv-icon-hover-background-color: var(--accent);
+
+    /* Drop hints borrow the brand accent so a drag reads at a glance. */
+    --dv-drag-over-background-color: color-mix(in oklab, var(--brand) 12%, transparent);
+    --dv-drag-over-border-color: var(--brand);
+    --dv-drag-over-border: 2px solid var(--brand);
+    --dv-edge-dock-indicator-color: var(--brand);
+    --dv-smart-guides-color: var(--ring);
+
+    --dv-border-radius: var(--radius-md);
+    --dv-tab-border-radius: 0px;
+    --dv-sash-border-radius: 0px;
+    --dv-dropdown-border-radius: var(--radius-sm);
+    --dv-tab-margin: 0;
+    --dv-spacing-padding: 0px;
+
+    --dv-floating-border: 1px solid var(--border);
+    --dv-floating-group-border: 1px solid var(--border);
+    --dv-floating-box-shadow: 0 10px 30px oklch(0 0 0 / 25%), 0 2px 8px oklch(0 0 0 / 15%);
+    --dv-floating-titlebar-height: 22px;
+    --dv-floating-titlebar-background-color: var(--muted);
+    --dv-floating-titlebar-border-bottom: 1px solid var(--border);
+    --dv-floating-group-dragging-opacity: 0.6;
+
+    --dv-context-menu-background-color: var(--popover);
+    --dv-context-menu-color: var(--popover-foreground);
+
+    /*
+     * Above the app header (z-20) so a drag overlay is never clipped by it, but
+     * below the dialog layer (z-50) so a modal still covers the dock.
+     */
+    --dv-overlay-z-index: 40;
+}
+
+.dockview-theme-baugraph .dv-tabs-and-actions-container {
+    border-bottom: 1px solid var(--border);
+}
+
+/* The tab strip alone cannot say which split has focus, so the active tab does. */
+.dockview-theme-baugraph .dv-tab.dv-active-tab {
+    box-shadow: inset 0 2px 0 0 var(--muted-foreground);
+}
+
+.dockview-theme-baugraph .dv-active-group .dv-tab.dv-active-tab {
+    box-shadow: inset 0 2px 0 0 var(--brand);
+}
+
+.dockview-theme-baugraph .dv-tab:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+}

@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build the extension (debug)",
+      "detail": "Editor (Vite → extension/media) + host (esbuild → extension/dist), unminified and with sourcemaps",
+      "type": "npm",
+      "script": "extension:debug",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Watch the extension",
+      "detail": "Rebuilds both halves on change. Reload the Extension Development Host to pick changes up.",
+      "type": "npm",
+      "script": "extension:watch",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

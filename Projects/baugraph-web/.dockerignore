@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+.git
+.github
+.vscode
+.idea
+.run
+*.log
+*.local
+coverage
+__screenshots__

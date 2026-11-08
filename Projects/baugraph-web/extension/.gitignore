@@ -1,0 +1,7 @@
+# Built by `npm run extension:build` in the repository root.
+dist/
+media/
+schema/
+LICENSE
+NOTICE
+*.vsix

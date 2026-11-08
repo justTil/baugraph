@@ -1,0 +1,365 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import {
+  Box,
+  Check,
+  Copy,
+  Crosshair,
+  Grid3x3,
+  Magnet,
+  Maximize,
+  Moon,
+  Pause,
+  Pencil,
+  Play,
+  Presentation,
+  Redo2,
+  Sun,
+  Undo2,
+  Waypoints,
+  ZoomIn,
+  ZoomOut,
+} from '@lucide/vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import { Toggle } from '@/components/ui/toggle'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { HEADER_ACTIONS_SLOT_SELECTOR } from '@/components/layout/header-slot'
+import { useAppTheme } from '@/composables/useAppTheme'
+import { useDiagram } from '@/features/diagram/composables/useDiagram'
+import { useFlows } from '@/features/diagram/composables/useFlows'
+import { useLaserPointer } from '@/features/diagram/composables/useLaserPointer'
+import { useCanvas } from '@/features/diagram/composables/useCanvas'
+import { useDocumentFile } from '@/features/diagram/composables/useDocumentFile'
+import { usePresentation } from '@/features/workspace/composables/usePresentation'
+import { useView3D } from '@/features/diagram/composables/useView3D'
+import { AI_SKILLS_MARKDOWN } from '@/features/diagram/data/ai-skills.generated'
+
+const emit = defineEmits<{
+  (e: 'new' | 'open' | 'save' | 'export' | 'help'): void
+}>()
+
+const { documentId, meta, canvas, flows, canUndo, canRedo, dirty, undo, redo, commit, endCoalesce } =
+  useDiagram()
+const { dark: appDark } = useAppTheme()
+const { canOverwriteFiles, fileName } = useDocumentFile(documentId)
+
+/** What ⌘S will do, so the button can say it before it is pressed. */
+const saveHint = computed(() => {
+  const target = !canOverwriteFiles
+    ? 'Download the source file'
+    : fileName.value
+      ? `Save to ${fileName.value}`
+      : 'Save to a file…'
+  return dirty.value ? `${target} — unsaved changes (⌘S)` : `${target} (⌘S)`
+})
+const { paused, editorOpen: flowEditorOpen, openFlowEditor } = useFlows()
+const { active: laserActive } = useLaserPointer()
+const { presenting, toggle: togglePresentation } = usePresentation()
+const { zoomIn, zoomOut, fitView, viewport } = useCanvas()
+const { active: view3d, commands: view3dCommands } = useView3D()
+
+// The zoom row drives whichever view is on screen. A perspective camera has no
+// zoom percentage worth reading, so 3D says what it is instead.
+const zoomLabel = computed(() => (view3d.value ? '3D' : `${Math.round(viewport.value.zoom * 100)}%`))
+
+function zoom(by: 'in' | 'out') {
+  if (view3d.value) view3dCommands.value?.zoom(by === 'in' ? 0.8 : 1.25)
+  else if (by === 'in') zoomIn()
+  else zoomOut()
+}
+
+function fit() {
+  if (view3d.value) view3dCommands.value?.frame()
+  else fitView({ padding: 0.2 })
+}
+
+function onTitleInput() {
+  commit('meta.title')
+}
+
+/**
+ * Bound rather than left to `group-focus-within`: the pointer is still over the
+ * field after a click, and Tailwind's variant order lets the hover rule win.
+ */
+const editingTitle = ref(false)
+
+/**
+ * The field reference, both catalogues and the JSON Schema, generated from the
+ * same source the app runs on (see `scripts/generate-ai-skills.ts`) — copies
+ * everything an AI assistant needs to write a `.baugraph.json` by hand.
+ */
+const aiSkillsCopied = ref(false)
+
+async function copyAiSkills() {
+  await navigator.clipboard?.writeText(AI_SKILLS_MARKDOWN).catch(() => {})
+  aiSkillsCopied.value = true
+  setTimeout(() => (aiSkillsCopied.value = false), 1500)
+}
+</script>
+
+<template>
+  <!--
+    The title reads as a heading, so nothing about it says "type here". The
+    pencil is the affordance: visible at rest, brighter under the pointer, and
+    out of the way once the field has focus and the caret says it all.
+  -->
+  <Tooltip>
+    <TooltipTrigger as-child>
+      <div class="group/title relative shrink-0">
+        <Input
+          :model-value="meta.title"
+          class="hover:border-input focus-visible:border-input h-8 w-56 border-transparent pr-8 text-sm font-medium shadow-none"
+          placeholder="Untitled diagram"
+          spellcheck="false"
+          aria-label="Diagram name"
+          @update:model-value="meta.title = String($event)"
+          @input="onTitleInput"
+          @focus="editingTitle = true"
+          @blur="editingTitle = false, endCoalesce()"
+        />
+        <Pencil
+          v-show="!editingTitle"
+          class="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-3.5 -translate-y-1/2 opacity-50 transition-opacity group-hover/title:opacity-100"
+        />
+      </div>
+    </TooltipTrigger>
+    <TooltipContent>Rename this diagram</TooltipContent>
+  </Tooltip>
+
+  <Separator orientation="vertical" class="mx-1 h-4" />
+
+  <Tooltip>
+    <TooltipTrigger as-child>
+      <Button variant="ghost" size="icon" class="size-8" :disabled="!canUndo" @click="undo()">
+        <Undo2 />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>Undo (⌘Z)</TooltipContent>
+  </Tooltip>
+
+  <Tooltip>
+    <TooltipTrigger as-child>
+      <Button variant="ghost" size="icon" class="size-8" :disabled="!canRedo" @click="redo()">
+        <Redo2 />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>Redo (⇧⌘Z)</TooltipContent>
+  </Tooltip>
+
+  <Separator orientation="vertical" class="mx-1 h-4" />
+
+  <Button variant="ghost" size="icon" class="size-8" title="Zoom out" @click="zoom('out')">
+    <ZoomOut />
+  </Button>
+  <span class="text-muted-foreground w-11 text-center font-mono text-xs tabular-nums">
+    {{ zoomLabel }}
+  </span>
+  <Button variant="ghost" size="icon" class="size-8" title="Zoom in" @click="zoom('in')">
+    <ZoomIn />
+  </Button>
+
+  <Tooltip>
+    <TooltipTrigger as-child>
+      <Button variant="ghost" size="icon" class="size-8" @click="fit">
+        <Maximize />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>Fit to content (F)</TooltipContent>
+  </Tooltip>
+
+  <div class="ml-auto flex items-center gap-1">
+    <!--
+      Flows belong to the diagram, not to anything selected on it, so this is
+      where they are edited — one door, in the same place whatever is selected.
+      The editor docks under the canvas, so the same button puts it away again.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="h-8"
+          :class="{ 'bg-accent text-accent-foreground': flowEditorOpen }"
+          :aria-pressed="flowEditorOpen"
+          @click="flowEditorOpen ? (flowEditorOpen = false) : openFlowEditor()"
+        >
+          <Waypoints />
+          Message flows
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {{ flowEditorOpen ? 'Close the message flow editor' : 'Open the message flow editor' }}
+      </TooltipContent>
+    </Tooltip>
+
+    <!--
+      Only offered once there is something to stop. Freezing the messages is the
+      first thing wanted while working *on* a diagram that animates.
+    -->
+    <Tooltip v-if="flows.length">
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="sm" class="h-8" @click="paused = !paused">
+          <Play v-if="paused" />
+          <Pause v-else />
+          {{ paused ? 'Play flows' : 'Pause flows' }}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{{ paused ? 'Play message flows' : 'Pause message flows' }}</TooltipContent>
+    </Tooltip>
+
+    <!--
+      The diagram stood up in 3D, its messages arcing from node to node. A way
+      of looking, not an edit: the file does not change, and it opens flat again
+      next time.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="view3d"
+          aria-label="3D view"
+          @update:model-value="view3d = Boolean($event)"
+        >
+          <Box />
+          3D
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>3D view (3) — the diagram stood up, its messages in flight</TooltipContent>
+    </Tooltip>
+
+    <!--
+      Clears the nav, header and inspector off screen and, where the browser
+      allows it, claims the whole screen — for sharing just the diagram in a
+      call rather than the app around it.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="presenting"
+          aria-label="Presentation mode"
+          @update:model-value="togglePresentation()"
+        >
+          <Presentation />
+          Presentation
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>Presentation mode (P) — full screen for screen-sharing</TooltipContent>
+    </Tooltip>
+
+    <!--
+      A presentation aid: turns the cursor into a laser dot that leaves a fading
+      trail, for pointing something out in a meeting without touching the diagram.
+    -->
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="laserActive"
+          aria-label="Laser pointer"
+          @update:model-value="laserActive = Boolean($event)"
+        >
+          <Crosshair />
+          Laser pointer
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>Laser pointer (L) — hold to draw</TooltipContent>
+    </Tooltip>
+
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="canvas.snap"
+          aria-label="Snap to grid"
+          @update:model-value="canvas.snap = Boolean($event)"
+        >
+          <Magnet />
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>Snap to grid</TooltipContent>
+    </Tooltip>
+
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Toggle
+          size="sm"
+          :model-value="canvas.grid"
+          aria-label="Show grid"
+          @update:model-value="canvas.grid = Boolean($event)"
+        >
+          <Grid3x3 />
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>Show grid</TooltipContent>
+    </Tooltip>
+
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="size-8"
+          @click="appDark = !appDark"
+        >
+          <Sun v-if="appDark" />
+          <Moon v-else />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Dark mode</TooltipContent>
+    </Tooltip>
+
+    <Separator orientation="vertical" class="mx-1 h-4" />
+
+    <Button variant="ghost" size="icon" class="size-8" title="Help (?)" @click="emit('help')">
+      ?
+    </Button>
+  </div>
+
+  <!--
+    File-level actions live in the app-chrome row, next to the title, rather
+    than down here with the rest of the toolbar - they're what you reach for
+    with the least regard for what's on the canvas.
+  -->
+  <Teleport :to="HEADER_ACTIONS_SLOT_SELECTOR">
+    <Separator orientation="vertical" class="mx-1 h-4" />
+
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="sm" class="h-8" @click="copyAiSkills">
+          <Check v-if="aiSkillsCopied" />
+          <Copy v-else />
+          {{ aiSkillsCopied ? 'Copied' : 'Copy AI skills' }}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        The file format, both catalogues and the schema — paste it into an AI assistant so it can
+        write diagrams for you.
+      </TooltipContent>
+    </Tooltip>
+
+    <Separator orientation="vertical" class="mx-1 h-4" />
+
+    <Button variant="ghost" size="sm" class="h-8" @click="emit('new')">New</Button>
+    <Button variant="ghost" size="sm" class="h-8" @click="emit('open')">Open</Button>
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="sm" class="h-8" @click="emit('save')">
+          Save
+          <!-- A dot rather than an asterisk in the title: the file is behind,
+               the diagram itself is safe in the browser either way. Hidden from
+               assistive tech, which reads the tooltip instead. -->
+          <span
+            v-if="dirty"
+            class="bg-destructive ml-1.5 size-1.5 rounded-full"
+            aria-hidden="true"
+          />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{{ saveHint }}</TooltipContent>
+    </Tooltip>
+    <Button variant="outline" size="sm" class="h-8" @click="emit('export')">Export</Button>
+  </Teleport>
+</template>

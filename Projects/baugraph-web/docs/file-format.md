@@ -1,0 +1,210 @@
+# The .baugraph.json format
+
+A diagram is one JSON document, designed to produce readable diffs when
+committed next to the code it describes.
+
+```json
+{
+  "$schema": "/schema/baugraph-v1.schema.json",
+  "baugraph": "1.0",
+  "meta": { "title": "Order processing" },
+  "canvas": { "theme": "light", "grid": true, "snap": true, "snapSize": 10 },
+  "nodes": [
+    {
+      "id": "order-platform",
+      "kind": "zone",
+      "type": "vpc",
+      "tech": "aws",
+      "label": "Order platform",
+      "sublabel": "production",
+      "position": { "x": 300, "y": 60 },
+      "size": { "width": 620, "height": 430 }
+    },
+    {
+      "id": "order-db",
+      "type": "database",
+      "tech": "postgresql",
+      "label": "Order DB",
+      "sublabel": "primary",
+      "shape": "cylinder",
+      "color": "green",
+      "icon": "database",
+      "position": { "x": 300, "y": 50 },
+      "size": { "width": 168, "height": 70 },
+      "parent": "order-platform"
+    }
+  ],
+  "edges": [
+    {
+      "id": "api-gateway--order-service",
+      "source": "api-gateway",
+      "target": "order-service",
+      "sourceSide": "bottom",
+      "targetSide": "top",
+      "label": "POST /orders"
+    },
+    {
+      "id": "order-service--billing-adapter",
+      "source": "order-service",
+      "target": "billing-adapter",
+      "waypoints": [{ "x": 640, "y": 220 }, { "x": 640, "y": 340 }]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-order-placed",
+      "label": "Order placed",
+      "edges": [
+        "order-service--order-created",
+        "order-created--billing-adapter",
+        "order-created--notification-service",
+        "order-created--dead-letter-queue"
+      ],
+      "token": "envelope",
+      "style": {
+        "order-created--dead-letter-queue": { "color": "red", "token": "packet", "speed": 110 }
+      }
+    }
+  ]
+}
+```
+
+See [`examples/order-processing.baugraph.json`](https://github.com/justTil/baugraph/blob/main/examples/order-processing.baugraph.json)
+in the repository for a complete example.
+
+## Design decisions
+
+All in service of readable diffs:
+
+- **`type` and `tech` are catalogue ids**, not display text: `ibm_db2` in the
+  file, "IBM DB2" on screen. Renaming an entry in the catalogue changes every
+  diagram's labels without touching a single file, and a `grep` for
+  `"tech": "tibco_ems"` finds every diagram that depends on it. Ids the app
+  does not know are shown as written rather than dropped, so a file may name
+  a technology this build has never heard of.
+- **Ids are derived from labels** (`api-gateway`, `api-gateway-2`) and never
+  regenerated. Renaming a node does not rewrite every edge that references
+  it.
+- **Defaults are omitted on write** and filled back in on read. A file only
+  ever spells out what differs from the default, so `"line": "dashed"`
+  stands out.
+- **Keys are written in a fixed order** and coordinates are rounded, so
+  saving an unchanged diagram twice produces byte-identical output.
+- **Every array is sorted on write**, so a diagram has exactly one file no
+  matter who drew it or in what order. Nodes come out in hierarchy order —
+  a zone, then everything inside it, then the next zone — which also keeps a
+  parent ahead of its children. Connections are grouped by the node they
+  leave, then the one they reach; flows are ordered by id, and a flow's
+  `edges` follow the order the connections are written in above them. Keys
+  inside a `data` block are sorted too. None of this carries meaning: paint
+  order comes from a node's `kind`, and a flow's hops are derived from the
+  graph — so sorting costs nothing and takes "two people built the same
+  diagram in a different order" out of the diff entirely. A flow's `steps`
+  is the one list whose order *is* its meaning, so it is never sorted.
+- **`position` and `size` stay on one line**, keeping "moved a node" to a
+  one-line diff.
+- **A child's `position` is relative to its `parent` zone**, so moving a
+  zone touches one line instead of every node inside it. `parent` *is* the
+  grouping, and it chains: a zone may itself have a parent.
+- **A node's `ports` counts connection points, and nothing else.** Points
+  are spread evenly along the side they sit on, so `"ports": { "right": 4 }`
+  is the whole of what a fan-out stores — no coordinates to go stale when
+  the node is resized, and nothing at all for the sides that were left
+  alone. An edge's `sourcePort` / `targetPort` then names which of them an
+  end uses, counted from the top or the left and starting at 1; both are
+  omitted while the end is on `auto`, which places itself. A port a node no
+  longer offers falls back to the last one that exists rather than failing
+  to open.
+- **`portPositions` lists only the points that were moved.** Sliding a
+  connection point along its side writes where it now sits as a fraction of
+  the side — `"portPositions": { "right": { "2": 0.8 } }`, point 2 on the
+  right, 80% of the way down — and nothing for the points that were left
+  alone, which keep their even slots. A fraction rather than a coordinate, so
+  a moved point holds its place relative to the side when the node is
+  resized. The number is the point's identity, so the connections on it move
+  with it. A point the node no longer offers is ignored on open and dropped on
+  the next save; a node with no moved points writes no `portPositions` key.
+- **`locked` is an editing aid**, written only when true. It keeps a node
+  out of the way while you work on its neighbours and has no effect on
+  rendering or export.
+- **A flow names connections, not a timeline.** `edges` is a set of edge ids
+  and the traversal is derived from them, so a fan-out is four ids rather
+  than a hand-written schedule that would go stale the moment a node moved.
+  An order set by hand in the editor is the one exception, and it is kept
+  apart in `steps`: a list of steps, each a list of edge ids that travel at
+  the same time, e.g.
+  `"steps": [["client--api"], ["api--db"], ["db--api"], ["api--client"]]`.
+  Every id in it must be one of the flow's `edges`, and each may appear once;
+  any of `edges` it leaves out run after the last step. A flow following the
+  arrows writes no `steps` key.
+  Every id has to resolve: a flow pointing at a connection that is not there
+  is rejected on open, and the editor drops a flow whose last connection is
+  deleted rather than leaving one behind. A diagram with no flows writes no
+  `flows` key.
+- **`style` says only what differs.** A per-connection override carries just
+  the fields that are not the flow's own, so a connection meant to look like
+  the rest stores nothing at all rather than a copy that would go stale the
+  next time the flow's colour changed. Styling a connection the flow does
+  not travel is rejected on open, and an override is dropped along with the
+  connection it described.
+- **`data` on any node or edge is yours** — free-form metadata, round-tripped
+  untouched. Use it for ticket links, ownership, team conventions.
+- **`meta.authors` credits people, and only a name is required.** Each entry is
+  `{ "name": "…", "email": "…", "website": "…" }` — an address is a way to be
+  reached, not part of being the author, so both contact fields are optional
+  and an empty one is dropped on write. The list is written in crediting order
+  and is left as given: it is the one array the editor does not sort, because
+  who comes first is a decision the file is making. A diagram that credits
+  nobody writes no `authors` key at all, which is exactly what every file
+  written before this existed says — so none of them change on the next save.
+  Each author stays on one line, so adding or removing a credit is a one-line
+  diff.
+- **`labelInfo` is the long version of an edge's `label`.** A payload, an
+  SLA, a retry policy — anything too long to draw on the line. The editor
+  marks the label with an info icon and shows the text on hover (an SVG
+  export carries it as a `<title>`, so SVG viewers do the same). Newlines are
+  kept. An edge without it writes no `labelInfo` key, so every file written
+  before it existed stays exactly as it was.
+- **A moved label is a place along the line, not a coordinate.**
+  `labelPosition` is how far along the line the label sits, from `0` at the
+  source to `1` at the target, and `labelOffset` (`{ "x": …, "y": … }`, on one
+  line) is how far it was pulled off the line from there. Stored that way, a
+  label dragged next to one end stays next to that end — on the same side of
+  the line — however the nodes are moved later. A label that was never moved
+  writes neither key and sits in the middle of the line, exactly where labels
+  always have; one that sits on the line writes no `labelOffset`.
+- **3D is optional and on top.** A node's `extrusion` (`flat`, `low`,
+  `regular`, `tall`, `tower`) says how it stands in the [3D view](./3d-view) —
+  on the floor, raised on a post for `tall` and `tower`, or lying on its back
+  for `flat`. It is the only 3D key: the 3D view stands every node where its
+  `position` puts it, and the 2D canvas and every export ignore `extrusion`.
+  Omitted means `regular`, so a file that never set it is written exactly as
+  before.
+- **An edge routes itself unless `waypoints` says otherwise.** Every
+  connection is auto-routed around obstacles by default, the only behavior
+  this format had before manual routing existed. Giving an edge one or more
+  `waypoints` switches it to manual: the line is drawn straight through them,
+  source to target, with no obstacle avoidance at all — the file is stating
+  a route, not asking for one. An `orthogonal` edge stays right-angled: where
+  two of its points do not line up, a corner is drawn in between, and an end
+  on a side with a single connection point slides along the side's straight
+  part to meet the first or last point head-on. Omitting the key, or writing `[]`, means
+  automatic. Each point stays on its own line, the same reasoning as
+  `position` and `size`: reshaping a connection should touch one line, not
+  four.
+
+## Validating a diagram
+
+Every export validates against the bundled JSON Schema at
+[`/schema/baugraph-v1.schema.json`](https://baugraph.com/schema/baugraph-v1.schema.json).
+Point your editor at it via the `$schema` key for completion and inline
+errors while hand-editing. Opening a file in the app reports every problem
+it finds — dangling edge endpoints, duplicate ids, unknown parents — with
+the path to each one.
+
+The schema is generated from the same zod schema the app parses with
+(`src/model/schema.ts`), so the two cannot drift:
+
+```sh
+npm run schema:generate
+```

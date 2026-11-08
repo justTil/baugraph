@@ -1,0 +1,10 @@
+{
+  "baugraph": "1.0",
+  "meta": { "title": "Edge to nowhere" },
+  "nodes": [
+    { "id": "a", "position": { "x": 0, "y": 0 }, "size": { "width": 120, "height": 60 } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "a", "target": "ghost" }
+  ]
+}

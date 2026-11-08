@@ -1,0 +1,41 @@
+/*
+ * What the editor needs to sit inside a VS Code webview rather than a page.
+ *
+ * Only the frame is adjusted. Colours stay the app's own — the editor is a
+ * canvas, and a canvas that repaints itself in every user's theme is a canvas
+ * whose diagrams do not look the same twice. `.dark` follows VS Code's theme
+ * (see `VscodeEditor.vue`), which is as far as the host's palette reaches.
+ */
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/*
+ * A webview is not a document: the page itself never scrolls, the canvas and the
+ * panels inside it do. Without this, a dialog can push the whole editor down.
+ */
+body {
+  overscroll-behavior: none;
+}
+
+/*
+ * VS Code puts its own focus ring on the webview's `body` when the panel takes
+ * focus, which lands as an outline around the entire diagram.
+ */
+body:focus,
+body:focus-visible {
+  outline: none;
+}
+
+/*
+ * The workbench's scrollbars are drawn by VS Code, not by the page, so the ones
+ * in the palette and the inspector have to be asked for.
+ */
+* {
+  scrollbar-width: thin;
+}

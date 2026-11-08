@@ -1,0 +1,84 @@
+{
+  "$schema": "/schema/baugraph-v1.schema.json",
+  "baugraph": "1.0",
+  "meta": {
+    "title": "Untitled diagram"
+  },
+  "canvas": {
+    "theme": "light",
+    "grid": true,
+    "snap": true,
+    "snapSize": 10
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "label": "Start",
+      "shape": "pill",
+      "icon": "play",
+      "position": { "x": 140, "y": 190 },
+      "size": { "width": 130, "height": 56 }
+    },
+    {
+      "id": "step",
+      "type": "step",
+      "label": "Step",
+      "position": { "x": 550, "y": 184 },
+      "size": { "width": 150, "height": 62 }
+    },
+    {
+      "id": "decision",
+      "type": "decision",
+      "label": "Decision",
+      "shape": "diamond",
+      "color": "amber",
+      "icon": "split",
+      "position": { "x": 320, "y": 40 },
+      "size": { "width": 180, "height": 110 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "start--step",
+      "source": "start",
+      "target": "step",
+      "sourceSide": "right",
+      "targetSide": "left",
+      "waypoints": [
+        { "x": 380, "y": 299.5 },
+        { "x": 449.96, "y": 300.09 }
+      ]
+    },
+    {
+      "id": "start--decision",
+      "source": "start",
+      "target": "decision",
+      "sourceSide": "top",
+      "targetSide": "left"
+    },
+    {
+      "id": "decision--step",
+      "source": "decision",
+      "target": "step",
+      "sourceSide": "right",
+      "targetSide": "top"
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-start",
+      "label": "Start",
+      "edges": ["start--step"],
+      "speed": 100,
+      "count": 10,
+      "stream": true
+    },
+    {
+      "id": "flow-start-2",
+      "label": "Start",
+      "edges": ["start--decision", "decision--step"],
+      "color": "purple"
+    }
+  ]
+}

@@ -1,0 +1,1483 @@
+import type { NodePorts, PortPositions, PortSide, Route, ShapeKey, Side } from '@/model'
+import { nodePorts, portFraction, PORT_SIDES } from '@/model'
+import { EDGE_PX } from '@/features/diagram/lib/theme'
+import { cylinderCap } from '@/features/diagram/lib/shapes'
+
+/**
+ * Edge routing.
+ *
+ * Vue Flow's built-in path helpers only know handle coordinates; Baugraph needs
+ * `auto` side resolution, self-loops and a shared implementation between the
+ * canvas and the SVG export, so the geometry is computed here from node boxes.
+ */
+
+export interface Box {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface Vec {
+  x: number
+  y: number
+}
+
+export interface EdgeGeometry {
+  /** SVG path data for the connector. */
+  path: string
+  /**
+   * The connector's polyline vertices, before the corners are rounded off —
+   * for anything that has to re-trace the route at a different width, the flow
+   * halo above all: a wide translucent stroke over the tight quadratic a sharp
+   * corner rounds to balloons into a blob, where the same stroke over the raw
+   * polyline with a round line-join just bends cleanly. Absent for curved and
+   * self-loop connectors, which have no sharp joins to begin with.
+   */
+  points?: Vec[]
+  /**
+   * The cubic a curved or self-loop connector is drawn as — start, both control
+   * points, end — so anything measuring along the line (a label slid towards
+   * one end) can follow the curve rather than the chord. Absent for polylines,
+   * which `points` already describes.
+   */
+  curve?: [Vec, Vec, Vec, Vec]
+  /** Midpoint of the path, where a label that was never moved sits. */
+  mid: Vec
+  start: Vec
+  end: Vec
+  /** Unit vectors pointing outwards at each end, for arrowheads. */
+  startDir: Vec
+  endDir: Vec
+  /**
+   * How far each end of an orthogonal connector may slide along the side it
+   * leaves from to meet its first (or last) bend head-on — see `SlideRange`.
+   * Absent where the end is held in place: on a side carrying several points,
+   * on a point slid there by hand, and on any connector that is not orthogonal.
+   */
+  startSlide?: SlideRange
+  endSlide?: SlideRange
+}
+
+/**
+ * The stretch of a side a connector's end can travel along, on one axis.
+ *
+ * A manually routed orthogonal connector stays square by letting the end that
+ * has only one place to be — a side with a single, unmoved point — slide along
+ * its side to line up with the bend next to it, the way an end that is free to
+ * float does in any diagramming tool. Dragging the first leg of a line up or
+ * down then moves the line, not just the leg, until the side runs out.
+ */
+export interface SlideRange {
+  /** `y` for a left or right side, `x` for a top or bottom one. */
+  axis: 'x' | 'y'
+  lo: number
+  hi: number
+}
+
+/**
+ * Splits a Vue Flow handle id — `right:3` — back into the side and the
+ * connection point on it a drag actually touched. Anything unrecognised is
+ * `auto`, which is what a connection to a node with no dots of its own (a
+ * zone) comes out as, and what the fixed end of a reconnect drag comes out as
+ * too — Baugraph's own edges never carry a concrete handle id of their own
+ * (see `toVueFlowEdge`), so that end has to fall back on its stored side.
+ */
+export function endpointOf(handleId: string | null | undefined): { side: Side; port: number } {
+  const [side, port] = (handleId ?? '').split(':')
+  if (!PORT_SIDES.includes(side as PortSide)) return { side: 'auto', port: 1 }
+  return { side: side as Side, port: Number(port) || 1 }
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+
+/** The point and outward normal where a connector meets one side of a box. */
+interface Anchor {
+  point: Vec
+  normal: Vec
+}
+
+/**
+ * Where a connector meets `side` of `box`, `f` of the way along it — see
+ * `portFraction` in the model for how a point's place on its side is decided.
+ */
+function anchor(box: Box, side: PortSide, f = 0.5): Anchor {
+  const { x, y, width: w, height: h } = box
+  switch (side) {
+    case 'top':
+      return { point: { x: x + w * f, y }, normal: { x: 0, y: -1 } }
+    case 'bottom':
+      return { point: { x: x + w * f, y: y + h }, normal: { x: 0, y: 1 } }
+    case 'left':
+      return { point: { x, y: y + h * f }, normal: { x: -1, y: 0 } }
+    default:
+      return { point: { x: x + w, y: y + h * f }, normal: { x: 1, y: 0 } }
+  }
+}
+
+/** Picks the side of `from` that faces `to`. */
+export function autoSide(from: Box, to: Box): PortSide {
+  const dx = to.x + to.width / 2 - (from.x + from.width / 2)
+  const dy = to.y + to.height / 2 - (from.y + from.height / 2)
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left'
+  return dy >= 0 ? 'bottom' : 'top'
+}
+
+/**
+ * On a side carrying several connection points, the one facing `to`.
+ *
+ * `auto` means "wherever this reads best", and that answer has to survive a side
+ * gaining points: picking the nearest keeps a connection short instead of
+ * sending it back to a middle that is no longer where anything attaches.
+ */
+function autoPort(
+  box: Box,
+  side: PortSide,
+  count: number,
+  to: Box,
+  moved?: Record<string, number>,
+): number {
+  if (count < 2) return 1
+  const horizontal = side === 'top' || side === 'bottom'
+  const origin = horizontal ? box.x : box.y
+  const span = horizontal ? box.width : box.height
+  const facing = horizontal ? to.x + to.width / 2 : to.y + to.height / 2
+
+  let best = 1
+  let bestGap = Infinity
+  // Measured from where each point actually is, moved or not: the nearest one
+  // to a point slid down the side is the one that now sits nearest.
+  for (let port = 1; port <= count; port++) {
+    const gap = Math.abs(origin + span * portFraction(count, port, moved) - facing)
+    if (gap < bestGap) {
+      bestGap = gap
+      best = port
+    }
+  }
+  return best
+}
+
+/** Rounds the corners of a polyline. */
+function polylinePath(points: Vec[], radius: number): string {
+  const first = points[0]
+  const last = points.at(-1)
+  if (!first || !last || points.length < 2) return ''
+
+  let d = `M${first.x},${first.y}`
+  for (let i = 1; i < points.length - 1; i++) {
+    const p = points[i]!
+    const a = points[i - 1]!
+    const b = points[i + 1]!
+    const l1 = Math.hypot(p.x - a.x, p.y - a.y)
+    const l2 = Math.hypot(b.x - p.x, b.y - p.y)
+    const r = Math.min(radius, l1 / 2, l2 / 2)
+    if (r < 1) {
+      d += `L${p.x},${p.y}`
+      continue
+    }
+    const u1 = { x: (p.x - a.x) / (l1 || 1), y: (p.y - a.y) / (l1 || 1) }
+    const u2 = { x: (b.x - p.x) / (l2 || 1), y: (b.y - p.y) / (l2 || 1) }
+    d += `L${p.x - u1.x * r},${p.y - u1.y * r}Q${p.x},${p.y} ${p.x + u2.x * r},${p.y + u2.y * r}`
+  }
+  return `${d}L${last.x},${last.y}`
+}
+
+function polylineMid(points: Vec[]): Vec {
+  const first = points[0]
+  if (!first) return { x: 0, y: 0 }
+
+  const lengths: number[] = []
+  let total = 0
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!
+    const b = points[i]!
+    const l = Math.hypot(b.x - a.x, b.y - a.y)
+    lengths.push(l)
+    total += l
+  }
+
+  let remaining = total / 2
+  for (let i = 0; i < lengths.length; i++) {
+    const segment = lengths[i]!
+    if (remaining <= segment || i === lengths.length - 1) {
+      const a = points[i]!
+      const b = points[i + 1]!
+      const t = segment ? remaining / segment : 0
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
+    }
+    remaining -= segment
+  }
+  return first
+}
+
+function bezierPoint(a: Vec, b: Vec, c: Vec, d: Vec, t: number): Vec {
+  const m = 1 - t
+  return {
+    x: m * m * m * a.x + 3 * m * m * t * b.x + 3 * m * t * t * c.x + t * t * t * d.x,
+    y: m * m * m * a.y + 3 * m * m * t * b.y + 3 * m * t * t * c.y + t * t * t * d.y,
+  }
+}
+
+/** An edge whose source and target are the same node loops out of its top-right. */
+function selfLoop(box: Box): EdgeGeometry {
+  const sx = box.x + box.width
+  const sy = box.y + box.height * 0.3
+  const ex = box.x + box.width * 0.7
+  const ey = box.y - 2
+  const c1 = { x: sx + 62, y: sy - 26 }
+  const c2 = { x: ex + 40, y: ey - 52 }
+  return {
+    path: `M${sx},${sy}C${c1.x},${c1.y} ${c2.x},${c2.y} ${ex},${ey}`,
+    curve: [{ x: sx, y: sy }, c1, c2, { x: ex, y: ey }],
+    mid: { x: sx + 30, y: ey - 32 },
+    start: { x: sx, y: sy },
+    end: { x: ex, y: ey },
+    startDir: { x: 1, y: -0.4 },
+    endDir: { x: -0.6, y: 0.8 },
+  }
+}
+
+/**
+ * How far apart two facing anchors may sit before the connector keeps the offset.
+ *
+ * Two nodes of different heights almost never share a centre line: a couple of
+ * pixels is enough for a curved connector to visibly S-bend, or an orthogonal
+ * one to grow a jog nobody asked for. Within this much, both ends are pulled
+ * onto one shared line and the connector comes out straight — the design that
+ * was intended, without demanding the impossible of the grid.
+ *
+ * Sized to cover a node auto-fitted to its label, not just grid jitter: width
+ * grows in 10px steps with a node's text (see `fitNodeSize`) while height
+ * mostly sits at its type's floor, so two nodes stacked top-to-bottom drift off
+ * centre far more often than two placed side-by-side ever do. A tolerance tuned
+ * only to grid rounding straightened left/right connectors and left top/bottom
+ * ones jogging on exactly that drift.
+ */
+const ALIGN_TOLERANCE = 26
+
+/**
+ * Pulls two facing anchors onto a shared line when they are nearly aligned.
+ *
+ * Only ends that face along the same axis qualify (left/right against
+ * left/right, top/bottom against top/bottom); the shared line is the average of
+ * the two, clamped so neither anchor leaves the side it sits on.
+ */
+function align(source: Box, target: Box, sa: Anchor, ta: Anchor): void {
+  const horizontal = sa.normal.x !== 0 && ta.normal.x !== 0
+  const vertical = sa.normal.y !== 0 && ta.normal.y !== 0
+  if (!horizontal && !vertical) return
+
+  const axis = horizontal ? 'y' : 'x'
+  const offset = ta.point[axis] - sa.point[axis]
+  if (offset === 0 || Math.abs(offset) > ALIGN_TOLERANCE) return
+
+  const lo = horizontal ? Math.max(source.y, target.y) : Math.max(source.x, target.x)
+  const hi = horizontal
+    ? Math.min(source.y + source.height, target.y + target.height)
+    : Math.min(source.x + source.width, target.x + target.width)
+  if (hi <= lo) return
+
+  const shared = clamp((sa.point[axis] + ta.point[axis]) / 2, lo, hi)
+  sa.point[axis] = shared
+  ta.point[axis] = shared
+}
+
+/* ------------------------------------------------------ obstacle avoidance */
+
+/**
+ * How much room a detouring connector keeps between itself and a node.
+ *
+ * Wide enough that the line reads as going *around* the box rather than
+ * grazing it, tight enough that two nodes a grid step apart still leave a lane
+ * open between them.
+ */
+const CLEARANCE = 14
+
+/** Retried with when the full margin leaves no way through a crowded patch. */
+const TIGHT_CLEARANCE = 5
+
+/**
+ * Clearance around the two nodes a connection joins.
+ *
+ * Kept narrow: a connector may hug the node it comes out of — it is attached to
+ * it — where it must stand well clear of one it merely passes. Wide enough that
+ * a rounded corner cannot bite into the box behind it.
+ */
+const END_CLEARANCE = 6
+
+/** How far outside the boxes it connects the search may roam. */
+const SEARCH_MARGIN = 90
+
+/**
+ * What a corner costs, in pixels of line.
+ *
+ * Every way around a box is the same length — Manhattan distance does not care
+ * which way it is walked — so length alone leaves the search free to return a
+ * staircase. Pricing corners is what makes it pick the two-turn detour a person
+ * would have drawn.
+ */
+const TURN_COST = 26
+
+/** Corner rounding per route style, once a connector has had to divert. */
+const DETOUR_RADIUS = { orthogonal: 10, straight: 8, curved: 26 } as const
+
+/** Ceilings on the search, so a crowded diagram cannot stall a drag. */
+const MAX_CELLS = 3000
+const MAX_VISITS = 12000
+
+const inflate = (b: Box, by: number): Box => ({
+  x: b.x - by,
+  y: b.y - by,
+  width: b.width + by * 2,
+  height: b.height + by * 2,
+})
+
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+const contains = (b: Box, p: Vec) =>
+  p.x > b.x && p.x < b.x + b.width && p.y > b.y && p.y < b.y + b.height
+
+function boundsOf(points: Vec[]): Box {
+  const x = Math.min(...points.map((p) => p.x))
+  const y = Math.min(...points.map((p) => p.y))
+  return {
+    x,
+    y,
+    width: Math.max(...points.map((p) => p.x)) - x,
+    height: Math.max(...points.map((p) => p.y)) - y,
+  }
+}
+
+function union(a: Box, b: Box): Box {
+  const x = Math.min(a.x, b.x)
+  const y = Math.min(a.y, b.y)
+  return {
+    x,
+    y,
+    width: Math.max(a.x + a.width, b.x + b.width) - x,
+    height: Math.max(a.y + a.height, b.y + b.height) - y,
+  }
+}
+
+/**
+ * Whether a segment passes through the inside of a box.
+ *
+ * Liang–Barsky clipping against a box pulled in by half a pixel, so a line that
+ * runs along a node's edge — or clips its corner — does not count as crossing
+ * it. Only actually going through the box does.
+ */
+function segmentBlocked(a: Vec, b: Vec, box: Box): boolean {
+  const EPS = 0.5
+  const xLo = box.x + EPS
+  const xHi = box.x + box.width - EPS
+  const yLo = box.y + EPS
+  const yHi = box.y + box.height - EPS
+  if (xHi <= xLo || yHi <= yLo) return false
+
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  let t0 = 0
+  let t1 = 1
+  const clip = (p: number, q: number) => {
+    if (p === 0) return q >= 0
+    const t = q / p
+    if (p < 0) {
+      if (t > t1) return false
+      if (t > t0) t0 = t
+    } else {
+      if (t < t0) return false
+      if (t < t1) t1 = t
+    }
+    return true
+  }
+  return clip(-dx, a.x - xLo) && clip(dx, xHi - a.x) && clip(-dy, a.y - yLo) && clip(dy, yHi - a.y)
+}
+
+function polylineBlocked(points: Vec[], boxes: Box[]): boolean {
+  for (let i = 1; i < points.length; i++) {
+    for (const box of boxes) {
+      if (segmentBlocked(points[i - 1]!, points[i]!, box)) return true
+    }
+  }
+  return false
+}
+
+/** A curve is tested as the polyline through a sample of its points. */
+const bezierSamples = (a: Vec, b: Vec, c: Vec, d: Vec, steps = 24): Vec[] =>
+  Array.from({ length: steps + 1 }, (_, i) => bezierPoint(a, b, c, d, i / steps))
+
+/** Direction index of an axis-aligned unit vector: 0 = +x, 1 = +y, 2 = -x, 3 = -y. */
+const dirOf = (v: Vec) => (v.x > 0 ? 0 : v.x < 0 ? 2 : v.y > 0 ? 1 : 3)
+
+/** Grid coordinates are quantised, so a point can be looked up by value. */
+const tick = (v: number) => Math.round(v * 2) / 2
+
+/** Sorted, de-duplicated coordinates, with anything outside `[lo, hi]` dropped. */
+function axisTicks(values: number[], lo: number, hi: number): number[] {
+  const seen = new Set<number>()
+  for (const v of values) {
+    const t = tick(v)
+    if (t >= lo && t <= hi) seen.add(t)
+  }
+  return [...seen].sort((a, b) => a - b)
+}
+
+/**
+ * How far apart two neighbouring ticks may sit before a bend confined to that
+ * stretch gets pulled all the way to one end of it.
+ *
+ * The Hanan grid a detour searches only has lines through obstacle edges, so
+ * an open stretch with nothing in it — the common case, one node sitting well
+ * clear of another — carries no line to turn on until the edge of whichever
+ * box the search is skirting. Left alone, every bend in a long detour lands
+ * jammed against that box instead of somewhere a person would have drawn it.
+ *
+ * Kept tight enough that even two nodes sitting close together still get a
+ * midpoint of their own — a gap has to clear this before it earns even one
+ * inserted tick, so a stretch not much wider than this got none at all, and
+ * the only place left to bend was wherever the stub happened to end.
+ */
+const MAX_TICK_GAP = 24
+
+/**
+ * Ticks a single gap is split into once it is wide enough to split at all —
+ * quarters, not one every {@link MAX_TICK_GAP}.
+ *
+ * A per-gap cap rather than a per-pixel one: splitting every such run into
+ * one-tick-per-`MAX_TICK_GAP` scales with how wide the diagram is, and a
+ * single long open stretch — one node placed well clear of another, the case
+ * this exists for — could alone burn through the search's whole cell budget,
+ * silently losing the obstacle-avoidance that budget exists to afford. A
+ * handful of candidates spread through any one gap is enough for a bend to
+ * land near its middle; it does not need one every `MAX_TICK_GAP` on top.
+ */
+const MAX_SPLITS = 4
+
+/** Split any gap wider than `MAX_TICK_GAP` into up to `MAX_SPLITS` even parts. */
+function withMidpoints(ticks: number[]): number[] {
+  const out: number[] = []
+  for (const v of ticks) {
+    const prev = out.at(-1)
+    if (prev !== undefined && v - prev > MAX_TICK_GAP) {
+      const steps = Math.min(Math.ceil((v - prev) / MAX_TICK_GAP), MAX_SPLITS)
+      for (let s = 1; s < steps; s++) out.push(tick(prev + ((v - prev) * s) / steps))
+    }
+    out.push(v)
+  }
+  return out
+}
+
+/**
+ * The open run of one axis that `at` sits in, bounded by the nearest wall on
+ * either side whose span actually crosses `probe` on the other axis — or by
+ * the search region itself, where nothing does.
+ *
+ * This is deliberately not a fixed point (an anchor, a box centre): the two
+ * nodes a connector joins can sit anywhere relative to each other, and their
+ * ports carry no relation to how much open space happens to separate the
+ * boxes at a given spot. Reading the gap off the walls themselves is what
+ * lets the centering bias below track the actual free space between two
+ * nodes as they move — including shrinking right along with it as the nodes
+ * are dragged closer together — rather than aiming at a spot that stays put
+ * while the room around it changes size.
+ */
+function openInterval(
+  walls: Box[],
+  fixedAxis: 'x' | 'y',
+  probe: number,
+  at: number,
+  lo: number,
+  hi: number,
+): [number, number] {
+  let near = lo
+  let far = hi
+  for (const w of walls) {
+    const wLo = fixedAxis === 'x' ? w.x : w.y
+    const wSpan = fixedAxis === 'x' ? w.width : w.height
+    if (probe <= wLo || probe >= wLo + wSpan) continue
+    const bLo = fixedAxis === 'x' ? w.y : w.x
+    const bHi = fixedAxis === 'x' ? w.y + w.height : w.x + w.width
+    if (bHi <= at && bHi > near) near = bHi
+    if (bLo >= at && bLo < far) far = bLo
+  }
+  return [near, far]
+}
+
+/** How far `at` sits from the middle of `[lo, hi]`. */
+const centerOffset = (at: number, [lo, hi]: [number, number]) => Math.abs(at - (lo + hi) / 2)
+
+/**
+ * Tie-break weight pulling a free bend toward the middle of the open space it
+ * crosses, so where a bend's exact position is open — costing the same
+ * wherever it falls along an obstacle-free stretch — the search settles on
+ * the one a person would draw instead of whichever the grid happened to
+ * visit first.
+ *
+ * Charged once per turn, against its distance from the middle of the local
+ * gap {@link openInterval} finds at that turn — not against distance from a
+ * fixed point such as the anchors' own midpoint, which stays put as the two
+ * nodes move and so drifts outside the gap, and not against distance from the
+ * straight line between the anchors, which rewards cutting a forced detour
+ * short instead of centering it — both recreate the hugging this exists to
+ * fix. Only ever compared within one value of {@link COST_SCALE} — see there
+ * for why that keeps it powerless to change which route is actually
+ * shortest.
+ */
+const CENTER_BIAS = 0.1
+
+/**
+ * What one real pixel — or one {@link TURN_COST} — of route cost is worth in
+ * the units the search actually minimises.
+ *
+ * The search has to weigh real cost first and the centering bias only as a
+ * tiebreak between routes already equal on that: a bend free to land
+ * anywhere in open space should land in the middle, but never at the price of
+ * a longer or cornier route — that was the bug centering by raw bias alone
+ * produced, trading real distance for a straighter-looking detour. Scaling
+ * real cost up here and leaving the bias unscaled gets both at once: real
+ * cost so dwarfs the bias that no plausible accumulation of it can look
+ * cheaper than the next real-cost step (real costs move in units of at least
+ * 0.5, so keeping total bias on any one path under half of `COST_SCALE` — true
+ * with room to spare at diagram-sized path lengths — keeps it from ever
+ * crossing one), while genuine ties in real cost still separate cleanly once
+ * the bias is added on top.
+ */
+const COST_SCALE = 1e7
+
+/** Drops the middle of any three points that lie on one straight run. */
+function simplify(points: Vec[]): Vec[] {
+  const out: Vec[] = []
+  for (const p of points) {
+    const a = out.at(-2)
+    const b = out.at(-1)
+    if (b && Math.abs(p.x - b.x) < 0.5 && Math.abs(p.y - b.y) < 0.5) continue
+    if (a && b) {
+      const alongX = Math.abs(a.x - b.x) < 0.5 && Math.abs(b.x - p.x) < 0.5
+      const alongY = Math.abs(a.y - b.y) < 0.5 && Math.abs(b.y - p.y) < 0.5
+      if (alongX || alongY) out.pop()
+    }
+    out.push(p)
+  }
+  return out
+}
+
+/* A binary min-heap, kept as two parallel arrays of numbers: the search runs on
+   every frame of a drag, and this is the part of it that runs the most. */
+
+function heapPush(costs: number[], items: number[], cost: number, item: number): void {
+  let i = costs.length
+  costs.push(cost)
+  items.push(item)
+  while (i > 0) {
+    const up = (i - 1) >> 1
+    if (costs[up]! <= costs[i]!) break
+    ;[costs[up], costs[i]] = [costs[i]!, costs[up]!]
+    ;[items[up], items[i]] = [items[i]!, items[up]!]
+    i = up
+  }
+}
+
+function heapPop(costs: number[], items: number[]): number {
+  const top = items[0]!
+  const cost = costs.pop()!
+  const item = items.pop()!
+  if (costs.length) {
+    costs[0] = cost
+    items[0] = item
+    for (let i = 0; ; ) {
+      const left = i * 2 + 1
+      const right = left + 1
+      let low = i
+      if (left < costs.length && costs[left]! < costs[low]!) low = left
+      if (right < costs.length && costs[right]! < costs[low]!) low = right
+      if (low === i) break
+      ;[costs[low], costs[i]] = [costs[i]!, costs[low]!]
+      ;[items[low], items[i]] = [items[i]!, items[low]!]
+      i = low
+    }
+  }
+  return top
+}
+
+/**
+ * An orthogonal route from `s` to `t` that stays out of `boxes`, or `null` when
+ * there is none to be had.
+ *
+ * A* over the Hanan grid: the lines through every obstacle edge, plus the two
+ * endpoints and their stubs. Any shortest rectilinear path around a set of
+ * boxes turns only on those lines, so the grid stays small — a few dozen points
+ * for a normal diagram — without giving up a route that exists. The search
+ * state carries the direction of travel, which is what lets a corner be priced,
+ * and what lets the route be made to leave and arrive along the sides the
+ * connection is attached to.
+ */
+function detour(
+  s: Vec,
+  t: Vec,
+  sa: Anchor,
+  ta: Anchor,
+  boxes: Box[],
+  ends: Box[],
+  clearance: number,
+): Vec[] | null {
+  const stub = 22
+  const s1 = { x: s.x + sa.normal.x * stub, y: s.y + sa.normal.y * stub }
+  const t1 = { x: t.x + ta.normal.x * stub, y: t.y + ta.normal.y * stub }
+
+  // The ground the search may use: what it connects, whatever stands in the
+  // way, and enough room to get past it. The endpoint boxes go in whole — an
+  // anchor sits on the face of one, so the search has to be able to see round
+  // the rest of it.
+  let region = boundsOf([s, t, s1, t1])
+  for (const box of ends) region = union(region, box)
+  for (const box of boxes) {
+    if (overlaps(inflate(region, SEARCH_MARGIN), box)) region = union(region, box)
+  }
+  region = inflate(region, SEARCH_MARGIN)
+
+  const walls = [
+    ...boxes.filter((b) => overlaps(region, b)).map((b) => inflate(b, clearance)),
+    ...ends.map((b) => inflate(b, END_CLEARANCE)),
+  ]
+  // A stub buried in a neighbour leaves nowhere to set off from. Measured from
+  // clear of the connection's own nodes: a stub starts inside their collar by
+  // definition, which is not the same as being blocked by them.
+  const guard = END_CLEARANCE + 2
+  const sFree = { x: s.x + sa.normal.x * guard, y: s.y + sa.normal.y * guard }
+  const tFree = { x: t.x + ta.normal.x * guard, y: t.y + ta.normal.y * guard }
+  if (polylineBlocked([sFree, s1], walls) || polylineBlocked([tFree, t1], walls)) return null
+
+  const xHi = region.x + region.width
+  const yHi = region.y + region.height
+  const xs = withMidpoints(
+    axisTicks(
+      [region.x, xHi, s.x, s1.x, t.x, t1.x, ...walls.flatMap((w) => [w.x, w.x + w.width])],
+      region.x,
+      xHi,
+    ),
+  )
+  const ys = withMidpoints(
+    axisTicks(
+      [region.y, yHi, s.y, s1.y, t.y, t1.y, ...walls.flatMap((w) => [w.y, w.y + w.height])],
+      region.y,
+      yHi,
+    ),
+  )
+  const nx = xs.length
+  const ny = ys.length
+  if (nx < 2 || ny < 2 || nx * ny > MAX_CELLS) return null
+
+  const sx = xs.indexOf(tick(s1.x))
+  const sy = ys.indexOf(tick(s1.y))
+  const tx = xs.indexOf(tick(t1.x))
+  const ty = ys.indexOf(tick(t1.y))
+  if (sx < 0 || sy < 0 || tx < 0 || ty < 0) return null
+
+  const stateOf = (ix: number, iy: number, dir: number) => (iy * nx + ix) * 4 + dir
+  const start = stateOf(sx, sy, dirOf(sa.normal))
+  /*
+   * Arriving at `t1` is not quite the end: the line still has to turn in towards
+   * `t`, and may do so right there — the same freedom the source end has to
+   * turn at `s1`. Insisting on arriving already headed for `t` meant the last
+   * bend could never sit on the stub, and was pushed out to whichever grid line
+   * lay beyond it, leaving the target end with twice the approach the source
+   * end has. The goal is a state past every real one, reached from `t1` by that
+   * final turn.
+   */
+  const inward = dirOf({ x: -ta.normal.x, y: -ta.normal.y })
+  const outward = dirOf(ta.normal)
+  const goal = nx * ny * 4
+  const heuristic = (ix: number, iy: number) =>
+    (Math.abs(xs[ix]! - xs[tx]!) + Math.abs(ys[iy]! - ys[ty]!)) * COST_SCALE
+
+  const best = new Map<number, number>([[start, 0]])
+  const cameFrom = new Map<number, number>()
+  const settled = new Set<number>()
+  const costs: number[] = []
+  const items: number[] = []
+  heapPush(costs, items, heuristic(sx, sy), start)
+
+  let visits = 0
+  while (items.length) {
+    const state = heapPop(costs, items)
+    if (state === goal) break
+    if (settled.has(state)) continue
+    settled.add(state)
+    if (++visits > MAX_VISITS) return null
+
+    const dir = state % 4
+    const cell = (state - dir) / 4
+    const ix = cell % nx
+    const iy = (cell - ix) / nx
+    const g = best.get(state)!
+
+    if (ix === tx && iy === ty && dir !== outward) {
+      const cost = g + (dir === inward ? 0 : TURN_COST * COST_SCALE)
+      if (cost < (best.get(goal) ?? Infinity)) {
+        best.set(goal, cost)
+        cameFrom.set(goal, state)
+        heapPush(costs, items, cost, goal)
+      }
+    }
+
+    for (let step = 0; step < 4; step++) {
+      const jx = ix + (step === 0 ? 1 : step === 2 ? -1 : 0)
+      const jy = iy + (step === 1 ? 1 : step === 3 ? -1 : 0)
+      if (jx < 0 || jy < 0 || jx >= nx || jy >= ny) continue
+      const a = { x: xs[ix]!, y: ys[iy]! }
+      const b = { x: xs[jx]!, y: ys[jy]! }
+      if (walls.some((w) => segmentBlocked(a, b, w))) continue
+      const turning = step !== dir
+      const turnBias = !turning
+        ? 0
+        : dir === 1 || dir === 3
+          ? centerOffset(a.y, openInterval(walls, 'x', a.x, a.y, region.y, yHi))
+          : centerOffset(a.x, openInterval(walls, 'y', a.y, a.x, region.x, xHi))
+      const cost =
+        g +
+        (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) + (turning ? TURN_COST : 0)) * COST_SCALE +
+        CENTER_BIAS * turnBias
+      const next = stateOf(jx, jy, step)
+      if (cost >= (best.get(next) ?? Infinity)) continue
+      best.set(next, cost)
+      cameFrom.set(next, state)
+      heapPush(costs, items, cost + heuristic(jx, jy), next)
+    }
+  }
+
+  if (!best.has(goal)) return null
+
+  const points: Vec[] = []
+  for (
+    let state: number | undefined = cameFrom.get(goal);
+    state !== undefined;
+    state = cameFrom.get(state)
+  ) {
+    const cell = (state - (state % 4)) / 4
+    const ix = cell % nx
+    points.push({ x: xs[ix]!, y: ys[(cell - ix) / nx]! })
+    if (points.length > nx * ny) return null
+  }
+  points.reverse()
+  return simplify(centreLegs(simplify([s, ...points, t]), [...boxes, ...ends], walls, stub))
+}
+
+/**
+ * Slides every free leg of a detour into the middle of the lane it runs along.
+ *
+ * A leg is free when the legs either side of it carry on the same way — a Z,
+ * not a U. Moving one of those along its neighbours lengthens one by exactly
+ * what it takes off the other, so where it sits costs nothing, and the search
+ * has no reason of its own to put it anywhere in particular. `CENTER_BIAS` is
+ * meant to break that tie, but it is charged at the turn, against the gap
+ * measured *across that turn's own position* — and for a leg setting off from
+ * beside a node, the turn sits past the node's edge, where the gap runs
+ * straight on past the node the leg is about to pass under. The middle of that
+ * is nowhere near the lane the leg actually ends up in, so the leg came out
+ * pressed against the node it had just left: two stacked nodes joined side to
+ * side drew their crossing leg hugging the upper one instead of halfway down
+ * the gap between them.
+ *
+ * Measured here instead, once the whole route is known, against everything
+ * across the leg's full length. The middle is taken between the boxes as they
+ * are drawn, then held inside the clearance the route was found with, so a
+ * lane between a node and its neighbour reads as centred whatever margin each
+ * side is kept at. The legs at either end are stubs, and never shrink below
+ * `stub`, so a line still leaves and enters its nodes square.
+ */
+function centreLegs(points: Vec[], solids: Box[], walls: Box[], stub: number): Vec[] {
+  const out = points.map((p) => ({ ...p }))
+  const last = out.length - 1
+
+  for (let k = 1; k <= last - 2; k++) {
+    const p = out[k]!
+    const q = out[k + 1]!
+    const before = out[k - 1]!
+    const after = out[k + 2]!
+    // The axis the leg slides along, and the one it runs along.
+    const m = Math.abs(p.y - q.y) < 0.5 ? 'y' : 'x'
+    const o = m === 'y' ? 'x' : 'y'
+
+    const into = Math.sign(p[m] - before[m])
+    const onward = Math.sign(after[m] - q[m])
+    if (!into || into !== onward) continue
+
+    const from = k - 1 === 0 ? before[m] + into * stub : before[m]
+    const to = k + 1 === last - 1 ? after[m] - onward * stub : after[m]
+    const spanLo = Math.min(p[o], q[o])
+    const spanHi = Math.max(p[o], q[o])
+
+    /** The open run either side of the leg, among boxes that cross its span. */
+    const lane = (boxes: Box[], ends: [number, number]): [number, number] | null => {
+      let lo = Math.min(...ends)
+      let hi = Math.max(...ends)
+      for (const b of boxes) {
+        const oLo = b[o]
+        const oHi = b[o] + (o === 'x' ? b.width : b.height)
+        if (oHi <= spanLo + 0.5 || oLo >= spanHi - 0.5) continue
+        const mLo = b[m]
+        const mHi = b[m] + (m === 'x' ? b.width : b.height)
+        if (mHi <= p[m] + 0.5) lo = Math.max(lo, mHi)
+        else if (mLo >= p[m] - 0.5) hi = Math.min(hi, mLo)
+        // The leg runs through it: whatever let that happen, it is not ours to move.
+        else return null
+      }
+      return [lo, hi]
+    }
+
+    // The stubs only limit where the leg may go, not where the middle is: a leg
+    // passing right under the node it is about to enter is centred between
+    // that node and whatever is on its other side, not between the end of the
+    // stub and it.
+    const drawn = lane(solids, [before[m], after[m]])
+    const kept = lane(walls, [from, to])
+    if (!drawn || !kept || kept[1] - kept[0] < 1) continue
+
+    const at = tick(clamp((drawn[0] + drawn[1]) / 2, kept[0], kept[1]))
+    p[m] = at
+    q[m] = at
+  }
+  return out
+}
+
+/** Tries for a detour with proper clearance, then for any detour at all. */
+function detourRoute(
+  s: Vec,
+  t: Vec,
+  sa: Anchor,
+  ta: Anchor,
+  boxes: Box[],
+  ends: Box[],
+): Vec[] | null {
+  return (
+    detour(s, t, sa, ta, boxes, ends, CLEARANCE) ??
+    detour(s, t, sa, ta, boxes, ends, TIGHT_CLEARANCE)
+  )
+}
+
+/** Geometry for a connector drawn as a polyline with its corners rounded off. */
+function fromPolyline(points: Vec[], radius: number): EdgeGeometry {
+  const cleaned = points.filter((p, i) => {
+    const previous = points[i - 1]
+    return !previous || Math.abs(p.x - previous.x) > 0.5 || Math.abs(p.y - previous.y) > 0.5
+  })
+  const first = cleaned[0] ?? { x: 0, y: 0 }
+  const afterFirst = cleaned[1] ?? first
+  const last = cleaned.at(-1) ?? first
+  const beforeLast = cleaned.at(-2) ?? last
+  const ls = Math.hypot(afterFirst.x - first.x, afterFirst.y - first.y) || 1
+  const le = Math.hypot(last.x - beforeLast.x, last.y - beforeLast.y) || 1
+
+  return {
+    path: polylinePath(cleaned, radius),
+    points: cleaned,
+    mid: polylineMid(cleaned),
+    start: first,
+    end: last,
+    startDir: { x: (first.x - afterFirst.x) / ls, y: (first.y - afterFirst.y) / ls },
+    endDir: { x: (last.x - beforeLast.x) / le, y: (last.y - beforeLast.y) / le },
+  }
+}
+
+/**
+ * Whether the polyline folds back on itself: two consecutive legs running the
+ * same axis in opposite directions, rather than turning onto the other one.
+ *
+ * `orthogonalPoints` only ever produces axis-aligned legs, so consecutive
+ * ones are exactly parallel, exactly perpendicular, or exactly opposite —
+ * nothing in between — which is what lets a plain sign check stand in for a
+ * real angle. It happens when a stub sends the line further from the other
+ * node before the shared midpoint pulls it back — most often two ends on the
+ * same side (both `right`, say) with one node behind the other along that
+ * axis — and once rounded, the corner shows as the line visibly doubling back
+ * on itself rather than turning a clean corner.
+ */
+function reversesDirection(points: Vec[]): boolean {
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = points[i - 1]!
+    const p = points[i]!
+    const b = points[i + 1]!
+    const d1x = p.x - a.x
+    const d1y = p.y - a.y
+    const d2x = b.x - p.x
+    const d2y = b.y - p.y
+    if (d1x * d2x + d1y * d2y < -0.01) return true
+  }
+  return false
+}
+
+/** The plain right-angled route between two anchors, ignoring everything else. */
+function orthogonalPoints(s: Vec, t: Vec, sa: Anchor, ta: Anchor): Vec[] {
+  const stub = 22
+  const s1 = { x: s.x + sa.normal.x * stub, y: s.y + sa.normal.y * stub }
+  const t1 = { x: t.x + ta.normal.x * stub, y: t.y + ta.normal.y * stub }
+  const sourceHorizontal = sa.normal.x !== 0
+  const targetHorizontal = ta.normal.x !== 0
+
+  const points: Vec[] = [s, s1]
+  if (sourceHorizontal && targetHorizontal) {
+    if (Math.abs(s1.y - t1.y) >= 1) {
+      const mx = (s1.x + t1.x) / 2
+      points.push({ x: mx, y: s1.y }, { x: mx, y: t1.y })
+    }
+  } else if (!sourceHorizontal && !targetHorizontal) {
+    if (Math.abs(s1.x - t1.x) >= 1) {
+      const my = (s1.y + t1.y) / 2
+      points.push({ x: s1.x, y: my }, { x: t1.x, y: my })
+    }
+  } else if (sourceHorizontal) {
+    points.push({ x: t1.x, y: s1.y })
+  } else {
+    points.push({ x: s1.x, y: t1.y })
+  }
+  points.push(t1, t)
+  return points
+}
+
+export interface EdgeRouteOptions {
+  sourceSide: Side
+  targetSide: Side
+  /**
+   * Connection points each end offers, per side. Omitted — or omitting a side —
+   * is the single point every side has by default, which is the geometry this
+   * module had before nodes could carry more.
+   */
+  sourcePorts?: Partial<NodePorts>
+  targetPorts?: Partial<NodePorts>
+  /**
+   * Where each end's node has had connection points slid to by hand (see
+   * `DiagramNode.portPositions`). Omitted means every point sits in its evenly
+   * spread slot.
+   */
+  sourcePortPositions?: PortPositions
+  targetPortPositions?: PortPositions
+  /** Which of those points each end attaches to, 1-based. Ignored while its side is `auto`. */
+  sourcePort?: number
+  targetPort?: number
+  route: Route
+  /**
+   * Boxes the connector must not run through — every other node on the canvas.
+   *
+   * Passed in rather than looked up, because the two callers hold different
+   * things: the canvas has live, mid-drag node boxes, the exporter has the
+   * document's. Source and target are filtered out here, so a caller can hand
+   * over the whole set without picking through it.
+   */
+  obstacles?: Box[]
+  /**
+   * User-placed bend points, source to target. Their presence *is* "manual
+   * routing": the connector is drawn straight through them from one anchor to
+   * the other with no obstacle avoidance at all — the user has taken over
+   * from the router, not asked it for a second opinion.
+   */
+  waypoints?: Vec[]
+  /**
+   * What each end's node is drawn as. Only a manual orthogonal line reads it:
+   * an end slides along its side only as far as the outline really runs along
+   * that side — see `flatInset`. Omitted is a plain rectangle, and a zone,
+   * which draws its own frame, is one.
+   */
+  sourceShape?: ShapeKey
+  targetShape?: ShapeKey
+}
+
+/** A single point, as the zero-size `Box` `autoSide`/`autoPort` can face. */
+const pointBox = (p: Vec): Box => ({ x: p.x, y: p.y, width: 0, height: 0 })
+
+/** How close to a corner a sliding end may come, so a line never leaves from the corner itself. */
+const SLIDE_MARGIN = 8
+
+/**
+ * How far in from each end `side` of a `shape` the outline runs straight along
+ * the box — or `null` where it never does. An end slid off the straight part
+ * would leave a gap between the line and a node that curves or slants away
+ * underneath it: the round ends of a pill, a cylinder's caps, every side of a
+ * circle or a diamond.
+ */
+function flatInset(shape: ShapeKey | undefined, side: PortSide, box: Box): number | null {
+  const across = side === 'top' || side === 'bottom'
+  switch (shape) {
+    case 'circle':
+    case 'diamond':
+      return null
+    case 'pill':
+      return across ? box.height / 2 : null
+    case 'hexagon':
+      return across ? Math.min(22, box.width * 0.16) : null
+    case 'cylinder':
+      return across ? null : cylinderCap(box.height)
+    case 'round':
+      return 16
+    case 'queue':
+      return 6
+    default:
+      return 0
+  }
+}
+
+/** See `SlideRange`. `undefined` where the side has no straight stretch to slide along. */
+function slideRange(box: Box, side: PortSide, shape: ShapeKey | undefined): SlideRange | undefined {
+  const inset = flatInset(shape, side, box)
+  if (inset === null) return undefined
+  const vertical = side === 'left' || side === 'right'
+  const from = vertical ? box.y : box.x
+  const span = vertical ? box.height : box.width
+  const margin = Math.max(inset, Math.min(SLIDE_MARGIN, span / 4))
+  if (span - 2 * margin < 1) return undefined
+  return { axis: vertical ? 'y' : 'x', lo: from + margin, hi: from + span - margin }
+}
+
+/** Slides `a` along its side to meet `p` head-on, when the side reaches that far. */
+function slideOnto(a: Anchor, range: SlideRange | undefined, p: Vec | undefined): void {
+  if (!range || !p) return
+  const at = p[range.axis]
+  if (at >= range.lo && at <= range.hi) a.point[range.axis] = at
+}
+
+/**
+ * How long the short leg is that a manual orthogonal connector leaves a node
+ * along before it is allowed to turn — the same stub the router itself uses.
+ */
+const MANUAL_STUB = 22
+
+/**
+ * How far apart two bend points may sit across a leg and still count as lined
+ * up. Points dragged by hand drift by a fraction of a pixel — files written
+ * before connectors were kept square are full of them — and squaring that
+ * drift off would only put in a corner too small to see.
+ */
+const ALIGNED = 1
+
+/**
+ * Keeps a manually routed orthogonal connector square.
+ *
+ * Bend points placed by hand rarely line up on their own, and an orthogonal
+ * line drawn straight between two that do not would come out diagonal. Each
+ * such leg is broken into two at a right angle instead. The corner is chosen
+ * so the line keeps going the way it already was before it turns — leaving a
+ * node along the node's own normal — unless that would send it back the way
+ * it came, when it turns first. The last leg turns early enough to arrive at
+ * the target along the target's normal.
+ */
+function orthogonalize(points: Vec[], startNormal: Vec, endNormal: Vec): Vec[] {
+  const out: Vec[] = [points[0]!]
+  /** Direction of the leg that just arrived — at the start, straight out of the node. */
+  let dir: Vec = { x: startNormal.x, y: startNormal.y }
+  const last = points.length - 1
+  for (let i = 1; i <= last; i++) {
+    const a = out.at(-1)!
+    const b = points[i]!
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    if (Math.abs(dx) >= ALIGNED && Math.abs(dy) >= ALIGNED) {
+      let acrossFirst: boolean
+      if (i === last) {
+        acrossFirst = endNormal.x === 0
+      } else {
+        const alongX = dir.x !== 0
+        const back = alongX ? Math.sign(dx) === -Math.sign(dir.x) : Math.sign(dy) === -Math.sign(dir.y)
+        acrossFirst = alongX !== back
+      }
+      out.push(acrossFirst ? { x: b.x, y: a.y } : { x: a.x, y: b.y })
+      dir = acrossFirst ? { x: 0, y: Math.sign(dy) } : { x: Math.sign(dx), y: 0 }
+    } else if (Math.abs(dx) >= ALIGNED) {
+      dir = { x: Math.sign(dx), y: 0 }
+    } else if (Math.abs(dy) >= ALIGNED) {
+      dir = { x: 0, y: Math.sign(dy) }
+    }
+    out.push(b)
+  }
+  return out
+}
+
+/**
+ * Bend points for an orthogonal connector with one of its legs dragged
+ * sideways.
+ *
+ * `points` is the connector as drawn, ends included; `index` is the leg being
+ * moved (from `points[index]` to `points[index + 1]`), and `value` where it now
+ * sits across its own direction: a new `y` for a leg that runs across, a new
+ * `x` for one that runs up or down. Both of its corners move with it, which
+ * keeps the legs either side of it square.
+ *
+ * A leg that ends at a node cannot take the node with it. That end slides
+ * along its side to follow, as far as `slides` says it can; past that, a
+ * short jog is put in next to the node so the moved leg still meets it.
+ *
+ * Always computed from the same `points`, the ones the drag started with, so
+ * every frame of a drag is an absolute placement rather than a correction of
+ * the last one — and dragging back to where it started puts the line back.
+ */
+export function moveSegment(
+  points: Vec[],
+  index: number,
+  value: number,
+  slides: { start?: SlideRange; end?: SlideRange } = {},
+): Vec[] {
+  const lastIndex = points.length - 1
+  const a = points[index]!
+  const b = points[index + 1]!
+  const axis: 'x' | 'y' = Math.abs(a.y - b.y) < 0.5 ? 'y' : 'x'
+  const along: 'x' | 'y' = axis === 'y' ? 'x' : 'y'
+  const at = (alongValue: number, axisValue: number): Vec =>
+    axis === 'y' ? { x: alongValue, y: axisValue } : { x: axisValue, y: alongValue }
+
+  const middle = points.slice(1, -1).map((p, k) => {
+    const i = k + 1
+    if (i !== index && i !== index + 1) return { x: p.x, y: p.y }
+    return axis === 'y' ? { x: p.x, y: value } : { x: value, y: p.y }
+  })
+
+  /** The two corners of a jog next to the node at `end`, or none when `end` can just slide there. */
+  const jog = (end: Vec, toward: Vec, slide?: SlideRange): Vec[] => {
+    const slides = slide?.axis === axis
+    if (slides && value >= slide.lo && value <= slide.hi) return []
+    const fixed = slides ? clamp(value, slide.lo, slide.hi) : end[axis]
+    const span = toward[along] - end[along]
+    const foot = end[along] + Math.sign(span || 1) * Math.min(MANUAL_STUB, Math.abs(span) / 2)
+    return [at(foot, fixed), at(foot, value)]
+  }
+  const head = index === 0 ? jog(a, b, slides.start) : []
+  const tail = index + 1 === lastIndex ? jog(b, a, slides.end).reverse() : []
+
+  const out = [...head, ...middle, ...tail]
+  // A single leg straight from one node to the other, with both ends free to
+  // slide, has no corner of its own to move: one point on it holds the line
+  // where it was put, rather than an empty list handing it back to the router.
+  if (!out.length) out.push(at((a[along] + b[along]) / 2, value))
+  return out
+}
+
+/**
+ * Drops the bend points a drag has made redundant — two that landed on top of
+ * each other, or one sitting partway along a straight run — so lining a leg up
+ * with its neighbour merges the two rather than leaving a corner nobody can
+ * see. `start` and `end` are the drawn ends, there only to be measured against.
+ * At least one point is always kept: an empty list would mean automatic, and
+ * the line the user just placed would jump.
+ */
+export function tidyWaypoints(start: Vec, waypoints: Vec[], end: Vec): Vec[] {
+  const inner = simplify([start, ...waypoints, end]).slice(1, -1)
+  if (inner.length) return inner
+  return waypoints.length ? [waypoints[Math.floor(waypoints.length / 2)]!] : []
+}
+
+export function edgeGeometry(
+  source: Box,
+  target: Box,
+  {
+    sourceSide,
+    targetSide,
+    sourcePorts,
+    targetPorts,
+    sourcePortPositions,
+    targetPortPositions,
+    sourcePort,
+    targetPort,
+    route,
+    obstacles,
+    waypoints,
+    sourceShape,
+    targetShape,
+  }: EdgeRouteOptions,
+): EdgeGeometry {
+  const manual = !!waypoints?.length
+  if (
+    !manual &&
+    (source === target ||
+      (source.x === target.x && source.y === target.y && source.width === target.width))
+  ) {
+    return selfLoop(source)
+  }
+
+  // `auto` faces the nearest waypoint when routing manually — the other node
+  // is no longer what this end has to read as pointing towards.
+  const sourceFacing = manual ? pointBox(waypoints![0]!) : target
+  const targetFacing = manual ? pointBox(waypoints!.at(-1)!) : source
+
+  const sSide = sourceSide === 'auto' ? autoSide(source, sourceFacing) : sourceSide
+  const tSide = targetSide === 'auto' ? autoSide(target, targetFacing) : targetSide
+  const sCount = nodePorts(sourcePorts)[sSide]
+  const tCount = nodePorts(targetPorts)[tSide]
+  const sMoved = sourcePortPositions?.[sSide]
+  const tMoved = targetPortPositions?.[tSide]
+  const sPort =
+    sourceSide === 'auto'
+      ? autoPort(source, sSide, sCount, sourceFacing, sMoved)
+      : (sourcePort ?? 1)
+  const tPort =
+    targetSide === 'auto'
+      ? autoPort(target, tSide, tCount, targetFacing, tMoved)
+      : (targetPort ?? 1)
+
+  const sa = anchor(source, sSide, portFraction(sCount, sPort, sMoved))
+  const ta = anchor(target, tSide, portFraction(tCount, tPort, tMoved))
+  // Only ends that have nowhere else to be get pulled onto a shared line. A side
+  // carrying several points was laid out deliberately, and its spacing is finer
+  // than the tolerance below — nudging one end would slide a connection onto a
+  // point its node does not say it uses. A point slid along its side by hand
+  // was placed deliberately too, and is left exactly where it was put. Skipped
+  // entirely while routing manually: the user has already placed this line,
+  // and snapping the anchor out from under the first bend point would fight that.
+  const sPinned = sMoved?.[String(sPort)] !== undefined
+  const tPinned = tMoved?.[String(tPort)] !== undefined
+  if (!manual && sCount === 1 && tCount === 1 && !sPinned && !tPinned) {
+    align(source, target, sa, ta)
+  }
+
+  // Worked out for an automatic orthogonal line as well as a manual one: the
+  // first drag of one of its legs is what turns it manual, and that drag needs
+  // to know how far the ends will follow before it starts.
+  const orthogonal = route === 'orthogonal'
+  const startSlide =
+    orthogonal && sCount === 1 && !sPinned ? slideRange(source, sSide, sourceShape) : undefined
+  const endSlide =
+    orthogonal && tCount === 1 && !tPinned ? slideRange(target, tSide, targetShape) : undefined
+  if (manual && orthogonal) {
+    slideOnto(sa, startSlide, waypoints![0])
+    slideOnto(ta, endSlide, waypoints!.at(-1))
+  }
+
+  const gap = 2
+  const s: Vec = { x: sa.point.x + sa.normal.x * gap, y: sa.point.y + sa.normal.y * gap }
+  const t: Vec = { x: ta.point.x + ta.normal.x * gap, y: ta.point.y + ta.normal.y * gap }
+
+  if (manual) {
+    const through = [s, ...waypoints!, t]
+    if (!orthogonal) return fromPolyline(through, DETOUR_RADIUS[route])
+    const square = orthogonalize(through, sa.normal, ta.normal)
+    return { ...fromPolyline(square, DETOUR_RADIUS.orthogonal), startSlide, endSlide }
+  }
+
+  // A box sitting on top of an endpoint is not something a detour can help
+  // with — there is no way out of it — so it is not treated as one.
+  const others = (obstacles ?? []).filter(
+    (b) => b !== source && b !== target && !contains(b, s) && !contains(b, t),
+  )
+  /*
+   * The two nodes the connection joins count as obstacles everywhere except at
+   * the anchors themselves. Left out, a connector whose ends face away from
+   * each other — two nodes stacked vertically but joined side to side, say —
+   * runs its middle leg straight back through the node it just came out of.
+   */
+  const walls = [...others, source, target]
+
+  if (route === 'straight') {
+    if (polylineBlocked([s, t], walls)) {
+      const around = detourRoute(s, t, sa, ta, others, [source, target])
+      if (around) return fromPolyline(around, DETOUR_RADIUS.straight)
+    }
+    const dx = t.x - s.x
+    const dy = t.y - s.y
+    const len = Math.hypot(dx, dy) || 1
+    return {
+      path: `M${s.x},${s.y}L${t.x},${t.y}`,
+      points: [s, t],
+      mid: { x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 },
+      start: s,
+      end: t,
+      startDir: { x: -dx / len, y: -dy / len },
+      endDir: { x: dx / len, y: dy / len },
+    }
+  }
+
+  if (route === 'curved') {
+    const reach = clamp(Math.hypot(t.x - s.x, t.y - s.y) * 0.42, 34, 150)
+    const c1 = { x: s.x + sa.normal.x * reach, y: s.y + sa.normal.y * reach }
+    const c2 = { x: t.x + ta.normal.x * reach, y: t.y + ta.normal.y * reach }
+    if (polylineBlocked(bezierSamples(s, c1, c2, t), walls)) {
+      const around = detourRoute(s, t, sa, ta, others, [source, target])
+      // Rounded generously: a curve that has to divert should still read as one.
+      if (around) return fromPolyline(around, DETOUR_RADIUS.curved)
+    }
+    const nearEnd = bezierPoint(s, c1, c2, t, 0.96)
+    const nearStart = bezierPoint(s, c1, c2, t, 0.04)
+    const le = Math.hypot(t.x - nearEnd.x, t.y - nearEnd.y) || 1
+    const ls = Math.hypot(s.x - nearStart.x, s.y - nearStart.y) || 1
+    return {
+      path: `M${s.x},${s.y}C${c1.x},${c1.y} ${c2.x},${c2.y} ${t.x},${t.y}`,
+      curve: [s, c1, c2, t],
+      mid: bezierPoint(s, c1, c2, t, 0.5),
+      start: s,
+      end: t,
+      startDir: { x: (s.x - nearStart.x) / ls, y: (s.y - nearStart.y) / ls },
+      endDir: { x: (t.x - nearEnd.x) / le, y: (t.y - nearEnd.y) / le },
+    }
+  }
+
+  /* orthogonal */
+  const points = orthogonalPoints(s, t, sa, ta)
+  if (polylineBlocked(points, walls) || reversesDirection(points)) {
+    const around = detourRoute(s, t, sa, ta, others, [source, target])
+    if (around) return { ...fromPolyline(around, DETOUR_RADIUS.orthogonal), startSlide, endSlide }
+  }
+  return { ...fromPolyline(points, DETOUR_RADIUS.orthogonal), startSlide, endSlide }
+}
+
+/* --------------------------------------------------- measuring along a line */
+
+/** How finely a curve is followed when measuring along it. */
+const CURVE_SAMPLES = 48
+
+/**
+ * The connector as a polyline to measure along — its own vertices when it is
+ * one, a close sampling of the curve when it is not. The drawn path rounds a
+ * polyline's corners off; measuring the corners square instead is a fraction of
+ * a pixel at any one of them, and it is what keeps the canvas and the exporter,
+ * which only ever see the geometry, agreeing to the pixel.
+ */
+function traceOf(geometry: EdgeGeometry): Vec[] {
+  if (geometry.points && geometry.points.length >= 2) return geometry.points
+  if (geometry.curve) return bezierSamples(...geometry.curve, CURVE_SAMPLES)
+  return [geometry.start, geometry.end]
+}
+
+/** Each leg's length, and all of them together. */
+function legLengths(points: Vec[]): { legs: number[]; total: number } {
+  const legs: number[] = []
+  let total = 0
+  for (let i = 1; i < points.length; i++) {
+    const l = Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y)
+    legs.push(l)
+    total += l
+  }
+  return { legs, total }
+}
+
+/** The point `t` of the way along the connector, by length: `0` at the source, `1` at the target. */
+export function pointAlong(geometry: EdgeGeometry, t: number): Vec {
+  const points = traceOf(geometry)
+  const { legs, total } = legLengths(points)
+  if (!total) return { ...points[0]! }
+  let remaining = clamp(t, 0, 1) * total
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i]!
+    if (remaining <= leg || i === legs.length - 1) {
+      const a = points[i]!
+      const b = points[i + 1]!
+      const f = leg ? clamp(remaining / leg, 0, 1) : 0
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }
+    }
+    remaining -= leg
+  }
+  return { ...points.at(-1)! }
+}
+
+/**
+ * The point on the connector nearest `p`, and how far along the line it is —
+ * the inverse of `pointAlong`, so a label dragged to `p` can be written down
+ * as a place on the line plus how far it was pulled off it.
+ */
+export function projectOnto(geometry: EdgeGeometry, p: Vec): { t: number; point: Vec } {
+  const points = traceOf(geometry)
+  const { legs, total } = legLengths(points)
+  if (!total) return { t: 0.5, point: { ...points[0]! } }
+
+  let best = { t: 0, point: { ...points[0]! }, dist: Infinity }
+  let walked = 0
+  for (let i = 0; i < legs.length; i++) {
+    const a = points[i]!
+    const b = points[i + 1]!
+    const leg = legs[i]!
+    const f = leg
+      ? clamp(((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (leg * leg), 0, 1)
+      : 0
+    const q = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }
+    const dist = (p.x - q.x) ** 2 + (p.y - q.y) ** 2
+    if (dist < best.dist) best = { t: (walked + leg * f) / total, point: q, dist }
+    walked += leg
+  }
+  return { t: best.t, point: best.point }
+}
+
+/**
+ * Where a connection's label is centred: `position` of the way along the line,
+ * then `offset` off it. A label that was never moved — no `position` — sits on
+ * `geometry.mid`, exactly where every label was drawn before labels could be
+ * moved, so no diagram that has not moved one looks any different.
+ */
+export function labelAnchor(geometry: EdgeGeometry, position?: number, offset?: Vec): Vec {
+  const on = position === undefined ? geometry.mid : pointAlong(geometry, position)
+  return { x: on.x + (offset?.x ?? 0), y: on.y + (offset?.y ?? 0) }
+}
+
+/**
+ * The point on the line a label pulled off it belongs to — where the leader
+ * from the label back to its connection ends. `null` while the label sits on
+ * the line, where it needs no leader. Shared by the canvas and the export, so
+ * the two draw the same thread.
+ */
+export function labelFoot(geometry: EdgeGeometry, position?: number, offset?: Vec): Vec | null {
+  if (!offset || (!offset.x && !offset.y)) return null
+  return position === undefined ? geometry.mid : pointAlong(geometry, position)
+}
+
+/** Squared distance from `p` to the segment `a`–`b`. */
+function segmentDistanceSq(p: Vec, a: Vec, b: Vec): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const lenSq = dx * dx + dy * dy
+  const t = lenSq ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq, 0, 1) : 0
+  const px = a.x + dx * t
+  const py = a.y + dy * t
+  return (p.x - px) ** 2 + (p.y - py) ** 2
+}
+
+/**
+ * Which segment of a polyline `p` falls nearest to — as the index of the
+ * point *before* it, so a new waypoint inserted at that segment belongs at
+ * this index in the waypoints array (`points` here is
+ * `[start, ...waypoints, end]`, one longer than `waypoints` itself).
+ *
+ * Used to turn "the user grabbed the line here" into "insert a bend point
+ * there": clicking anywhere along a manually- or auto-routed connector picks
+ * the one existing leg the click actually landed nearest, whatever shape
+ * that leg is drawn in.
+ */
+export function nearestSegmentIndex(points: Vec[], p: Vec): number {
+  let best = 0
+  let bestDist = Infinity
+  for (let i = 0; i < points.length - 1; i++) {
+    const dist = segmentDistanceSq(p, points[i]!, points[i + 1]!)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = i
+    }
+  }
+  return best
+}
+
+/** Triangular arrowhead pointing along `dir`, with its tip at `point`. */
+export function arrowHeadPath(point: Vec, dir: Vec, stroke = EDGE_PX.regular): string {
+  // The head follows the line's weight, but not one-for-one: a thick connection
+  // wants a bigger arrow to keep its point, not one two and a half times the
+  // size of everything else on the diagram.
+  const scale = 1 + Math.max(0, stroke - EDGE_PX.regular) * 0.22
+  const length = 10 * scale
+  const halfWidth = 4.6 * scale
+  const n = { x: -dir.y, y: dir.x }
+  const base = { x: point.x - dir.x * length, y: point.y - dir.y * length }
+  return (
+    `M${point.x},${point.y}` +
+    `L${base.x + n.x * halfWidth},${base.y + n.y * halfWidth}` +
+    `L${base.x - n.x * halfWidth},${base.y - n.y * halfWidth}Z`
+  )
+}
+
+/**
+ * Dash pattern for a line style, or `undefined` for solid.
+ *
+ * The pattern scales with the line's weight. Left fixed, a thick dotted line
+ * closes up into a solid one — the dots grow with the stroke while the gaps
+ * between them do not.
+ */
+export function dashArray(
+  line: 'solid' | 'dashed' | 'dotted',
+  stroke = EDGE_PX.regular,
+): string | undefined {
+  const f = stroke / EDGE_PX.regular
+  const pattern = line === 'dashed' ? [8, 5] : line === 'dotted' ? [1.5, 4.5] : null
+  if (!pattern) return undefined
+  return pattern.map((n) => Math.round(n * f * 100) / 100).join(' ')
+}

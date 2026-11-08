@@ -1,0 +1,502 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+### Added
+
+- **A new message flow editor, docked under the canvas.** *Message flows* in
+  the toolbar now opens a panel below the diagram instead of a dialog over
+  it, so the messages keep moving in view while you edit them, hovering a row
+  lights up its connection on the canvas, and connections can be selected on
+  the canvas and added to a flow without closing anything. Drag its top edge
+  to resize it; the height is remembered.
+  - **Flows are shown as sequence diagrams.** Every node a flow touches is a
+    column with a lifeline under it, and every connection is a row with an
+    arrow from sender to receiver, grouped into numbered steps in the order
+    the message travels. The messages travel those arrows on the canvas's
+    own clock, and the step that is moving right now lights up in the flow's
+    colour.
+  - **You can change the order messages travel in.** Drag a row by its grip
+    between two steps to give it a step of its own, or onto a step to send it
+    at the same time; the arrows beside each row move it one place at a time,
+    and a step of several can be split back into one after another. The new
+    **Order** switch offers *Fan out* and *One by one*, which follow the
+    arrows as before, and *Custom*, which any rearranging turns into: each
+    step leaves once the one before it has arrived. A request and its reply
+    read as one message that waits at a node for its turn. *Automatic again*
+    goes back to following the arrows.
+  - **Look & timing sits beside the sequence**, and clicking a row brings up
+    that connection's own colour, message shape and speed at the top. On a
+    narrow screen it slides over the sequence from a *Look* button instead.
+  - The connection inspector now says which step of each flow a connection
+    is in.
+- **The "Flow paused" tag explains itself.** Hovering it says which flow is
+  paused and how to remove the tag — press *Run* on the flow in the message
+  flow editor — and clicking it opens the editor on that flow with the
+  connection picked out.
+- **A flow's hand-set order is saved in a new optional `steps` field**: a
+  list of steps, each a list of the flow's edge ids that travel together.
+  Flows that follow the arrows write nothing new, so no existing file
+  changes. Exported SVGs and the 3D view play a custom order exactly as the
+  canvas does. The JSON Schema and the AI skills are regenerated to match.
+
+- **Connections can be rerouted by hand.** Select
+  a connection and handles appear on it: a bar on each leg of an orthogonal
+  line, to drag that leg sideways while the line stays right-angled, and a
+  dashed dot on each stretch of a straight or curved line, to pull a bend
+  out of it. No *Manual* switch is needed first — the first drag takes over
+  the route exactly as it was drawn. An end slides along its node to follow
+  the leg that leaves it, and a jog is put in next to the node where it
+  cannot. `⇧`-dragging the line now adds a bend point on automatic
+  connections too.
+- **Resetting a route.** *Reset to automatic route* in a connection's
+  inspector and right-click menu, `⌥⇧R` for every selected connection (and
+  those between selected nodes), and *Reset every connection's route* on the
+  canvas menu hand connections back to the router.
+
+### Changed
+
+- **Manually routed orthogonal connections are always drawn right-angled.**
+  Bend points that do not line up used to be joined by a diagonal; a corner
+  is now drawn in between, in the SVG export too, turning rather than
+  doubling back. Points out of line by less than a pixel — the drift a
+  hand-dragged point picks up — count as lined up, so a file from an earlier
+  version gains no corners too small to see. Automatic connections, and
+  straight and curved ones, are drawn exactly as before.
+- The flow editor's *When one node feeds several* setting is now the *Fan
+  out* / *One by one* choice of the **Order** switch.
+- **Baugraph is now licensed under the Apache License 2.0** instead of MIT.
+  You can still use, modify and redistribute it freely, but the new licence
+  does not cover the Baugraph name or logo. A new `NOTICE` file explains that
+  forks need a name of their own, and the license page in the app shows it.
+- Opening the message flow editor collapses the inspector to give the canvas
+  more room, and closing it opens the inspector again.
+
+## [1.34.0]
+
+### Added
+
+- **A 3D view.** Press `3`, or **3D** in the toolbar or in the view switch at
+  the top right of the canvas, and the diagram stands up. It is exactly the
+  canvas's layout: every node stands where it is there, so the 3D view is the
+  same diagram looked at from an angle. Node faces are drawn by the same code
+  as the SVG export, so a node reads the same in 3D as everywhere else.
+  - **Nodes stand up, as solids.** Each one stands facing the front as the
+    solid its shape is a drawing of. A database is a drum, a queue a tube on
+    its side with its slots as bands round it, a pill a capsule, and a circle
+    a ball. A box, a rounded box, a hexagon and a diamond are their outlines
+    made deep. A note stays a sheet with its corner turned down. The name,
+    type and icon are laid on the front — on a round solid printed straight
+    onto its curve, like a decal, so the icon and the text stay upright — and
+    read as they do on the canvas. Zones are trays with low glass walls.
+    Nodes stay standing whichever way the view is turned.
+  - **Lit softly, like a studio model.** Matte solids in the node's colour,
+    their edges rounded over — boxes bevelled, a drum's lid and a tube's ends
+    rounded like a tin's — cast soft shadows on the floor and on each other,
+    on a slab that floats over the page on a shadow of its own. Names, icons,
+    connections and messages are drawn unlit, in exactly the theme's colours.
+    Hovering a node lights it faintly; a click flies to it.
+  - **Messages go from top to top.** Every connection is an arch out of the
+    top of the node it leaves and down into the top of the node it reaches,
+    leaving and arriving at the same slant and rising higher the farther it
+    goes, so it clears what stands between. Every connection of a node's, in
+    or out, meets it at one point, the middle of its top, so a node that
+    talks to many reads as the hub it is. A request and its reply between
+    the same two nodes swing apart in the middle. Dashed and dotted
+    connections are drawn with longer dashes than on the canvas, so they stay
+    clean from across the diagram. Message flows travel along the arches on
+    the same timing as on the canvas, as what the flow says they are: a
+    packet is a parcel taped down the middle, and an envelope a letter with
+    its flap down, both drawn like the canvas's glyphs on every side, standing
+    upright and turned to face the viewer. A connection styled differently changes the message as
+    it passes, as on the canvas, and a ripple in the message's colour marks
+    where it lands. `←`/`→` step a spotlight through the flows: the lit flow
+    is drawn in its own colour and everything it does not touch fades back.
+    Messages stay large enough to follow from across the whole diagram.
+  - **A node's 3D height** — *Flat*, *Low*, *Regular*, *Tall* or *Tower* —
+    is set in the inspector, for one node or a whole selection. *Low* and
+    *Regular* stand on the floor, *Low* the thinner, *Tall* and *Tower* on a
+    post over the rest, and *Flat* lies on its back.
+  - **It is for looking.** Nothing is moved, selected or edited in the 3D
+    view, and the editing keys do nothing there; undo and redo still work.
+    Drag or middle-drag orbits, right-drag or `⇧` middle-drag pans, scroll
+    zooms, a click on a node flies to it and a double-click on empty space
+    fits everything. There are angled, top and front views, a turntable
+    (`R`), a toggle for connection labels, and a button that saves the
+    current view as a PNG. The toolbar's zoom and fit buttons drive the 3D
+    camera while it is up.
+  - **Presentation mode** keeps the 3D view. It gains a **3D** switch and a
+    turntable, the spotlight still steps through the flows, and clicking a
+    node flies to it.
+  - three.js is only downloaded the first time the 3D view is opened, so
+    nobody who stays in 2D pays for it.
+- **An optional `extrusion` on a node in the file format** — `flat`, `low`,
+  `regular`, `tall` or `tower` — says how tall it stands in the 3D view. It is
+  the only 3D key: where a node stands in 3D is its `position`. Omitted means
+  `regular` and is not written, so no existing file changes, and the 2D canvas
+  and every export ignore it. The JSON Schema and the AI skills are
+  regenerated to match. Opening a file that uses it in an older Baugraph drops
+  it on the next save, as with any newer field.
+- **Labels can be moved.** Drag a connection's label along its line, towards
+  either end, or off the line altogether. It is kept as a place along the line
+  plus how far off it, so it stays with its connection — at the same end, on
+  the same side — when the nodes move, and the export puts it in the same
+  place, with the image grown to fit a label dragged out past every node.
+  A label pulled off the line keeps a dotted thread back to the point it
+  belongs to, on the canvas and in exports. Dropped back on the line it
+  sits on the line; dropped on the middle it is back where it started.
+  Double-click it, or use **Recentre label** in the right-click menu or
+  **Recentre** in the inspector, to put it back. `⌥` places it freely.
+- **Connection points can be moved.** `⇧`-drag a node's dot to slide it along
+  its side, and its connections go with it. It snaps to the grid, to the
+  middle of the side, and to its own even slot — where it goes back to
+  spreading itself evenly — and `⌥` places it freely. A moved point keeps its
+  place relative to the side as the node is resized; the points that were
+  not moved keep spreading themselves evenly around it. **Respread connection
+  points**, in the inspector or a node's right-click menu, puts them all back.
+- **Three optional keys in the file format for them**: `labelPosition` (`0`
+  at the source, `1` at the target) and `labelOffset` on an edge, and
+  `portPositions` on a node, listing only the points that were moved. None is
+  written for a label or a point that was never moved, so no existing file
+  changes. The JSON Schema and the AI skills are regenerated to match.
+
+### Changed
+
+- **A new logo, as part of the valsom family.** Baugraph's mark is now the
+  letters **BG** in Geist on valsom's orange tile, in the favicon, the home
+  screen icon, the VS Code extension, the docs and the link preview.
+- **The interface keeps its clean, neutral look, with valsom orange as the one
+  accent.** It marks what is current or selected — the focused tab, the latest
+  release, the chosen export backdrop, a drop target — and nothing else, so
+  buttons, switches and focus rings stay as they were.
+- **Fonts are served by Baugraph itself.** Geist and Geist Mono ship with the
+  app, the docs and the VS Code extension instead of being fetched from Google
+  Fonts, so nothing is requested from Google when the page opens, the privacy
+  policy no longer needs to mention it, and the extension shows the right
+  typeface offline. Code and file names are now set in Geist Mono.
+
+### Fixed
+
+- **Reversing a manually routed connection** now walks its bend points the
+  other way too. It used to keep them in their old order, so the reversed line
+  zig-zagged back through them from the wrong end.
+
+## [1.33.0]
+
+### Added
+
+- **A layers panel, for finding and regrouping nodes without hunting the
+  canvas.** A **Layers** tab on the left edge of the canvas opens a list of
+  every node in the diagram, nested the way its zones nest: zones first, then
+  everything else by name. Click a row to select that node (⌘- or ⇧-click adds
+  it to the selection), and double-click it — or use its locate button — to
+  bring it into view. Hover a row to lock or unlock it; a locked node keeps its
+  lock icon in the list, and clicking it shows you where it is. Drag rows to
+  regroup them: drop onto a zone to move into it, onto another node to join
+  the zone that node is in, or onto empty space to take it out of every zone.
+  Dragging a selected row moves the whole selection. A node that doesn't
+  already sit inside its new zone is set down under what the zone holds, and
+  the zone grows to fit it. One taken out is set down just clear of the zone,
+  so the canvas always matches the list. Every move is one undo step. A search
+  box finds nodes by name, type, technology or id, and the panel remembers
+  whether you left it open.
+- **Industry palettes.** Six packs of node types for the systems a general
+  palette has no name for — banking and payments, telco, insurance,
+  healthcare, retail and manufacturing — each type with its own Lucide icon,
+  colour and search aliases (listed below). The technology catalogue gains
+  the products that go with them: Temenos Transact, Finastra, FIS, Fiserv,
+  Mambu, Thought Machine Vault, Avaloq, SWIFT, SEPA, ISO 20022, Adyen, Stripe,
+  Ericsson, Nokia, Huawei, Amdocs, Netcracker, CSG, Oracle Communications,
+  Guidewire, Duck Creek, Sapiens, Epic, Oracle Health, Mirth Connect,
+  InterSystems HealthShare, SAP Commerce, Salesforce Commerce Cloud, Shopify,
+  commercetools, Adobe Commerce, Siemens SIMATIC, Rockwell Automation, OPC UA
+  and AVEVA PI. Picking one on an untyped node gives it the matching type, the
+  same as any other technology. The packs sit in their own **Industries**
+  section of the palette, each folded until opened, and a new **Industry
+  palettes** card in Settings hides the ones you don't work in. A hidden pack
+  still turns up when you search for it. In the right-click menus the packs
+  are grouped under one **Industries** submenu, so the general groups stay a
+  short list. The AI skills are regenerated, so an assistant writing a
+  diagram knows the new types and technologies too. Nothing changes in the
+  file format: these are new `type` and `tech` ids, and an older Baugraph
+  opens a diagram using them with the names spelled out from the id.
+  - **Banking & payments** — Core Banking, Ledger, Payment Hub, Card
+    Processor, Clearing & Settlement, KYC / AML, Fraud Detection, Risk Engine,
+    Open Banking API, ATM, Branch / Teller.
+  - **Telco** — RAN / Base Station, Core Network, Subscriber DB (HSS/HLR/UDM),
+    IMS, SMSC, Charging (OCS), OSS, BSS, Provisioning, eSIM.
+  - **Insurance** — Policy Administration, Claims, Underwriting, Rating
+    Engine, Broker Portal.
+  - **Healthcare** — EHR, PACS, Lab System, Interface Engine (HL7/FHIR),
+    Patient Portal.
+  - **Retail & e-commerce** — POS, Order Management, Inventory / WMS, PIM,
+    Checkout.
+  - **Manufacturing & IoT** — PLC, SCADA, MES, Historian, Edge Gateway,
+    Digital Twin.
+- **A palette overview.** **Browse all palettes**, under the palette's search
+  box — or `B` on the canvas, which closes it again too — opens everything the
+  palette can add, laid out side by side instead of folded into a narrow
+  column: every node-type group, the industry packs, and on a second tab the
+  whole technology catalogue, with the node type each technology arrives as.
+  One search narrows both tabs, clicking an entry drops it on the canvas, and
+  each industry pack has an **In palette** switch to show or hide it in the
+  sidebar.
+
+### Fixed
+
+- **Connections that have to go around no longer hug the node they leave.**
+  Two stacked nodes joined side to side — out of the right of one, into the
+  left of the other — drew the leg that crosses between them pressed against
+  the upper node instead of halfway down the gap. Any leg of a detour that is
+  free to move now sits in the middle of the space it runs through. The end
+  that enters a node also turns in as close to it as the other end turns out,
+  instead of a full step further away, so those connections are shorter and
+  read the same at both ends. The canvas and SVG/PNG exports both draw the new
+  routes.
+
+## [1.32.0]
+
+Skipped for the editor: this version went to restructuring the repository to
+make room for a new Python package, `baugraph`. The editor moved to
+`Projects/baugraph-web`, the package was set up in `Projects/baugraph-py`,
+and the build and publish pipelines were updated to match. Baugraph itself is
+unchanged from 1.31.0.
+
+## [1.31.0]
+
+### Added
+
+- **Additional info on a connection's label.** A connection can now carry a
+  longer note behind its label — a payload, an SLA, a retry policy — in the new
+  **Additional info** field under **Label** in the inspector. A label with info
+  shows an info icon, and hovering the label shows the text. Info on a
+  connection without a label is drawn as an icon-only chip, so it is still easy
+  to find. An SVG export includes the text as a native hover tooltip. In the
+  file it is an optional `labelInfo` string on the edge, written only when it is
+  set, so every existing diagram opens and saves exactly as before.
+
+### Changed
+
+- **Nodes can be made thinner.** Dragging a node's top or bottom edge, or
+  typing a height in the inspector, now goes down to what the node's text
+  actually needs (a label-only box can be 30px tall), not the taller size a new
+  node starts at. New nodes and **Fit** (⇧⌘F) still use the roomier default,
+  and renaming a thin node no longer resets it to that height.
+
+## [1.30.0]
+
+### Added
+
+- **Authors on a diagram.** `meta.authors` credits the people behind a diagram:
+  a list of `{ "name": "…", "email": "…", "website": "…" }` in the order they
+  should be credited, of which only `name` is required. The whole key is
+  optional and is written only when somebody is credited, so every file written
+  before this stays byte-identical on the next save. Each author is written on
+  one line, and the list is the one array the editor leaves in the order it was
+  given — who comes first is the file's decision, not the editor's.
+  In the editor, the inspector's **Diagram** panel (shown when nothing is
+  selected) has a new **Authors** section listing everyone credited, with their
+  email and website as links. Add someone with **Add author**, and hover a name
+  to edit, remove or reorder them — each change is one undo step. A website is
+  only ever linked if it is an `http(s)` address, so a shared file cannot put a
+  script behind the link.
+- **Delete all stored diagrams from the Open dialog.** The **Stored in this
+  browser** list now shows how many diagrams it holds, and has a **Delete all
+  from browser cache** button once there is more than one. You no longer have
+  to delete them one by one. It asks first, and closes any tab still showing
+  one of them.
+- **Cite Baugraph in a thesis.** A new **Cite** entry in the sidebar (also
+  linked from **About**) has references to Baugraph ready to copy, for a
+  thesis, paper or report that shows a diagram drawn with it: APA 7, Harvard,
+  IEEE, a BibTeX/BibLaTeX entry, and a figure caption ("Own illustration,
+  created with Baugraph …"). Type the figure's title to fill in the caption.
+  Each reference names Til Schwarze as author and gives the version you are
+  running, the year that build was made, the GitHub repository, and today as
+  the access date.
+
+### Changed
+
+- **The AI skills now teach layout, not just the format.** A new **Layout and
+  placement** section tells an AI how the canvas actually sizes and routes
+  things, so the diagrams it writes open looking drawn rather than dropped:
+  how big a node has to be for its label, caption, sublabel and icon (with
+  per-shape allowances and floors, and a table of real nodes measured by the
+  editor's own fitter), spacing between columns, rows and labelled edges, one
+  main direction on a grid of columns and rows, centre alignment so connectors
+  come out straight, where a zone's children go below its header and how a
+  zone wraps them, how `auto` sides are picked, what connectors route around,
+  and when to spread a fan-out over `ports`. It ends in a checklist to run
+  before handing a file back. The node-type catalogue now lists the size each
+  type starts at, and the node example is sized to fit its own text. The
+  sizes, floors and zone paddings come from the same code the editor runs on,
+  so they stay in step on the next `npm run ai-skills:generate`.
+
+## [1.29.0]
+
+### Added
+
+- **A VS Code extension.** `*.baugraph.json` files open on the canvas inside VS
+  Code instead of as JSON — the same editor as the web app, running in a custom
+  editor and writing the same file. Edits go into the document the way a text
+  edit does, so `⌘S`, undo, revert, hot exit, the Timeline and the source-control
+  diff all behave normally, and a split text editor on the same file stays in
+  step as you type. **Format Document** on a diagram file rewrites it in
+  canonical form, `*.baugraph.json` is bound to the published JSON Schema for
+  editing the source by hand, and exports go through a save dialog. Built from
+  this repository with `npm run extension:package`; see `docs/vscode.md`.
+- **Presentation mode.** Toggle it from the toolbar, press **P**, or hit **Esc**
+  to leave — the nav, header, toolbar and inspector all drop away and, where the
+  browser allows it, the page goes full screen too. The laser pointer stays one
+  switch away in a small floating control, since the toolbar it normally lives
+  in is hidden along with everything else. The canvas itself goes view-only for
+  as long as it's on: dragging, connecting, resizing, the right-click menu,
+  double-click rename and every editing shortcut are disabled, with a one-time
+  reminder shown at the top of the canvas — the same spot the laser pointer's
+  own hint uses — so a click that does nothing doesn't come as a surprise. For
+  the first five seconds the hint sits a little lower, clear of the laser/exit
+  controls in the corner, then settles back to its normal spot.
+- **A foldable inspector.** A new button in its header collapses the panel on
+  the right to a thin rail and back, freeing up room to work the canvas without
+  losing the panel entirely. The choice is remembered across reloads.
+- **A "Demo" badge on the worked examples.** The three sample diagrams opened
+  on a first visit now carry a small alert in the top-left corner of the
+  canvas, so it's clear at a glance that what's on screen is a shipped example
+  rather than the user's own work.
+- **One dark mode setting for the whole app.** The moon icon in the toolbar
+  (also in the canvas's right-click menu and a new **Appearance** card in
+  Settings) now switches the sidebar, header, canvas and JSON view together.
+  In the browser it's a single preference stored on the device, defaulting to
+  light, so it stays the same wherever you look instead of changing when you
+  switch tabs. Exports (SVG/PNG/GIF) pick up the same setting, so a downloaded
+  image matches what was on screen.
+- **The VS Code extension follows VS Code's own colour theme by default.**
+  The same toggle there sets an explicit light or dark instead, saved as the
+  `baugraph.theme` setting (Settings UI, settings.json, or the **Baugraph:
+  Diagram Theme…** command, which is also the way back to "match VS Code").
+
+### Changed
+
+- **Diagram files are now written in a canonical order.** Nodes come out in
+  hierarchy order — a zone, then everything inside it — connections are grouped
+  by the node they leave, flows are ordered by id, and the keys of a `data`
+  block are sorted. Array order never carried meaning (paint order comes from a
+  node's `kind`, and a flow's hops from the graph), but it used to be whatever
+  order the diagram happened to be drawn in, so two people building the same
+  diagram produced files full of moved blocks and no changes. The same diagram
+  now has exactly one file. Saving an existing diagram once will show this as a
+  one-off reordering diff.
+- **Toolbar buttons now carry their label alongside the icon** for message
+  flows, play/pause, presentation mode and the laser pointer, so they're easier
+  to scan at a glance. Magnet, grid and the theme toggle stay icon-only.
+
+### Fixed
+
+- **Dark mode used to cover only the canvas, and inconsistently at that.**
+  The sidebar, header and JSON view never picked it up at all, and because the
+  toggle changed a per-diagram setting, switching tabs could silently flip it
+  back. It's one setting now — see "One dark mode setting for the whole app"
+  above.
+- **The GitHub Pages deploy could fail type-checking over the VS Code
+  extension.** The app's `type-check` step type-checked the extension host
+  test, which imports the extension's `vscode`-dependent code; that only
+  resolved locally because the extension's own dependencies happened to be
+  installed already. On a clean runner it isn't, so the deploy build broke.
+  The extension test suite is now excluded from the app's type-check — it
+  still runs under Vitest, and the extension has its own `type-check` step.
+
+## [1.28.0]
+
+### Added
+
+- **Manual edge routing with waypoints.** Drag anywhere along a connection to
+  drop a bend point; the line is then drawn straight through your points instead
+  of auto-routing around obstacles. Move several waypoints at once, delete them
+  one at a time, or pick **Reset routing** from an edge's context menu to hand
+  it back to the auto-router. Waypoints round-trip through `.baugraph.json` as a
+  per-edge `waypoints` list (one point per line) and are covered by the JSON
+  Schema and the generated AI skills.
+- **Watermarks on exports.** SVG, PNG and GIF exports can carry a diagonally
+  tiled caption — a `DRAFT` stamp, or a short issued-to id from the **Random**
+  button. It is drawn as one rotated SVG pattern so it covers the whole image
+  edge to edge, scales to the export size, and — like every export — never
+  leaves the browser.
+- **In-app changelog.** A **What's New** entry in the sidebar renders this file
+  as a formatted release history.
+- **Laser pointer.** A presentation aid — toggle it from the toolbar or press
+  **L** and the cursor becomes a glowing dot that follows you over the canvas;
+  hold and drag to draw a stroke that fades after a couple of seconds, for
+  circling something in a meeting. Scroll-to-pan and pinch-to-zoom still work;
+  presses on the canvas draw instead of moving anything. **Esc** turns it off.
+- Docs
+- "Self host with Docker" link in the app header, pointing at the Docker Hub image
+- Two more worked example diagrams (a CI/CD pipeline and a three-tier web app),
+  opened as their own tabs alongside the order-processing example on a first visit
+
+### Changed
+
+- Privacy policy now names Cloudflare as the DNS/CDN provider in front of the
+  GitHub Pages host
+
+## [1.27.0]
+
+### Added
+
+- Created amd64 docker image (before it was only arm)
+
+## [1.26.0]
+
+### Added
+
+- Created first docker image
+
+## [1.25.0] - 2026-08-22
+
+Baugraph is a browser-based architecture-diagram editor built on Vue Flow.
+This is the current state of the project; there have been no tagged releases
+before this one, so everything built since the initial commit is listed here.
+
+### Added
+
+- Canvas editor for architecture diagrams: drag nodes from a palette, connect
+  them, group them into labelled/nestable zones, and lock nodes/zones in place.
+- Node-type (~90) and technology (~250) catalogues, grouped into categories,
+  with a searchable palette and matching context-menu/inspector pickers.
+- Connection points per node side (up to six), spread evenly and reflowed on
+  resize, with an inspector-driven point picker and an "auto" mode.
+- Sizing that fits a node's label/caption/icon automatically, manual resize by
+  dragging an edge, and `⇧⌘F` to re-fit the selection (or everything).
+- Copy/paste, including via a right-click context menu.
+- Undo/redo, multi-select, alignment and snapping while dragging.
+- Message-flow animation: send a message along a path with forks that either
+  multiply or route one-by-one, per-connection style overrides, and both
+  discrete-token and marching-line rendering (GSAP + CSS/SVG), including
+  reduced-motion handling.
+- Multi-tab support with a save dialog and diagram naming.
+- Export to `.baugraph.json`, SVG (with animated flows via SMIL) and PNG
+  (2x/4x), plus macOS-specific native save/export options.
+- A Monaco-based JSON editor for viewing and hand-editing diagram files.
+- Migration of exports from the legacy single-file `diagram-tool.html`.
+- JSON Schema for `.baugraph.json`, generated from the app's zod schema, with
+  in-app validation and error reporting on open.
+- AI skills generated from the diagram schema for working with
+  `.baugraph.json` files.
+- Legal/impressum page.
+- Build, deploy and process-management tooling (`build.sh`, `manage.sh`) and
+  a GitHub Pages deploy workflow on a self-hosted runner.
+
+### Changed
+
+- Numerous UI passes on layout, sidebar, tabs, wrapping, labels, fonts and
+  overall visualization/message-flow behaviour.
+
+### Fixed
+
+- Diagram edge rendering, node editing, panel and sidebar layout issues found
+  along the way.
+
+[1.28.0]: https://github.com/justTil/baugraph/releases/tag/1.28.0
+[1.27.0]: https://github.com/justTil/baugraph/releases/tag/1.27.0
+[1.26.0]: https://github.com/justTil/baugraph/releases/tag/1.26.0
+[1.25.0]: https://github.com/justTil/baugraph/releases/tag/1.25.0

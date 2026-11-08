@@ -1,0 +1,48 @@
+/*
+ * VitePress's default theme, kept as it is apart from two things it shares
+ * with the app (src/style.css): the typeface, Geist, served from the app's own
+ * font files rather than a CDN, and valsom orange as the one accent — links,
+ * the primary button and the current page in the sidebar. Headlines stay in
+ * the text colour.
+ */
+
+@font-face {
+  font-family: 'Geist';
+  src: url('../../../src/assets/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../../../src/assets/fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --vp-font-family-base: 'Geist', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --vp-font-family-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /*
+   * On white, link-sized orange text needs the darker accent (5.0:1); the
+   * brand orange itself (3.4:1) is for hover and fills. The button carries
+   * white text, so it takes the darker one too.
+   */
+  --vp-c-brand-1: #d1320f;
+  --vp-c-brand-2: #ff4622;
+  --vp-c-brand-3: #d1320f;
+  --vp-c-brand-soft: rgba(255, 70, 34, 0.12);
+
+  --vp-home-hero-name-color: var(--vp-c-text-1);
+}
+
+/* On the dark ground the brand orange is legible as text (5:1). */
+.dark {
+  --vp-c-brand-1: #ff4622;
+  --vp-c-brand-2: #ff4622;
+  --vp-c-brand-3: #d1320f;
+  --vp-c-brand-soft: rgba(255, 70, 34, 0.16);
+}

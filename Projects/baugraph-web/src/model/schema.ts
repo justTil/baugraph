@@ -1,0 +1,393 @@
+import { z } from 'zod'
+import {
+  ARROW_MODES,
+  BORDER_WIDTHS,
+  COLOR_KEYS,
+  EXTRUSIONS,
+  FLOW_MODES,
+  FLOW_MOTIONS,
+  FLOW_TOKENS,
+  FORMAT_VERSION,
+  LINE_STYLES,
+  LINE_WIDTHS,
+  MAX_PORTS,
+  MAX_WAYPOINTS,
+  ROUTES,
+  SHAPE_KEYS,
+  SIDES,
+  TEXT_ALIGNS,
+} from '@/model/types'
+import {
+  DEFAULT_CANVAS,
+  EDGE_DEFAULTS,
+  FLOW_DEFAULTS,
+  NODE_DEFAULTS,
+} from '@/model/defaults'
+
+/**
+ * Runtime schema for `.baugraph.json`.
+ *
+ * Every field that has a default in `defaults.ts` is optional here — a file may
+ * omit it, and parsing fills it in. That is what lets the writer keep files terse
+ * while the editor always sees a fully populated document.
+ *
+ * This schema is also the source for the published JSON Schema
+ * (`npm run schema:generate` → `public/schema/baugraph-v1.schema.json`).
+ */
+
+const idSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/, 'ids may contain letters, digits and . _ : -')
+
+const vec2Schema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+})
+
+const sizeSchema = z.object({
+  width: z.number().finite().min(16),
+  height: z.number().finite().min(16),
+})
+
+const metadataSchema = z.record(z.string(), z.unknown())
+
+/**
+ * Node type and technology ids. Deliberately not an enum: the catalogues live in
+ * the app and grow with it, and a diagram naming something they have never heard
+ * of is shown as written rather than rejected. The pattern only rules out
+ * spellings that could never be a catalogue id, so `"Apache Kafka"` is caught
+ * where `apache_kafka` was meant.
+ */
+const catalogueIdSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z0-9_]*$/, 'catalogue ids are lower-case, digits and _')
+
+/**
+ * Connection points per side.
+ *
+ * Every side is optional and every side defaults to the one point it has always
+ * had, so a file only names the sides it added to — and one written before this
+ * existed parses to exactly the node it always did.
+ */
+const portCountSchema = z.number().int().min(1).max(MAX_PORTS)
+
+const portsSchema = z.object({
+  top: portCountSchema.optional(),
+  right: portCountSchema.optional(),
+  bottom: portCountSchema.optional(),
+  left: portCountSchema.optional(),
+})
+
+/** A place along a line or a side: `0` at its start, `1` at its end. */
+const fractionSchema = z.number().finite().min(0).max(1)
+
+/**
+ * Connection points slid along their side, keyed by the point's number on that
+ * side. Only moved points are listed, so a side keeps no entry at all for a
+ * point that still sits in its evenly spread slot. A number the side does not
+ * offer is accepted and ignored — the same leniency an edge's `sourcePort` gets
+ * — rather than refusing to open a diagram over a side that was narrowed.
+ */
+const portSlotsSchema = z.record(
+  z.string().regex(new RegExp(`^[1-${MAX_PORTS}]$`), `connection points are numbered 1–${MAX_PORTS}`),
+  fractionSchema,
+)
+
+const portPositionsSchema = z.object({
+  top: portSlotsSchema.optional(),
+  right: portSlotsSchema.optional(),
+  bottom: portSlotsSchema.optional(),
+  left: portSlotsSchema.optional(),
+})
+
+export const nodeSchema = z.object({
+  id: idSchema,
+  kind: z.enum(['shape', 'zone', 'annotation']).default(NODE_DEFAULTS.kind),
+  type: catalogueIdSchema.default(NODE_DEFAULTS.type),
+  tech: catalogueIdSchema.default(NODE_DEFAULTS.tech),
+  label: z.string().default(''),
+  sublabel: z.string().default(NODE_DEFAULTS.sublabel),
+  align: z.enum(TEXT_ALIGNS).default(NODE_DEFAULTS.align),
+  shape: z.enum(SHAPE_KEYS).default(NODE_DEFAULTS.shape),
+  color: z.enum(COLOR_KEYS).default(NODE_DEFAULTS.color),
+  border: z.enum(BORDER_WIDTHS).default(NODE_DEFAULTS.border),
+  icon: z.string().default(NODE_DEFAULTS.icon),
+  position: vec2Schema,
+  size: sizeSchema,
+  ports: portsSchema.optional(),
+  // Optional and never defaulted: a node whose points were never moved says
+  // nothing about them, which is what every file written before this did.
+  portPositions: portPositionsSchema.optional(),
+  parent: idSchema.nullable().default(NODE_DEFAULTS.parent),
+  // 3D only, and defaulted like everything else on a node: a file written before
+  // the 3D view existed parses to a node that stands at the regular height.
+  extrusion: z.enum(EXTRUSIONS).default(NODE_DEFAULTS.extrusion),
+  locked: z.boolean().default(NODE_DEFAULTS.locked),
+  data: metadataSchema.optional(),
+})
+
+export const edgeSchema = z.object({
+  id: idSchema,
+  source: idSchema,
+  target: idSchema,
+  sourceSide: z.enum(SIDES).default(EDGE_DEFAULTS.sourceSide),
+  targetSide: z.enum(SIDES).default(EDGE_DEFAULTS.targetSide),
+  // Which point on that side, 1-based. A file may name one the node no longer
+  // offers — a side that has since been narrowed — and the renderer falls back
+  // to the last point that does exist rather than refusing to open the diagram.
+  sourcePort: portCountSchema.default(EDGE_DEFAULTS.sourcePort),
+  targetPort: portCountSchema.default(EDGE_DEFAULTS.targetPort),
+  label: z.string().default(EDGE_DEFAULTS.label),
+  // Optional, and empty when a file written before it existed is opened, so every
+  // older diagram reads — and writes back — exactly as it did.
+  labelInfo: z.string().default(EDGE_DEFAULTS.labelInfo),
+  // Both optional and never defaulted: a label that was never moved sits where
+  // labels always have — the middle of the line — and its file says nothing.
+  labelPosition: fractionSchema.optional(),
+  labelOffset: vec2Schema.optional(),
+  route: z.enum(ROUTES).default(EDGE_DEFAULTS.route),
+  line: z.enum(LINE_STYLES).default(EDGE_DEFAULTS.line),
+  width: z.enum(LINE_WIDTHS).default(EDGE_DEFAULTS.width),
+  arrows: z.enum(ARROW_MODES).default(EDGE_DEFAULTS.arrows),
+  color: z.enum(COLOR_KEYS).nullable().default(EDGE_DEFAULTS.color),
+  // No `.min(1)`: a hand-written `[]` is harmless and means the same as
+  // omitting the key entirely — automatic routing.
+  waypoints: z.array(vec2Schema).max(MAX_WAYPOINTS).optional(),
+  data: metadataSchema.optional(),
+})
+
+const flowEdgeStyleSchema = z.object({
+  color: z.enum(COLOR_KEYS).optional(),
+  token: z.enum(FLOW_TOKENS).optional(),
+  speed: z.number().finite().min(10).max(4000).optional(),
+})
+
+export const flowSchema = z.object({
+  id: idSchema,
+  label: z.string().default(FLOW_DEFAULTS.label),
+  // A flow with nothing to travel has nothing to say; the editor drops one whose
+  // last connection is deleted rather than leaving it behind.
+  edges: z.array(idSchema).min(1),
+  // An order set by hand. Each inner list is one step; an empty step would say
+  // "wait for nothing", which is not something a diagram can mean.
+  steps: z.array(z.array(idSchema).min(1)).optional(),
+  from: idSchema.nullable().default(FLOW_DEFAULTS.from),
+  color: z.enum(COLOR_KEYS).default(FLOW_DEFAULTS.color),
+  motion: z.enum(FLOW_MOTIONS).default(FLOW_DEFAULTS.motion),
+  token: z.enum(FLOW_TOKENS).default(FLOW_DEFAULTS.token),
+  mode: z.enum(FLOW_MODES).default(FLOW_DEFAULTS.mode),
+  speed: z.number().finite().min(10).max(4000).default(FLOW_DEFAULTS.speed),
+  count: z.number().int().min(1).max(12).default(FLOW_DEFAULTS.count),
+  stream: z.boolean().default(FLOW_DEFAULTS.stream),
+  pause: z.number().finite().min(0).max(60).default(FLOW_DEFAULTS.pause),
+  loop: z.boolean().default(FLOW_DEFAULTS.loop),
+  enabled: z.boolean().default(FLOW_DEFAULTS.enabled),
+  style: z.record(idSchema, flowEdgeStyleSchema).optional(),
+  data: metadataSchema.optional(),
+})
+
+export const canvasSchema = z.object({
+  theme: z.enum(['light', 'dark']).default(DEFAULT_CANVAS.theme),
+  grid: z.boolean().default(DEFAULT_CANVAS.grid),
+  snap: z.boolean().default(DEFAULT_CANVAS.snap),
+  snapSize: z.number().int().min(1).max(200).default(DEFAULT_CANVAS.snapSize),
+})
+
+/**
+ * A way to reach an author. A plain string rather than a validated format, the
+ * same reasoning as catalogue ids: a diagram is shown as written rather than
+ * refused over an address this build happens to disagree with.
+ */
+const contactSchema = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .optional()
+    // A blank address is the absence of one. Normalising it here rather than on
+    // write is what keeps "what was read" and "what gets written" the same
+    // document, so a file cannot round-trip into a different one.
+    .transform((value) => (value && value.trim() !== '' ? value : undefined))
+
+/**
+ * One credited author. Only `name` is required — an address is a way to be
+ * reached, not part of being the author.
+ */
+export const authorSchema = z.object({
+  name: z.string().min(1, 'an author needs a name').max(200),
+  email: contactSchema(320),
+  website: contactSchema(2048),
+})
+
+export const metaSchema = z.object({
+  title: z.string().default('Untitled diagram'),
+  description: z.string().optional(),
+  // Optional, never defaulted to `[]`: a file that credits nobody says nothing
+  // about authorship, which is what every file written before this did.
+  authors: z.array(authorSchema).max(50).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+})
+
+export const documentSchema = z
+  .object({
+    /** JSON Schema pointer some editors add; accepted and dropped. */
+    $schema: z.string().optional(),
+    baugraph: z.string().default(FORMAT_VERSION),
+    meta: metaSchema.default({ title: 'Untitled diagram' }),
+    canvas: canvasSchema.default(DEFAULT_CANVAS),
+    nodes: z.array(nodeSchema).default([]),
+    edges: z.array(edgeSchema).default([]),
+    flows: z.array(flowSchema).default([]),
+  })
+  .superRefine((doc, ctx) => {
+    const ids = new Set<string>()
+    doc.nodes.forEach((node, i) => {
+      if (ids.has(node.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['nodes', i, 'id'],
+          message: `duplicate node id "${node.id}"`,
+        })
+      }
+      ids.add(node.id)
+    })
+
+    doc.nodes.forEach((node, i) => {
+      if (node.parent == null) return
+      if (!ids.has(node.parent)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['nodes', i, 'parent'],
+          message: `parent "${node.parent}" does not exist`,
+        })
+      } else if (node.parent === node.id) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['nodes', i, 'parent'],
+          message: 'a node cannot be its own parent',
+        })
+      }
+    })
+
+    // Zones may nest, so `parent` is a chain — and a chain can loop back on
+    // itself. Anything walking it (layout, export) would spin forever.
+    const parentOf = new Map(doc.nodes.map((node) => [node.id, node.parent ?? null]))
+    doc.nodes.forEach((node, i) => {
+      const seen = new Set<string>([node.id])
+      let current = parentOf.get(node.id) ?? null
+      while (current && parentOf.has(current)) {
+        if (seen.has(current)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['nodes', i, 'parent'],
+            message: `"${node.id}" is part of a parent cycle`,
+          })
+          break
+        }
+        seen.add(current)
+        current = parentOf.get(current) ?? null
+      }
+    })
+
+    const edgeIds = new Set<string>()
+    doc.edges.forEach((edge, i) => {
+      if (edgeIds.has(edge.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['edges', i, 'id'],
+          message: `duplicate edge id "${edge.id}"`,
+        })
+      }
+      edgeIds.add(edge.id)
+      for (const end of ['source', 'target'] as const) {
+        if (!ids.has(edge[end])) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['edges', i, end],
+            message: `${end} "${edge[end]}" does not reference an existing node`,
+          })
+        }
+      }
+    })
+
+    // A flow is a set of references and nothing else, so every one of them has
+    // to resolve — a dangling edge id would animate a connection that is not
+    // there, which is a diagram lying about itself.
+    const flowIds = new Set<string>()
+    doc.flows.forEach((flow, i) => {
+      if (flowIds.has(flow.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['flows', i, 'id'],
+          message: `duplicate flow id "${flow.id}"`,
+        })
+      }
+      flowIds.add(flow.id)
+
+      const seenEdges = new Set<string>()
+      flow.edges.forEach((edge, j) => {
+        if (!edgeIds.has(edge)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['flows', i, 'edges', j],
+            message: `"${edge}" does not reference an existing connection`,
+          })
+        }
+        if (seenEdges.has(edge)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['flows', i, 'edges', j],
+            message: `connection "${edge}" is listed twice in this flow`,
+          })
+        }
+        seenEdges.add(edge)
+      })
+
+      // A step can only order what the flow travels, and a connection is
+      // travelled once — two steps both sending it would contradict each other.
+      const stepped = new Set<string>()
+      flow.steps?.forEach((step, j) => {
+        step.forEach((edge, k) => {
+          if (!seenEdges.has(edge)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['flows', i, 'steps', j, k],
+              message: `"${edge}" is ordered but is not one of this flow's connections`,
+            })
+          }
+          if (stepped.has(edge)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['flows', i, 'steps', j, k],
+              message: `connection "${edge}" is in more than one step`,
+            })
+          }
+          stepped.add(edge)
+        })
+      })
+
+      if (flow.from != null && !ids.has(flow.from)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['flows', i, 'from'],
+          message: `start node "${flow.from}" does not exist`,
+        })
+      }
+
+      // Styling a connection the flow does not travel would draw nothing and
+      // read as a bug in the diagram rather than in the file.
+      for (const edge of Object.keys(flow.style ?? {})) {
+        if (seenEdges.has(edge)) continue
+        ctx.addIssue({
+          code: 'custom',
+          path: ['flows', i, 'style', edge],
+          message: `"${edge}" is styled but is not one of this flow's connections`,
+        })
+      }
+    })
+  })
+
+export type ParsedDocument = z.infer<typeof documentSchema>

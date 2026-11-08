@@ -1,0 +1,16 @@
+import type { Component } from 'vue'
+import { defineAsyncComponent } from 'vue'
+
+/**
+ * Maps a nav item id to the view rendered in the shell.
+ * Replace with vue-router routes once more than a handful of views exist.
+ */
+export const views: Record<string, Component> = {
+  editor: defineAsyncComponent(() => import('@/features/diagram/views/DiagramView.vue')),
+  settings: defineAsyncComponent(() => import('@/features/settings/views/SettingsView.vue')),
+  legal: defineAsyncComponent(() => import('@/features/legal/views/LegalView.vue')),
+  license: defineAsyncComponent(() => import('@/features/license/views/LicenseView.vue')),
+  about: defineAsyncComponent(() => import('@/features/about/views/AboutView.vue')),
+  cite: defineAsyncComponent(() => import('@/features/cite/views/CiteView.vue')),
+  changelog: defineAsyncComponent(() => import('@/features/changelog/views/ChangelogView.vue')),
+}

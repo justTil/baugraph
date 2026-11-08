@@ -1,0 +1,392 @@
+import type {
+  DiagramAuthor,
+  DiagramDocument,
+  DiagramEdge,
+  DiagramMeta,
+  DiagramNode,
+  MessageFlow,
+} from '@/model/types'
+import { FORMAT_VERSION, PORT_SIDES } from '@/model/types'
+import {
+  EDGE_DEFAULTS,
+  FLOW_DEFAULTS,
+  NODE_DEFAULTS,
+  blankDocument,
+  prunePortPositions,
+} from '@/model/defaults'
+import { documentSchema } from '@/model/schema'
+import { migrate } from '@/model/migrate'
+import { sortDocument } from '@/model/sort'
+
+/**
+ * Where the published JSON Schema lives, relative to the deployed app.
+ *
+ * A plain constant rather than `import.meta.env.BASE_URL`: the app is served
+ * from the root (see `vite.config.ts`), and keeping Vite out of the model is
+ * what lets this module be bundled for Node as-is — which the VS Code
+ * extension's formatter does.
+ */
+export const SCHEMA_URL = '/schema/baugraph-v1.schema.json'
+
+export class DiagramParseError extends Error {
+  constructor(
+    message: string,
+    /** `path: message` pairs, one per validation failure. */
+    readonly issues: { path: string; message: string }[] = [],
+  ) {
+    super(message)
+    this.name = 'DiagramParseError'
+  }
+}
+
+/** Drops keys whose value equals the format default. */
+function omitDefaults<T extends object>(value: T, defaults: Partial<T>): Partial<T> {
+  const out: Record<string, unknown> = {}
+  for (const [key, v] of Object.entries(value)) {
+    if (v === undefined) continue
+    if (key in defaults && Object.is((defaults as Record<string, unknown>)[key], v)) continue
+    out[key] = v
+  }
+  return out as Partial<T>
+}
+
+/**
+ * Drops an author list that credits nobody, and each author's empty contact
+ * fields. Crediting nobody is what a file says by staying silent, so `[]` would
+ * show up as a change in every diagram the moment this feature shipped — the
+ * same reasoning as a node's empty `data` and a document with no `flows`.
+ */
+function trimmedMeta(meta: DiagramMeta): DiagramMeta {
+  const out: DiagramMeta = { ...meta }
+  if (!out.authors?.length) delete out.authors
+  else {
+    out.authors = out.authors.map((author) =>
+      ordered(
+        Object.fromEntries(
+          Object.entries(author).filter(([, v]) => v !== undefined && v !== ''),
+        ) as DiagramAuthor,
+        ['name', 'email', 'website'],
+      ),
+    )
+  }
+  return out
+}
+
+/** Reorders an object's keys to `order`; anything unlisted is appended. */
+function ordered<T extends object>(value: T, order: (keyof T)[]): T {
+  const out: Record<string, unknown> = {}
+  for (const key of order) {
+    if (key in value && (value as Record<string, unknown>)[key as string] !== undefined) {
+      out[key as string] = (value as Record<string, unknown>)[key as string]
+    }
+  }
+  for (const key of Object.keys(value)) {
+    if (!(key in out) && (value as Record<string, unknown>)[key] !== undefined) {
+      out[key] = (value as Record<string, unknown>)[key]
+    }
+  }
+  return out as T
+}
+
+const NODE_KEY_ORDER: (keyof DiagramNode)[] = [
+  'id',
+  'kind',
+  'type',
+  'tech',
+  'label',
+  'sublabel',
+  'align',
+  'shape',
+  'color',
+  'border',
+  'icon',
+  'position',
+  'size',
+  'ports',
+  'portPositions',
+  'parent',
+  'extrusion',
+  'locked',
+  'data',
+]
+
+const EDGE_KEY_ORDER: (keyof DiagramEdge)[] = [
+  'id',
+  'source',
+  'target',
+  'sourceSide',
+  'sourcePort',
+  'targetSide',
+  'targetPort',
+  'label',
+  'labelInfo',
+  'labelPosition',
+  'labelOffset',
+  'route',
+  'waypoints',
+  'line',
+  'width',
+  'arrows',
+  'color',
+  'data',
+]
+
+const FLOW_KEY_ORDER: (keyof MessageFlow)[] = [
+  'id',
+  'label',
+  'edges',
+  'steps',
+  'from',
+  'color',
+  'motion',
+  'token',
+  'mode',
+  'speed',
+  'count',
+  'stream',
+  'pause',
+  'loop',
+  'enabled',
+  'style',
+  'data',
+]
+
+/** Rounds a coordinate so float noise never shows up in a diff. */
+const round = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Rounds a fraction along a line or a side. Finer than a coordinate, because it
+ * is multiplied back out by a length: four places is under a tenth of a pixel
+ * on a side thousands of units long.
+ */
+const roundFraction = (n: number) => Math.round(n * 10000) / 10000
+
+/**
+ * Produces the plain object that gets written to disk.
+ *
+ * Deterministic by construction: fixed key order, defaults omitted, coordinates
+ * rounded, and every array in canonical order (see `sort.ts`). The same diagram
+ * therefore has exactly one file — whoever saved it, in whatever order they drew
+ * it, and however many times.
+ */
+export function toFileObject(input: DiagramDocument): Record<string, unknown> {
+  const doc = sortDocument(input)
+
+  const nodes = doc.nodes.map((node) => {
+    const trimmed = omitDefaults(
+      {
+        ...node,
+        position: { x: round(node.position.x), y: round(node.position.y) },
+        size: { width: round(node.size.width), height: round(node.size.height) },
+      },
+      NODE_DEFAULTS,
+    )
+    if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    // A side that was never added to is the side every node already has, so it
+    // says nothing: `"ports": { "right": 4 }` is the whole of what changed.
+    if (trimmed.ports) {
+      const ports = Object.fromEntries(
+        PORT_SIDES.filter((side) => (trimmed.ports?.[side] ?? 1) > 1).map((side) => [
+          side,
+          trimmed.ports![side],
+        ]),
+      )
+      if (Object.keys(ports).length) trimmed.ports = ports
+      else delete trimmed.ports
+    }
+    // Only points that were moved, and only ones the node still has: a moved
+    // point on a side since given fewer is an instruction nothing follows.
+    const moved = prunePortPositions(node.portPositions, node.ports)
+    if (moved) {
+      trimmed.portPositions = Object.fromEntries(
+        Object.entries(moved).map(([side, slots]) => [
+          side,
+          Object.fromEntries(
+            Object.entries(slots)
+              .sort(([a], [b]) => Number(a) - Number(b))
+              .map(([port, at]) => [port, roundFraction(at)]),
+          ),
+        ]),
+      )
+    } else delete trimmed.portPositions
+    return ordered(trimmed as DiagramNode, NODE_KEY_ORDER)
+  })
+
+  const edges = doc.edges.map((edge) => {
+    // Which point an end sits on only means anything once that end names a side:
+    // `auto` places itself, and a stale index left beside it would read as an
+    // instruction that is not being followed.
+    const placed = {
+      ...edge,
+      sourcePort: edge.sourceSide === 'auto' ? EDGE_DEFAULTS.sourcePort : edge.sourcePort,
+      targetPort: edge.targetSide === 'auto' ? EDGE_DEFAULTS.targetPort : edge.targetPort,
+    }
+    const trimmed = omitDefaults(placed, EDGE_DEFAULTS)
+    if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    // No bend points is automatic routing, which says nothing — same
+    // treatment as an edge's `data` and a flow's `style` above/below.
+    if (trimmed.waypoints) {
+      if (!trimmed.waypoints.length) delete trimmed.waypoints
+      else trimmed.waypoints = trimmed.waypoints.map((p) => ({ x: round(p.x), y: round(p.y) }))
+    }
+    // A label that sits on the line has no offset to state, and one that was
+    // never moved has no place along it either — the middle is what saying
+    // nothing means.
+    if (trimmed.labelPosition !== undefined) {
+      trimmed.labelPosition = roundFraction(trimmed.labelPosition)
+    }
+    if (trimmed.labelOffset) {
+      const offset = { x: round(trimmed.labelOffset.x), y: round(trimmed.labelOffset.y) }
+      if (offset.x === 0 && offset.y === 0) delete trimmed.labelOffset
+      else trimmed.labelOffset = offset
+    }
+    return ordered(trimmed as DiagramEdge, EDGE_KEY_ORDER)
+  })
+
+  const flows = (doc.flows ?? []).map((flow) => {
+    const trimmed = omitDefaults({ ...flow }, FLOW_DEFAULTS)
+    if (trimmed.data && Object.keys(trimmed.data).length === 0) delete trimmed.data
+    // No steps is the automatic order, which is what saying nothing already means.
+    if (trimmed.steps) {
+      const steps = trimmed.steps.filter((step) => step.length > 0)
+      if (steps.length) trimmed.steps = steps.map((step) => [...step])
+      else delete trimmed.steps
+    }
+    // An override that overrides nothing is noise, and so is an empty map of them.
+    if (trimmed.style) {
+      const style = Object.fromEntries(
+        Object.entries(trimmed.style).filter(([, value]) => Object.keys(value).length > 0),
+      )
+      if (Object.keys(style).length) trimmed.style = style
+      else delete trimmed.style
+    }
+    return ordered(trimmed as MessageFlow, FLOW_KEY_ORDER)
+  })
+
+  return {
+    $schema: SCHEMA_URL,
+    baugraph: doc.baugraph || FORMAT_VERSION,
+    meta: ordered(trimmedMeta(doc.meta), [
+      'title',
+      'description',
+      'authors',
+      'createdAt',
+      'updatedAt',
+    ]),
+    canvas: ordered({ ...doc.canvas }, ['theme', 'grid', 'snap', 'snapSize']),
+    nodes,
+    edges,
+    // A diagram with no flows says nothing about them: an empty array would show
+    // up as a change in every file the moment this feature shipped.
+    ...(flows.length ? { flows } : {}),
+  }
+}
+
+/**
+ * Coordinate pairs are printed on one line. `JSON.stringify` would spread
+ * `{ "x": 300, "y": 60 }` over four, turning "moved a node" into a four-line
+ * diff — the single most common change a diagram ever sees.
+ */
+const INLINE_KEYS = new Set(['position', 'size', 'ports', 'portPositions', 'labelOffset'])
+
+/**
+ * Keys whose *children* are each one line. A flow's per-connection overrides are
+ * keyed by edge id, so the keys cannot be listed above — but each override is
+ * one small idea ("this one is red") and reads as one line. An edge's manual
+ * bend points are a list rather than a map, but the same idea applies: moving
+ * one point should touch one line, not four. An author is one person, so adding
+ * or removing a credit is one line as well.
+ */
+const INLINE_CHILD_KEYS = new Set(['style', 'waypoints', 'authors'])
+
+/**
+ * One value on one line, spaced the way the rest of the file is — an inline
+ * value that nests, like a node's moved connection points, still reads
+ * `{ "right": { "2": 0.8 } }` rather than dropping into `JSON.stringify`'s
+ * unspaced `{"2":0.8}` one level down.
+ */
+function inlineJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(inlineJson).join(', ')}]`
+  const entries = Object.entries(value).filter(([, v]) => v !== undefined)
+  if (!entries.length) return '{}'
+  return `{ ${entries.map(([k, v]) => `${JSON.stringify(k)}: ${inlineJson(v)}`).join(', ')} }`
+}
+
+function format(value: unknown, indent: string, key?: string, inline = false): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]'
+    // A list of plain values — a flow's connection ids — is one thing, so it goes
+    // on one line. Only lists of objects (nodes, edges) are stacked.
+    if (value.every((v) => v === null || typeof v !== 'object')) {
+      return `[${value.map((v) => JSON.stringify(v)).join(', ')}]`
+    }
+    const inner = indent + '  '
+    const inlineChildren = !!key && INLINE_CHILD_KEYS.has(key)
+    return `[\n${value.map((v) => inner + format(v, inner, undefined, inlineChildren)).join(',\n')}\n${indent}]`
+  }
+
+  const entries = Object.entries(value).filter(([, v]) => v !== undefined)
+  if (!entries.length) return '{}'
+  if (inline || (key && INLINE_KEYS.has(key))) return inlineJson(value)
+
+  const inner = indent + '  '
+  const inlineChildren = !!key && INLINE_CHILD_KEYS.has(key)
+  const body = entries
+    .map(([k, v]) => `${inner}${JSON.stringify(k)}: ${format(v, inner, k, inlineChildren)}`)
+    .join(',\n')
+  return `{\n${body}\n${indent}}`
+}
+
+/** Serialises a document to the exact text written to a `.baugraph.json` file. */
+export function stringify(doc: DiagramDocument): string {
+  return `${format(toFileObject(doc), '')}\n`
+}
+
+/**
+ * Parses and validates file contents into a fully-populated document.
+ * Throws `DiagramParseError` with per-field issues on invalid input.
+ */
+export function parse(input: string | unknown): DiagramDocument {
+  let raw: unknown = input
+  if (typeof input === 'string') {
+    try {
+      raw = JSON.parse(input)
+    } catch (error) {
+      throw new DiagramParseError(
+        `Not valid JSON: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  const result = documentSchema.safeParse(migrate(raw))
+  if (!result.success) {
+    const issues = result.error.issues.map((issue) => ({
+      path: issue.path.join('.') || '(root)',
+      message: issue.message,
+    }))
+    throw new DiagramParseError(
+      `${issues.length} problem${issues.length === 1 ? '' : 's'} in this diagram file`,
+      issues,
+    )
+  }
+
+  const { $schema: _schema, ...doc } = result.data
+  return doc as DiagramDocument
+}
+
+/** Non-throwing variant, for UI paths that want to show the issues inline. */
+export function safeParse(
+  input: string | unknown,
+): { ok: true; document: DiagramDocument } | { ok: false; error: DiagramParseError } {
+  try {
+    return { ok: true, document: parse(input) }
+  } catch (error) {
+    if (error instanceof DiagramParseError) return { ok: false, error }
+    return { ok: false, error: new DiagramParseError((error as Error).message) }
+  }
+}
+
+export { blankDocument }
